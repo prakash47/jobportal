@@ -1,0 +1,161 @@
+# ============================================================
+# JobPortal — .gitignore
+# Monorepo: Next.js 16 + NestJS 11 + Prisma 7 + Turborepo + pnpm
+# ============================================================
+
+# ---------- Dependencies ----------
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+.yarn/
+.yarn-integrity
+jspm_packages/
+web_modules/
+
+# ---------- Environment variables (NEVER commit) ----------
+.env
+.env.local
+.env.*.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.staging
+.env.staging.local
+.env.production
+.env.production.local
+# Keep the template
+!.env.example
+
+# ---------- Build outputs ----------
+dist/
+build/
+out/
+.next/
+.nuxt/
+.svelte-kit/
+.vercel/
+.netlify/
+.output/
+.serverless/
+.fusebox/
+.dynamodb/
+
+# NestJS
+apps/api/dist/
+
+# TypeScript build info
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# ---------- Turborepo / Nx ----------
+.turbo/
+.nx/cache/
+.nx/workspace-data/
+
+# ---------- Caches ----------
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.prettiercache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+.npm
+.node_repl_history
+
+# ---------- Test / Coverage ----------
+coverage/
+*.lcov
+.nyc_output/
+.jest-cache/
+playwright-report/
+playwright/.cache/
+test-results/
+__snapshots__/
+
+# ---------- Logs ----------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---------- Prisma ----------
+# Generated client (regenerated on install)
+packages/db/generated/
+**/prisma/generated/
+# Local migration drafts
+prisma/migrations/dev/
+# Prisma debug
+prisma-debug.log
+
+# ---------- Database / local data ----------
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+pgdata/
+esdata/
+redisdata/
+
+# ---------- Uploads / runtime files ----------
+uploads/
+tmp/
+temp/
+
+# ---------- IDE / Editor ----------
+.vscode/
+!.vscode/settings.json.example
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ---------- OS ----------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---------- Claude Code / AI tooling ----------
+.claude/
+.cursor/
+.aider*
+.continue/
+
+# ---------- Storybook ----------
+storybook-static/
+
+# ---------- Sentry ----------
+.sentryclirc
+
+# ---------- Docker ----------
+# Local override file (keep base docker-compose.yml committed)
+docker-compose.override.yml
+
+# ---------- Misc ----------
+*.pem
+*.key
+*.crt
+*.p12
+.env.vault
+.vercel
+.history/
