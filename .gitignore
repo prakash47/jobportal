@@ -159,3 +159,11 @@ docker-compose.override.yml
 .env.vault
 .vercel
 .history/
+
+# ---------- Local-only docs (NOT pushed to remote) ----------
+# These contain product strategy / spec material and stay on the dev machine.
+# Untracked from origin on 2026-05-07; files continue to exist locally.
+CLAUDE.md
+README.md
+SETUP_GUIDE.md
+docs/
