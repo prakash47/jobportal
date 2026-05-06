@@ -163,7 +163,7 @@ docker-compose.override.yml
 # ---------- Local-only docs (NOT pushed to remote) ----------
 # These contain product strategy / spec material and stay on the dev machine.
 # Untracked from origin on 2026-05-07; files continue to exist locally.
-# (README.md was removed from this list on 2026-05-07 to ship a public README.)
 CLAUDE.md
+README.md
 SETUP_GUIDE.md
 docs/
