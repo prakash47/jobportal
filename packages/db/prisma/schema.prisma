@@ -1,0 +1,13 @@
+// JobPortal — Prisma 7 schema.
+// Entities (User, Candidate, Recruiter, Company, Job, Application, etc.) follow
+// in feature/db-schema-and-prisma per SRS §8.2.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

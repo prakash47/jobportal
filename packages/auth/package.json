@@ -1,0 +1,20 @@
+{
+  "name": "@jobportal/auth",
+  "version": "0.1.0",
+  "private": true,
+  "description": "JWT (HS256) and Argon2id helpers.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "lint": "echo 'no lint configured yet'",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo dist"
+  },
+  "dependencies": {
+    "@jobportal/db": "workspace:*",
+    "@jobportal/types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

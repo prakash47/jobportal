@@ -1,0 +1,19 @@
+/* JobPortal design tokens — Tailwind 4 CSS-first config (CLAUDE.md §2).
+ * Imported by each app's globals.css AFTER `@import "tailwindcss"`.
+ * No tailwind.config.ts file — Tailwind 4 reads tokens from @theme blocks.
+ */
+
+@theme {
+  /* Colors — OKLCH (Tailwind 4 default) */
+  --color-primary: oklch(0.55 0.20 254);
+  --color-success: oklch(0.65 0.18 145);
+  --color-danger: oklch(0.60 0.22 25);
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
