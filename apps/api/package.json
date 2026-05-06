@@ -1,0 +1,33 @@
+{
+  "name": "@jobportal/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "JobPortal — NestJS BFF for all clients.",
+  "scripts": {
+    "build": "nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.8.0",
+    "@jobportal/db": "workspace:*",
+    "@jobportal/search": "workspace:*",
+    "@jobportal/auth": "workspace:*",
+    "@jobportal/types": "workspace:*",
+    "@jobportal/feature-flags": "workspace:*"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@types/node": "^24.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.9.0"
+  }
+}
