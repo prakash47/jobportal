@@ -1,4 +1,5 @@
 export { CompletenessIndicator } from './CompletenessIndicator';
+export { DailyApplyIndicator } from './DailyApplyIndicator';
 export { EducationManager } from './EducationManager';
 export { ExperienceManager } from './ExperienceManager';
 export { ProfileForm, type ProfileFormProps } from './ProfileForm';
