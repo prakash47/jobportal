@@ -1,4 +1,9 @@
-// @jobportal/db — Prisma 7 client + query helpers.
-// Schema lives in ./prisma/schema.prisma; entities follow in feature/db-schema-and-prisma per SRS §8.
+// @jobportal/db — Prisma 7 client + query helpers (SRS §8).
+// Schema lives in ./prisma/schema.prisma.
 
-export {};
+export { prisma } from './client';
+export * from './queries';
+
+// Re-export Prisma's generated types and enums so consumers import from
+// @jobportal/db rather than reaching into the gitignored generated/ path.
+export * from '../generated/client';

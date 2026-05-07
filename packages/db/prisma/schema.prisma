@@ -1,6 +1,6 @@
-// JobPortal — Prisma 7 schema.
-// Entities (User, Candidate, Recruiter, Company, Job, Application, etc.) follow
-// in feature/db-schema-and-prisma per SRS §8.2.
+// JobPortal — Prisma 7 schema (SRS §8 Data Model).
+// Generator: prisma-client (Rust-free) per CLAUDE.md §1.
+// DATABASE_URL is provided by prisma.config.ts (loads root .env), not env() here.
 
 generator client {
   provider = "prisma-client"
@@ -9,5 +9,422 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum UserRole {
+  CANDIDATE
+  RECRUITER
+  ADMIN
+}
+
+enum JobStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  CLOSED
+}
+
+enum ApplicationStatus {
+  APPLIED
+  IN_REVIEW
+  SHORTLISTED
+  INTERVIEWED
+  OFFERED
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+enum FlagType {
+  BOOLEAN
+  TIER_GATED
+  PERCENTAGE_ROLLOUT
+  USER_TARGETED
+  COHORT_TARGETED
+}
+
+enum SubscriptionTier {
+  FREE
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum EntitlementSource {
+  SUBSCRIPTION
+  ADMIN_GRANT
+  PROMO
+  REFERRAL
+}
+
+// ============================================================
+// User & profile (SRS §8.2)
+// ============================================================
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(CANDIDATE)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  candidate     Candidate?
+  recruiter     Recruiter?
+  applications  Application[]
+  savedJobs     SavedJob[]
+  jobAlerts     JobAlert[]
+  subscriptions Subscription[]
+  entitlements  UserEntitlement[]
+  usageRecords  UsageRecord[]
+
+  @@index([role])
+}
+
+model Candidate {
+  id                 Int      @id @default(autoincrement())
+  userId             Int      @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline           String?
+  summary            String?
+  experienceYears    Int?
+  currentSalaryPaise Int?
+  currentCompanyId   Int?
+  currentCompany     Company? @relation(fields: [currentCompanyId], references: [id], onDelete: SetNull)
+  resumeUrl          String?
+  profileViews       Int      @default(0)
+  skillIds           Int[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([currentCompanyId])
+}
+
+model Recruiter {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId    Int
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  designation  String?
+  contactPhone String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([companyId])
+}
+
+// ============================================================
+// Company (SRS §8.2)
+// ============================================================
+
+model Company {
+  id                 Int       @id @default(autoincrement())
+  slug               String    @unique
+  name               String
+  description        String?
+  logoUrl            String?
+  websiteUrl         String?
+  industryId         Int?
+  industry           Industry? @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  headquartersCityId Int?
+  headquartersCity   City?     @relation(fields: [headquartersCityId], references: [id], onDelete: SetNull)
+  employeeCount      String?
+  foundedYear        Int?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  jobs       Job[]
+  recruiters Recruiter[]
+  candidates Candidate[]
+
+  @@index([industryId])
+  @@index([headquartersCityId])
+}
+
+// ============================================================
+// Job & related (SRS §8.2 — composite indexes mandatory)
+// ============================================================
+
+model Job {
+  id                 Int             @id @default(autoincrement())
+  canonicalSlug      String          @unique
+  title              String
+  description        String
+  shortDescription   String?
+  companyId          Int
+  company            Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  primaryCityId      Int?
+  primaryCity        City?           @relation(fields: [primaryCityId], references: [id], onDelete: SetNull)
+  cityIds            Int[]
+  skillIds           Int[]
+  industryId         Int?
+  industry           Industry?       @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  functionalAreaId   Int?
+  functionalArea     FunctionalArea? @relation(fields: [functionalAreaId], references: [id], onDelete: SetNull)
+  status             JobStatus       @default(ACTIVE)
+  postedAt           DateTime        @default(now())
+  expiresAt          DateTime?
+  salaryMinPaise     Int?
+  salaryMaxPaise     Int?
+  experienceMinYears Int?
+  experienceMaxYears Int?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  applications Application[]
+  savedBy      SavedJob[]
+
+  @@index([status, postedAt])
+  @@index([primaryCityId, status])
+  @@index([companyId, status])
+}
+
+model Application {
+  id            Int               @id @default(autoincrement())
+  userId        Int
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId         Int
+  job           Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status        ApplicationStatus @default(APPLIED)
+  resumeUrl     String?
+  coverLetter   String?
+  statusHistory Json?
+  appliedAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@unique([userId, jobId])
+  @@index([userId, status])
+  @@index([jobId, status])
+}
+
+model SavedJob {
+  userId  Int
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId   Int
+  job     Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  savedAt DateTime @default(now())
+
+  @@id([userId, jobId])
+  @@index([jobId])
+}
+
+model JobAlert {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  query     Json
+  frequency String    @default("daily")
+  isActive  Boolean   @default(true)
+  lastRunAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, isActive])
+}
+
+// ============================================================
+// CMS — career-advice articles (SRS §4.8)
+// ============================================================
+
+model Article {
+  id              Int       @id @default(autoincrement())
+  slug            String    @unique
+  title           String
+  body            String
+  excerpt         String?
+  authorName      String
+  status          String    @default("DRAFT")
+  publishedAt     DateTime?
+  readTimeMinutes Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status, publishedAt])
+}
+
+// ============================================================
+// Reference data (SRS §8 — denormalized lookups)
+// ============================================================
+
+model Industry {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  companies Company[]
+  jobs      Job[]
+}
+
+model FunctionalArea {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  jobs Job[]
+}
+
+model City {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique
+  name      String
+  state     String
+  country   String   @default("India")
+  createdAt DateTime @default(now())
+
+  jobs      Job[]
+  companies Company[]
+}
+
+model Skill {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique
+  name      String
+  category  String?
+  createdAt DateTime @default(now())
+}
+
+// ============================================================
+// Feature flags + audit (SRS §7.4 + CLAUDE.md §4 — flags ship OFF)
+// ============================================================
+
+model FeatureFlag {
+  id              Int                @id @default(autoincrement())
+  key             String             @unique
+  description     String?
+  uiLabel         String?
+  category        String?
+  type            FlagType           @default(BOOLEAN)
+  enabled         Boolean            @default(false)
+  percentage      Int?
+  targetUserIds   Int[]
+  requiredTiers   SubscriptionTier[]
+  cohorts         String[]
+  createdById     Int?
+  lastChangedById Int?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  auditLogs FlagAuditLog[]
+
+  @@index([category])
+}
+
+model FlagAuditLog {
+  id          Int         @id @default(autoincrement())
+  flagId      Int
+  flag        FeatureFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  before      Json
+  after       Json
+  changedAt   DateTime    @default(now())
+  changedById Int?
+  reason      String?
+
+  @@index([flagId, changedAt(sort: Desc)])
+}
+
+// ============================================================
+// Subscriptions & entitlements (SRS §7.4 — plans ship inactive)
+// ============================================================
+
+model SubscriptionPlan {
+  id             Int              @id @default(autoincrement())
+  slug           String           @unique
+  name           String
+  description    String?
+  tier           SubscriptionTier
+  priceInPaise   Int
+  currency       String           @default("INR")
+  intervalDays   Int
+  trialDays      Int?
+  featureKeys    String[]
+  isActive       Boolean          @default(false)
+  isPublic       Boolean          @default(false)
+  sortOrder      Int              @default(0)
+  stripePriceId  String?          @unique
+  razorpayPlanId String?          @unique
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                     Int                @id @default(autoincrement())
+  userId                 Int
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId                 Int
+  plan                   SubscriptionPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status                 SubscriptionStatus @default(TRIALING)
+  startedAt              DateTime           @default(now())
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  cancelledAt            DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  cancelReason           String?
+  stripeSubscriptionId   String?            @unique
+  razorpaySubscriptionId String?            @unique
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  invoices SubscriptionInvoice[]
+
+  @@index([userId, status])
+  @@index([planId])
+}
+
+model SubscriptionInvoice {
+  id                Int          @id @default(autoincrement())
+  subscriptionId    Int
+  subscription      Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  amountInPaise     Int
+  currency          String       @default("INR")
+  status            String
+  providerInvoiceId String?
+  paidAt            DateTime?
+  createdAt         DateTime     @default(now())
+
+  @@index([subscriptionId])
+}
+
+model UserEntitlement {
+  id         Int               @id @default(autoincrement())
+  userId     Int
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  featureKey String
+  source     EntitlementSource
+  expiresAt  DateTime?
+  metadata   Json?
+  createdAt  DateTime          @default(now())
+
+  @@unique([userId, featureKey])
+  @@index([featureKey])
+}
+
+model UsageRecord {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  featureKey String
+  quantity   Int      @default(1)
+  occurredAt DateTime @default(now())
+  metadata   Json?
+
+  @@index([userId, featureKey, occurredAt])
 }
