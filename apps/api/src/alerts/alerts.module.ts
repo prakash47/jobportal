@@ -6,10 +6,12 @@ import { AlertsProcessor } from './alerts.processor';
 import { AlertsQueueService } from './alerts.queue';
 import { AlertsScheduler } from './alerts.scheduler';
 import { AlertsService } from './alerts.service';
+import { EmailPrefsController } from './email-prefs.controller';
+import { UnsubscribeController } from './unsubscribe.controller';
 
 @Module({
   imports: [AuthModule],
-  controllers: [AlertsController],
+  controllers: [AlertsController, UnsubscribeController, EmailPrefsController],
   providers: [
     AlertsService,
     AlertsProcessor,
