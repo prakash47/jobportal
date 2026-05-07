@@ -29,7 +29,11 @@
     "db:migrate:dev": "pnpm --filter @jobportal/db db:migrate:dev",
     "db:seed": "pnpm --filter @jobportal/db db:seed",
     "db:studio": "pnpm --filter @jobportal/db db:studio",
-    "db:reset": "pnpm --filter @jobportal/db db:reset"
+    "db:reset": "pnpm --filter @jobportal/db db:reset",
+    "search:bootstrap": "pnpm --filter @jobportal/search search:bootstrap",
+    "search:reindex": "pnpm --filter @jobportal/search search:reindex",
+    "search:seed-fixtures": "pnpm --filter @jobportal/search search:seed-fixtures",
+    "search:benchmark": "pnpm --filter @jobportal/search search:benchmark"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
