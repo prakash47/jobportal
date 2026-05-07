@@ -16,11 +16,25 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApplyDto, ListApplicationsQueryDto } from './dto';
 import { ApplicationsService } from './applications.service';
+import { ApplicationQuotaGuard } from './quota.guard';
+import { ApplicationQuotaService } from './quota.service';
 
 @Controller('me/applications')
 @UseGuards(JwtAuthGuard)
 export class ApplicationsController {
-  constructor(private readonly service: ApplicationsService) {}
+  constructor(
+    private readonly service: ApplicationsService,
+    private readonly quota: ApplicationQuotaService,
+  ) {}
+
+  // SRS §4.11.16-17 — read-only quota state for the web layer's L2 UI hint.
+  // Returns count, limit, unlimited, upgradeAvailable so the JD page can
+  // disable the apply button and the profile sidebar can render the daily
+  // counter without each surface re-deriving the state.
+  @Get('quota')
+  getQuota(@CurrentUser() user: AccessClaims) {
+    return this.quota.readState(user.sub);
+  }
 
   // SRS §4.6.1 — dashboard list. ?status=APPLIED|...|ALL filters; ?page=N
   // is 1-indexed. Defaults: status=ALL, page=1.
@@ -31,8 +45,13 @@ export class ApplicationsController {
     return this.service.list(user.sub, parsed.data);
   }
 
+  // Layer 1 of three-layer enforcement (CLAUDE.md §4 / SRS §4.11.16-17).
+  // ApplicationQuotaGuard runs preflight() before the controller method so we
+  // fast-fail without touching Postgres when the user is already at the daily
+  // limit. The atomic increment lives in the service (Layer 3).
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(ApplicationQuotaGuard)
   async apply(@Body() body: unknown, @CurrentUser() user: AccessClaims) {
     const parsed = ApplyDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);

@@ -11,6 +11,7 @@ vi.mock('@jobportal/db', () => ({
       findMany: vi.fn(),
       count: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
     },
   },
 }));
@@ -27,6 +28,7 @@ const mockedPrisma = prisma as unknown as {
     findMany: ReturnType<typeof vi.fn>;
     count: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
   };
 };
 
@@ -34,12 +36,16 @@ const fakeEmail = {
   sendApplicationStatusChange: vi.fn().mockResolvedValue(undefined),
 } as { sendApplicationStatusChange: ReturnType<typeof vi.fn> };
 
+const fakeQuota = {
+  consume: vi.fn().mockResolvedValue({ count: 1, limit: 10, unlimited: false, upgradeAvailable: false }),
+} as { consume: ReturnType<typeof vi.fn> };
+
 describe('ApplicationsService.apply', () => {
   let service: ApplicationsService;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    service = new ApplicationsService(fakeEmail as unknown as never);
+    service = new ApplicationsService(fakeEmail as unknown as never, fakeQuota as unknown as never);
   });
 
   it('creates an Application for a verified user on an ACTIVE job', async () => {
@@ -124,6 +130,46 @@ describe('ApplicationsService.apply', () => {
 
     await expect(service.apply(42, 7)).rejects.toThrow('Connection lost');
   });
+
+  // SRS §4.11.16-17 — quota integration. Layer 3 of three-layer enforcement.
+  it('calls quota.consume after a successful application.create', async () => {
+    mockedPrisma.user.findUnique.mockResolvedValue({ emailVerified: true });
+    mockedPrisma.job.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    mockedPrisma.application.create.mockResolvedValue({
+      id: 1,
+      userId: 42,
+      jobId: 7,
+      status: 'APPLIED',
+      appliedAt: new Date(),
+    });
+    await service.apply(42, 7);
+    expect(fakeQuota.consume).toHaveBeenCalledWith(42);
+  });
+
+  it('does NOT call quota.consume on P2002 (re-apply does not cost a slot)', async () => {
+    mockedPrisma.user.findUnique.mockResolvedValue({ emailVerified: true });
+    mockedPrisma.job.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    const dupErr = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+    mockedPrisma.application.create.mockRejectedValue(dupErr);
+    await expect(service.apply(42, 7)).rejects.toBeInstanceOf(ConflictException);
+    expect(fakeQuota.consume).not.toHaveBeenCalled();
+  });
+
+  it('rolls back the Application row when quota.consume throws 429', async () => {
+    mockedPrisma.user.findUnique.mockResolvedValue({ emailVerified: true });
+    mockedPrisma.job.findUnique.mockResolvedValue({ status: 'ACTIVE' });
+    mockedPrisma.application.create.mockResolvedValue({
+      id: 99,
+      userId: 42,
+      jobId: 7,
+      status: 'APPLIED',
+      appliedAt: new Date(),
+    });
+    mockedPrisma.application.delete.mockResolvedValue({});
+    fakeQuota.consume.mockRejectedValueOnce(new Error('429 race'));
+    await expect(service.apply(42, 7)).rejects.toThrow('429 race');
+    expect(mockedPrisma.application.delete).toHaveBeenCalledWith({ where: { id: 99 } });
+  });
 });
 
 describe('ApplicationsService.list', () => {
@@ -131,7 +177,7 @@ describe('ApplicationsService.list', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    service = new ApplicationsService(fakeEmail as unknown as never);
+    service = new ApplicationsService(fakeEmail as unknown as never, fakeQuota as unknown as never);
   });
 
   it('paginates with default page=1, status=ALL', async () => {
@@ -172,7 +218,7 @@ describe('ApplicationsService.withdraw', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    service = new ApplicationsService(fakeEmail as unknown as never);
+    service = new ApplicationsService(fakeEmail as unknown as never, fakeQuota as unknown as never);
   });
 
   const ownedRow = {
