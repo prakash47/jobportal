@@ -1,12 +1,17 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock @jobportal/db before importing the service so the service picks up the mock.
 vi.mock('@jobportal/db', () => ({
   prisma: {
     user: { findUnique: vi.fn() },
     job: { findUnique: vi.fn() },
-    application: { create: vi.fn(), findUnique: vi.fn() },
+    application: {
+      create: vi.fn(),
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
+      update: vi.fn(),
+    },
   },
 }));
 
@@ -19,15 +24,22 @@ const mockedPrisma = prisma as unknown as {
   application: {
     create: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
+    findMany: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
   };
 };
+
+const fakeEmail = {
+  sendApplicationStatusChange: vi.fn().mockResolvedValue(undefined),
+} as { sendApplicationStatusChange: ReturnType<typeof vi.fn> };
 
 describe('ApplicationsService.apply', () => {
   let service: ApplicationsService;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    service = new ApplicationsService();
+    service = new ApplicationsService(fakeEmail as unknown as never);
   });
 
   it('creates an Application for a verified user on an ACTIVE job', async () => {
@@ -95,9 +107,6 @@ describe('ApplicationsService.apply', () => {
     },
   );
 
-  // The headline test from the SRS acceptance criteria — re-applying should be
-  // a friendly 409, not a 500. The Prisma P2002 unique-constraint code maps to
-  // ConflictException.
   it('throws ConflictException on UNIQUE constraint violation (re-apply)', async () => {
     mockedPrisma.user.findUnique.mockResolvedValue({ emailVerified: true });
     mockedPrisma.job.findUnique.mockResolvedValue({ status: 'ACTIVE' });
@@ -115,4 +124,123 @@ describe('ApplicationsService.apply', () => {
 
     await expect(service.apply(42, 7)).rejects.toThrow('Connection lost');
   });
+});
+
+describe('ApplicationsService.list', () => {
+  let service: ApplicationsService;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    service = new ApplicationsService(fakeEmail as unknown as never);
+  });
+
+  it('paginates with default page=1, status=ALL', async () => {
+    mockedPrisma.application.findMany.mockResolvedValue([]);
+    mockedPrisma.application.count.mockResolvedValue(0);
+    const out = await service.list(42, {});
+    expect(out.page).toBe(1);
+    expect(out.pageSize).toBe(20);
+    expect(mockedPrisma.application.findMany.mock.calls[0]?.[0]).toMatchObject({
+      where: { userId: 42 },
+      orderBy: { appliedAt: 'desc' },
+      skip: 0,
+      take: 20,
+    });
+  });
+
+  it('narrows by status when filter is supplied', async () => {
+    mockedPrisma.application.findMany.mockResolvedValue([]);
+    mockedPrisma.application.count.mockResolvedValue(0);
+    await service.list(42, { status: 'OFFERED', page: 2 });
+    expect(mockedPrisma.application.findMany.mock.calls[0]?.[0]).toMatchObject({
+      where: { userId: 42, status: 'OFFERED' },
+      skip: 20,
+    });
+  });
+
+  it('treats status=ALL as no narrowing', async () => {
+    mockedPrisma.application.findMany.mockResolvedValue([]);
+    mockedPrisma.application.count.mockResolvedValue(0);
+    await service.list(42, { status: 'ALL' });
+    const callArgs = mockedPrisma.application.findMany.mock.calls[0]?.[0] as { where: Record<string, unknown> };
+    expect(callArgs.where).toEqual({ userId: 42 });
+  });
+});
+
+describe('ApplicationsService.withdraw', () => {
+  let service: ApplicationsService;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    service = new ApplicationsService(fakeEmail as unknown as never);
+  });
+
+  const ownedRow = {
+    id: 99,
+    userId: 42,
+    status: 'APPLIED' as const,
+    statusHistory: [],
+    job: { title: 'SE', company: { name: 'Acme' } },
+    user: { email: 'me@example.com' },
+  };
+
+  it('flips APPLIED → WITHDRAWN, appends history, fires email', async () => {
+    mockedPrisma.application.findUnique.mockResolvedValue(ownedRow);
+    mockedPrisma.application.update.mockResolvedValue({
+      ...ownedRow,
+      status: 'WITHDRAWN',
+      updatedAt: new Date(),
+    });
+
+    const out = await service.withdraw(42, 99);
+    expect(out.status).toBe('WITHDRAWN');
+    const call = mockedPrisma.application.update.mock.calls[0]?.[0] as {
+      data: { statusHistory: Array<Record<string, unknown>> };
+    };
+    expect(call.data.statusHistory).toHaveLength(1);
+    expect(call.data.statusHistory[0]).toMatchObject({
+      from: 'APPLIED',
+      to: 'WITHDRAWN',
+      by: 'CANDIDATE',
+    });
+    expect(fakeEmail.sendApplicationStatusChange).toHaveBeenCalledWith(
+      'me@example.com',
+      expect.objectContaining({ from: 'APPLIED', to: 'WITHDRAWN' }),
+    );
+  });
+
+  it('preserves prior history entries', async () => {
+    mockedPrisma.application.findUnique.mockResolvedValue({
+      ...ownedRow,
+      status: 'IN_REVIEW',
+      statusHistory: [
+        { from: 'APPLIED', to: 'IN_REVIEW', at: '2026-04-01T00:00:00Z', by: 'RECRUITER' },
+      ],
+    });
+    mockedPrisma.application.update.mockResolvedValue({ ...ownedRow, status: 'WITHDRAWN' });
+
+    await service.withdraw(42, 99);
+    const call = mockedPrisma.application.update.mock.calls[0]?.[0] as {
+      data: { statusHistory: Array<Record<string, unknown>> };
+    };
+    expect(call.data.statusHistory).toHaveLength(2);
+  });
+
+  it('404s when the application does not exist', async () => {
+    mockedPrisma.application.findUnique.mockResolvedValue(null);
+    await expect(service.withdraw(42, 99)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('404s on cross-user access (does not leak existence)', async () => {
+    mockedPrisma.application.findUnique.mockResolvedValue({ ...ownedRow, userId: 1 });
+    await expect(service.withdraw(42, 99)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it.each(['HIRED', 'REJECTED', 'WITHDRAWN'] as const)(
+    'rejects withdraw on terminal status %s',
+    async (status) => {
+      mockedPrisma.application.findUnique.mockResolvedValue({ ...ownedRow, status });
+      await expect(service.withdraw(42, 99)).rejects.toBeInstanceOf(ForbiddenException);
+    },
+  );
 });

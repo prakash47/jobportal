@@ -8,18 +8,28 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { ApplyDto } from './dto';
+import { ApplyDto, ListApplicationsQueryDto } from './dto';
 import { ApplicationsService } from './applications.service';
 
-@Controller('applications')
+@Controller('me/applications')
 @UseGuards(JwtAuthGuard)
 export class ApplicationsController {
   constructor(private readonly service: ApplicationsService) {}
+
+  // SRS §4.6.1 — dashboard list. ?status=APPLIED|...|ALL filters; ?page=N
+  // is 1-indexed. Defaults: status=ALL, page=1.
+  @Get()
+  async list(@CurrentUser() user: AccessClaims, @Query() query: unknown) {
+    const parsed = ListApplicationsQueryDto.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return this.service.list(user.sub, parsed.data);
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -35,14 +45,15 @@ export class ApplicationsController {
     };
   }
 
-  // GET /applications/me/:jobId — used by the web detail page to derive
-  // the initial Apply button state on the server before hydration.
-  @Get('me/:jobId')
-  async myApplicationForJob(
+  // SRS §4.6.2 — candidate-driven WITHDRAW. State machine in
+  // applications/state-machine.ts owns the validity check.
+  @Post(':id/withdraw')
+  @HttpCode(HttpStatus.OK)
+  async withdraw(
     @CurrentUser() user: AccessClaims,
-    @Param('jobId', ParseIntPipe) jobId: number,
+    @Param('id', ParseIntPipe) id: number,
   ) {
-    const app = await this.service.findUserApplication(user.sub, jobId);
-    return { applied: app !== null, status: app?.status ?? null };
+    const updated = await this.service.withdraw(user.sub, id);
+    return { id: updated.id, status: updated.status, updatedAt: updated.updatedAt };
   }
 }
