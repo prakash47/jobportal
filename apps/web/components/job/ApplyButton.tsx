@@ -1,11 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@jobportal/ui';
 import { Check } from '@jobportal/ui/icons';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+export interface ApplyQuotaState {
+  count: number;
+  limit: number;
+  unlimited: boolean;
+  upgradeAvailable: boolean;
+}
 
 export interface ApplyButtonProps {
   jobId: number;
@@ -13,6 +21,16 @@ export interface ApplyButtonProps {
   isAuthed: boolean;
   initialApplied: boolean;
   disabled?: boolean;     // closed/expired jobs
+  // SRS §4.11.16-17 — Layer 2 hint. When provided, the button can render
+  // an at-limit disabled state without waiting for the API 429.
+  quota?: ApplyQuotaState | null | undefined;
+}
+
+interface QuotaError {
+  message?: string;
+  count?: number;
+  limit?: number;
+  upgradeAvailable?: boolean;
 }
 
 export function ApplyButton({
@@ -21,11 +39,16 @@ export function ApplyButton({
   isAuthed,
   initialApplied,
   disabled = false,
+  quota,
 }: ApplyButtonProps) {
   const router = useRouter();
   const [applied, setApplied] = useState(initialApplied);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exhausted, setExhausted] = useState(
+    quota && !quota.unlimited && quota.count >= quota.limit,
+  );
+  const [upgradeAvailable, setUpgradeAvailable] = useState(quota?.upgradeAvailable ?? false);
 
   if (disabled) {
     return (
@@ -43,9 +66,30 @@ export function ApplyButton({
     );
   }
 
+  if (exhausted) {
+    return (
+      <div className="space-y-1.5">
+        <Button variant="primary" disabled>
+          Daily limit reached
+        </Button>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          {upgradeAvailable ? (
+            <>
+              Upgrade your plan to apply to more jobs today.{' '}
+              <Link href="/pricing" className="font-medium text-[var(--color-primary-600)] hover:underline">
+                See plans →
+              </Link>
+            </>
+          ) : (
+            'You can apply again tomorrow.'
+          )}
+        </p>
+      </div>
+    );
+  }
+
   async function onClick() {
     if (!isAuthed) {
-      // Open-redirect-safe: only allow same-origin internal paths.
       const next = `/job/${jobSlug}`;
       router.push(`/login?next=${encodeURIComponent(next)}`);
       return;
@@ -66,8 +110,16 @@ export function ApplyButton({
         return;
       }
       if (res.status === 409) {
-        // Duplicate — server says we already applied. Mirror UI to that state.
         setApplied(true);
+        return;
+      }
+      if (res.status === 429) {
+        // SRS §4.11.16-17 — quota exhausted. Mirror the at-limit UI so the
+        // user gets the calm 'tomorrow' message (or upgrade CTA when the
+        // subscription system is enabled).
+        const body = (await res.json().catch(() => ({}))) as QuotaError;
+        setUpgradeAvailable(body.upgradeAvailable ?? false);
+        setExhausted(true);
         return;
       }
       const body = (await res.json().catch(() => ({}))) as { message?: string };

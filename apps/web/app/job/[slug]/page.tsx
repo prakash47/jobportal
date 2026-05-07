@@ -14,6 +14,8 @@ import {
   SimilarJobs,
 } from '../../../components/job';
 import { readApplied, readSaved, readUserFromCookie } from '../../../lib/job';
+import { readApplyQuota } from '../../../lib/applications/quota-state';
+import { classifyQuota } from '../../../lib/applications/quota-ui-state';
 import { jobPosting } from '../../../lib/seo/json-ld';
 import { parseJobSlug } from '../../../lib/url/slug';
 
@@ -89,10 +91,12 @@ export default async function JobDetailPage({ params }: PageProps) {
   ]);
 
   const userId = user?.sub;
-  const [applied, saved] = await Promise.all([
+  const [applied, saved, quota] = await Promise.all([
     userId ? readApplied(userId, job.id) : Promise.resolve(false),
     userId ? readSaved(userId, job.id) : Promise.resolve(false),
+    userId ? readApplyQuota() : Promise.resolve(null),
   ]);
+  const quotaUiState = quota ? classifyQuota(quota) : 'normal';
 
   const cityNames = cities.length > 0 ? cities.map((c) => c.name) : (job.primaryCity ? [job.primaryCity.name] : []);
   const skillNames = skills.map((s) => s.name);
@@ -173,22 +177,32 @@ export default async function JobDetailPage({ params }: PageProps) {
           skillNames={skillNames}
         />
 
-        <div className="flex flex-wrap items-center gap-3 border-y border-[var(--color-border)] py-4">
-          <ApplyButton
-            jobId={job.id}
-            jobSlug={job.canonicalSlug}
-            isAuthed={user !== null}
-            initialApplied={applied}
-            disabled={!isActive}
-          />
-          <SaveButton
-            jobId={job.id}
-            jobSlug={job.canonicalSlug}
-            isAuthed={user !== null}
-            initialSaved={saved}
-          />
-          <div className="ml-auto">
-            <ShareButtons url={canonicalUrl} title={job.title} />
+        <div className="space-y-3 border-y border-[var(--color-border)] py-4">
+          {/* SRS §4.11.16-17 — Layer 2 inline hint. Calm sentence, never a
+              modal, never an upsell on Day 0 (subscription system OFF). */}
+          {quotaUiState === 'warning' && quota && (
+            <p className="text-xs text-[var(--color-fg-muted)]">
+              You&rsquo;ve used {quota.count} of {quota.limit} applications today — choose carefully.
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-3">
+            <ApplyButton
+              jobId={job.id}
+              jobSlug={job.canonicalSlug}
+              isAuthed={user !== null}
+              initialApplied={applied}
+              disabled={!isActive}
+              quota={quota}
+            />
+            <SaveButton
+              jobId={job.id}
+              jobSlug={job.canonicalSlug}
+              isAuthed={user !== null}
+              initialSaved={saved}
+            />
+            <div className="ml-auto">
+              <ShareButtons url={canonicalUrl} title={job.title} />
+            </div>
           </div>
         </div>
 
