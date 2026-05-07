@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { Resend } from 'resend';
 
 // Redact one-time tokens from any URL embedded in the email body before
 // logging. Reset and email-verification URLs include `?token=<value>` —
@@ -38,6 +39,39 @@ export class EmailService {
       `Your application for "${opts.jobTitle}" at ${opts.companyName} has moved ` +
       `from ${opts.from} to ${opts.to}.`;
     await this.send(toEmail, subject, body);
+  }
+
+  // SRS §4.5.3 — job-alert email. Sends via Resend when RESEND_API_KEY is
+  // set; logs the rendered subject + plain text otherwise so dev runs work
+  // without a configured Resend account. The HTML body never goes to logs
+  // (too large + already mirrored in the text part).
+  async sendJobAlert(
+    toEmail: string,
+    payload: { subject: string; html: string; text: string },
+  ): Promise<void> {
+    const apiKey = process.env.RESEND_API_KEY;
+    const from = process.env.RESEND_FROM ?? 'JobPortal <alerts@jobportal.com>';
+    if (!apiKey) {
+      console.log('[email] (stub — Resend not configured; not a real send)');
+      console.log(`  to: ${toEmail}`);
+      console.log(`  subject: ${payload.subject}`);
+      console.log(`  text: ${payload.text}`);
+      return;
+    }
+    const resend = new Resend(apiKey);
+    try {
+      await resend.emails.send({
+        from,
+        to: toEmail,
+        subject: payload.subject,
+        html: payload.html,
+        text: payload.text,
+      });
+    } catch (err: unknown) {
+      const log = new Logger(EmailService.name);
+      log.error(`Resend send failed for ${toEmail}: ${(err as Error).message}`);
+      throw err;
+    }
   }
 
   // Stub. Real Resend integration arrives in feature/email-pipeline.

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AlertsModule } from './alerts/alerts.module';
 import { AppController } from './app.controller';
 import { ApplicationsModule } from './applications/applications.module';
 import { AuthModule } from './auth/auth.module';
@@ -21,6 +22,7 @@ import { StorageModule } from './storage/storage.module';
     ClamAVModule,
     ProfileModule,
     ResumeModule,
+    AlertsModule,
   ],
   controllers: [AppController],
 })

@@ -119,6 +119,7 @@ model User {
   sessions            Session[]
   passwordResetTokens PasswordResetToken[]
   profileAuditLogs    ProfileAuditLog[]
+  emailPreference     EmailPreference?
 
   @@index([role])
 }
@@ -366,18 +367,45 @@ model SavedJob {
 }
 
 model JobAlert {
-  id        Int       @id @default(autoincrement())
-  userId    Int
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  query     Json
-  frequency String    @default("daily")
-  isActive  Boolean   @default(true)
-  lastRunAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  query            Json
+  // 'instant' | 'daily' | 'weekly' — kept as string for forward-compat with
+  // future cadences (e.g. 'every-other-day') without a schema migration.
+  frequency        String    @default("daily")
+  isActive         Boolean   @default(true)
+  lastRunAt        DateTime?
+  // SRS §4.5.4 — dedupe state. Worker stores the job ids it last emailed for
+  // this alert; on each run, only ids NOT in this set count as "new".
+  lastSentJobIds   Int[]     @default([])
+  lastSentAt       DateTime?
+  // SRS §4.5.6 — high-entropy token used by the one-click unsubscribe link in
+  // every alert email. Random per-alert so leaking one token does not unlock
+  // the user's other alerts. Defaulted at the DB layer (gen_random_uuid()) to
+  // match the migration and avoid prisma-migrate-diff drift; raw-SQL inserts
+  // get the same generation path as Prisma client inserts.
+  unsubscribeToken String    @unique @default(dbgenerated("gen_random_uuid()::text"))
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([userId, isActive])
+  @@index([frequency, isActive])
+}
+
+// SRS §4.13.4 foundation — per-user channel toggles. Lazily provisioned on
+// first read. productNewsEnabled defaults OFF (CLAUDE.md §0 — freemium, no
+// marketing surface).
+model EmailPreference {
+  id                       Int      @id @default(autoincrement())
+  userId                   Int      @unique
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobAlertsEnabled         Boolean  @default(true)
+  applicationStatusEnabled Boolean  @default(true)
+  productNewsEnabled       Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 }
 
 // ============================================================
