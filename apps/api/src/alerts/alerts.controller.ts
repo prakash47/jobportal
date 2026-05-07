@@ -16,12 +16,16 @@ import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AlertCreateDto, AlertUpdateDto } from './dto';
+import { AlertsQueueService } from './alerts.queue';
 import { AlertsService } from './alerts.service';
 
 @Controller('me/alerts')
 @UseGuards(JwtAuthGuard)
 export class AlertsController {
-  constructor(private readonly service: AlertsService) {}
+  constructor(
+    private readonly service: AlertsService,
+    private readonly queue: AlertsQueueService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AccessClaims) {
@@ -61,5 +65,18 @@ export class AlertsController {
     await this.service.delete(user.sub, id);
   }
 
-  // POST /me/alerts/:id/test arrives with the BullMQ queue in the next commit.
+  // SRS §4.5.5 — manual test send. Layer 2 of the killswitch enforcement
+  // (Layer 1 = worker, Layer 3 = UI). Returns 403 when the killswitch is ON
+  // even if the UI hides the button or someone POSTs directly.
+  @Post(':id/test')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async test(
+    @CurrentUser() user: AccessClaims,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    await this.service.assertCanRunTestOrFail();
+    const alert = await this.service.get(user.sub, id);
+    await this.queue.enqueueScan(alert.id);
+    return { queued: true };
+  }
 }
