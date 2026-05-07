@@ -25,6 +25,21 @@ export class EmailService {
     await this.send(toEmail, 'Reset your JobPortal password', `Reset link (expires in 15 min): ${resetUrl}`);
   }
 
+  // SRS §4.6.3 — application-status change notifications. Real send wires up
+  // in feature/email-pipeline (Task 18) which adds Resend + BullMQ batching.
+  // For now we log; the call sites in applications.service still fire so the
+  // observable contract is correct.
+  async sendApplicationStatusChange(
+    toEmail: string,
+    opts: { jobTitle: string; companyName: string; from: string; to: string },
+  ): Promise<void> {
+    const subject = `Update on your application for ${opts.jobTitle}`;
+    const body =
+      `Your application for "${opts.jobTitle}" at ${opts.companyName} has moved ` +
+      `from ${opts.from} to ${opts.to}.`;
+    await this.send(toEmail, subject, body);
+  }
+
   // Stub. Real Resend integration arrives in feature/email-pipeline.
   // Until then, log to console with token values redacted — operators can
   // confirm an email "would have" gone out without being able to consume
