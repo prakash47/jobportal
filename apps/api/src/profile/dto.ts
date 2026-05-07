@@ -32,7 +32,10 @@ export const ProfilePatchDto = z
   );
 export type ProfilePatchInput = z.infer<typeof ProfilePatchDto>;
 
-export const EducationCreateDto = z
+// Base shape without refinements so the Update variant can call .partial().
+// Cross-field rules (endYear >= startYear etc.) are reattached on the Create
+// DTO and re-checked on Update at the service layer.
+const educationBase = z
   .object({
     institute: z.string().min(1).max(200),
     degree: z.string().min(1).max(120),
@@ -41,16 +44,21 @@ export const EducationCreateDto = z
     endYear: yearInt.optional(),
     grade: z.string().max(40).optional(),
   })
-  .strict()
-  .refine((v) => v.endYear === undefined || v.endYear >= v.startYear, {
-    message: 'endYear must be >= startYear',
-  });
+  .strict();
+
+export const EducationCreateDto = educationBase.refine(
+  (v) => v.endYear === undefined || v.endYear >= v.startYear,
+  { message: 'endYear must be >= startYear' },
+);
 export type EducationCreateInput = z.infer<typeof EducationCreateDto>;
 
-export const EducationUpdateDto = EducationCreateDto.partial();
+export const EducationUpdateDto = educationBase.partial().refine(
+  (v) => v.startYear === undefined || v.endYear === undefined || v.endYear >= v.startYear,
+  { message: 'endYear must be >= startYear' },
+);
 export type EducationUpdateInput = z.infer<typeof EducationUpdateDto>;
 
-export const ExperienceCreateDto = z
+const experienceBase = z
   .object({
     companyName: z.string().min(1).max(200),
     title: z.string().min(1).max(120),
@@ -59,7 +67,9 @@ export const ExperienceCreateDto = z
     isCurrent: z.boolean().optional(),
     description: z.string().max(2_000).optional(),
   })
-  .strict()
+  .strict();
+
+export const ExperienceCreateDto = experienceBase
   .refine((v) => !(v.isCurrent === true && v.endDate !== undefined), {
     message: 'endDate must be omitted when isCurrent is true',
   })
@@ -68,7 +78,18 @@ export const ExperienceCreateDto = z
   });
 export type ExperienceCreateInput = z.infer<typeof ExperienceCreateDto>;
 
-export const ExperienceUpdateDto = ExperienceCreateDto.partial();
+export const ExperienceUpdateDto = experienceBase
+  .partial()
+  .refine((v) => !(v.isCurrent === true && v.endDate !== undefined), {
+    message: 'endDate must be omitted when isCurrent is true',
+  })
+  .refine(
+    (v) =>
+      v.startDate === undefined ||
+      v.endDate === undefined ||
+      new Date(v.endDate) >= new Date(v.startDate),
+    { message: 'endDate must be >= startDate' },
+  );
 export type ExperienceUpdateInput = z.infer<typeof ExperienceUpdateDto>;
 
 export const SkillsUpdateDto = z

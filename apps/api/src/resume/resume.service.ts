@@ -89,41 +89,55 @@ export class ResumeService {
     const r2Key = buildResumeKey(candidate.id, validation.ext, randomBytes(8).toString('hex'));
     await this.storage.putObject(r2Key, file.buffer, validation.mimeType);
 
-    const inserted = await prisma.$transaction(async (tx) => {
-      const resume = await tx.resume.create({
-        data: {
-          candidateId: candidate.id,
-          r2Key,
-          originalFilename: file.originalname,
-          sizeBytes: validation.sizeBytes,
-          mimeType: validation.mimeType,
-          scanStatus: 'CLEAN',
-        },
-      });
-      // Soft-delete the previous active resume.
-      if (candidate.activeResumeId !== null) {
-        await tx.resume.update({
-          where: { id: candidate.activeResumeId },
-          data: { deletedAt: new Date() },
+    let inserted;
+    try {
+      inserted = await prisma.$transaction(async (tx) => {
+        const resume = await tx.resume.create({
+          data: {
+            candidateId: candidate.id,
+            r2Key,
+            originalFilename: file.originalname,
+            sizeBytes: validation.sizeBytes,
+            mimeType: validation.mimeType,
+            scanStatus: 'CLEAN',
+          },
         });
+        // Soft-delete the previous active resume.
+        if (candidate.activeResumeId !== null) {
+          await tx.resume.update({
+            where: { id: candidate.activeResumeId },
+            data: { deletedAt: new Date() },
+          });
+        }
+        await tx.candidate.update({
+          where: { userId },
+          data: { activeResumeId: resume.id },
+        });
+        await tx.profileAuditLog.create({
+          data: {
+            userId,
+            action: 'RESUME_UPLOAD',
+            diff: {
+              resumeId: resume.id,
+              originalFilename: resume.originalFilename,
+              sizeBytes: resume.sizeBytes,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        return resume;
+      });
+    } catch (txErr) {
+      // Tx failed after R2 write — best-effort delete to avoid orphan.
+      this.logger.warn(`tx failed after R2 put — cleaning up ${r2Key}`);
+      try {
+        await this.storage.deleteObject(r2Key);
+      } catch (cleanupErr) {
+        this.logger.error(
+          `failed to clean up orphan ${r2Key}: ${(cleanupErr as Error).message}`,
+        );
       }
-      await tx.candidate.update({
-        where: { userId },
-        data: { activeResumeId: resume.id },
-      });
-      await tx.profileAuditLog.create({
-        data: {
-          userId,
-          action: 'RESUME_UPLOAD',
-          diff: {
-            resumeId: resume.id,
-            originalFilename: resume.originalFilename,
-            sizeBytes: resume.sizeBytes,
-          } as unknown as Prisma.InputJsonValue,
-        },
-      });
-      return resume;
-    });
+      throw txErr;
+    }
 
     await recomputeCompleteness(userId);
     return this.toView(inserted);
