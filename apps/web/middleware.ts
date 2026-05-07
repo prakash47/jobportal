@@ -1,39 +1,61 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { isFlagEnabled, FLAG } from '@jobportal/feature-flags';
+import { computeCanonicalRedirect } from './lib/url/middleware-core';
 
-// Layer 1 enforcement (SRS §7.12 + CLAUDE.md §4).
-// Returns 404 for any pathname whose flag is OFF before the route handler runs.
+// SRS §6.1 + §6.3 — URL canonicalisation pipeline:
+//   1. Lowercase paths (301 if uppercase)
+//   2. Strip trailing slashes (301)
+//   3. Sort multi-value city paths alphabetically (301)
+//   4. Strip tracking query params + sort what remains (301)
+//   5. Feature-flag route gates (404 when OFF)
 //
-// Currently gates:
-//   /services/<slug>   →  services.<slug_underscored>.enabled
-//   /pricing           →  subscription.pricing_page.visible
+// Order matters: we collapse all canonicalisation into ONE 301 (no chains)
+// before evaluating flag gates.
+//
+// CLAUDE.md §1 + the @jobportal/feature-flags Redis client require Node APIs,
+// so this middleware runs on Node runtime, not Edge. See ADR 0005 for why.
 
 export const config = {
-  // ioredis (used by @jobportal/feature-flags) needs Node APIs;
-  // Edge runtime can't load it.
   runtime: 'nodejs',
-  matcher: ['/services/:path*', '/pricing'],
+  matcher: [
+    // Skip API routes, _next internals, and static asset extensions.
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2?|css|js|json|xml|txt)).*)',
+  ],
 };
 
 export async function middleware(request: NextRequest): Promise<NextResponse | undefined> {
+  // 1-4: canonicalisation. Single 301 if anything changed.
+  const canonical = computeCanonicalRedirect(new URL(request.url));
+  if (canonical) {
+    return NextResponse.redirect(canonical, 301);
+  }
+
+  // 5: flag gates (existing behaviour from feature/feature-flag-system).
   const { pathname } = request.nextUrl;
 
   if (pathname === '/pricing') {
     if (!(await isFlagEnabled(FLAG.PRICING_PAGE_VISIBLE))) {
       return new NextResponse(null, { status: 404 });
     }
-    return undefined;
-  }
-
-  if (pathname.startsWith('/services/')) {
+  } else if (pathname.startsWith('/services/')) {
     const slug = pathname.split('/')[2];
     if (!slug) return new NextResponse(null, { status: 404 });
-    const key = `services.${slug.replaceAll('-', '_')}.enabled`;
-    if (!(await isFlagEnabled(key))) {
+    const flagKey = `services.${slug.replaceAll('-', '_')}.enabled`;
+    if (!(await isFlagEnabled(flagKey))) {
       return new NextResponse(null, { status: 404 });
     }
-    return undefined;
   }
 
-  return undefined;
+  // Forward the (canonical) pathname to layouts via header so they can
+  // render <link rel="canonical"> without re-deriving the URL.
+  const res = NextResponse.next({
+    request: {
+      headers: new Headers({
+        ...Object.fromEntries(request.headers),
+        'x-canonical-pathname': pathname,
+        'x-canonical-search': request.nextUrl.search,
+      }),
+    },
+  });
+  return res;
 }
