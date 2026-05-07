@@ -1,0 +1,21 @@
+{
+  "name": "@jobportal/search",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Elasticsearch 9 client and index helpers.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "lint": "echo 'no lint configured yet'",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo dist"
+  },
+  "dependencies": {
+    "@elastic/elasticsearch": "^9.0.0",
+    "@jobportal/db": "workspace:*",
+    "@jobportal/types": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

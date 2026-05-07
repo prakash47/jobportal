@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@jobportal/ui": ["packages/ui/src/index.ts"],
+      "@jobportal/ui/*": ["packages/ui/src/*"],
+      "@jobportal/db": ["packages/db/src/index.ts"],
+      "@jobportal/db/*": ["packages/db/src/*"],
+      "@jobportal/search": ["packages/search/src/index.ts"],
+      "@jobportal/search/*": ["packages/search/src/*"],
+      "@jobportal/auth": ["packages/auth/src/index.ts"],
+      "@jobportal/auth/*": ["packages/auth/src/*"],
+      "@jobportal/feature-flags": ["packages/feature-flags/src/index.ts"],
+      "@jobportal/feature-flags/*": ["packages/feature-flags/src/*"],
+      "@jobportal/types": ["packages/types/src/index.ts"],
+      "@jobportal/types/*": ["packages/types/src/*"]
+    }
+  }
+}

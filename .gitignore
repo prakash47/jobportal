@@ -161,9 +161,10 @@ docker-compose.override.yml
 .history/
 
 # ---------- Local-only docs (NOT pushed to remote) ----------
-# These contain product strategy / spec material and stay on the dev machine.
-# Untracked from origin on 2026-05-07; files continue to exist locally.
-CLAUDE.md
-README.md
-SETUP_GUIDE.md
-docs/
+# Patterns are anchored to the repo root with leading '/' so per-workspace
+# READMEs (apps/*/README.md, packages/*/README.md) remain trackable.
+# These root-level files contain product strategy / spec material and stay on the dev machine.
+/CLAUDE.md
+/README.md
+/SETUP_GUIDE.md
+/docs/
