@@ -1,11 +1,17 @@
-// @jobportal/feature-flags — backend-controlled feature flag system (SRS §7, CLAUDE.md §4).
-//
-// Three-layer enforcement (mandatory):
-//   Layer 1 — Next.js middleware (route gate)
-//   Layer 2 — Page server component (notFound() if disabled)
-//   Layer 3 — API endpoint (last line of defense — non-bypassable)
-//
-// Flag types: BOOLEAN, TIER_GATED, PERCENTAGE_ROLLOUT, USER_TARGETED, COHORT_TARGETED.
-// Implementations follow in feature/feature-flag-system.
+// @jobportal/feature-flags — backend-controlled feature flag system (SRS §7).
+// Three-layer enforcement (middleware / page / API) per CLAUDE.md §4.
 
-export {};
+export { CRITICAL_FLAGS, FLAG, type FlagKey } from './keys';
+export type {
+  Actor,
+  EvaluationContext,
+  EvaluationReason,
+  EvaluationResult,
+  FeatureFlag,
+  FlagAuditLog,
+  FlagPatch,
+} from './types';
+export { evaluate } from './evaluator';
+export { bucket } from './hash';
+export { evaluateFlag, getFlag, isFlagEnabled, listFlags, setFlag } from './api';
+export { disconnectCache, invalidateFlag } from './cache';
