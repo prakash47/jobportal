@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Button, Input, Label } from '@jobportal/ui';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -39,39 +40,37 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center justify-center p-6 font-sans">
+    <main className="mx-auto flex min-h-screen max-w-md items-center justify-center p-6">
       <div className="w-full">
-        <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
-        <p className="mt-1 text-sm text-zinc-500">Start your job search on JobPortal.</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Create your account</h1>
+        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">Start your job search on JobPortal.</p>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4">
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium">Name</label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="name">Name</Label>
+            <Input
               id="name"
               type="text"
               autoComplete="name"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none"
             />
           </div>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium">Email</label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="email">Email</Label>
+            <Input
               id="email"
               type="email"
               autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none"
             />
           </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium">Password</label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="password">Password</Label>
+            <Input
               id="password"
               type="password"
               autoComplete="new-password"
@@ -79,36 +78,41 @@ export default function RegisterPage() {
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none"
+              aria-describedby="password-hint"
             />
-            <p className="mt-1 text-xs text-zinc-500">8+ chars, must include a digit and a special character.</p>
+            <p id="password-hint" className="text-xs text-[var(--color-fg-muted)]">
+              8+ chars, must include a digit and a special character.
+            </p>
           </div>
-          <div>
-            <label htmlFor="phone" className="block text-sm font-medium">Phone <span className="text-zinc-400">(optional)</span></label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="phone">
+              Phone <span className="text-[var(--color-fg-subtle)]">(optional)</span>
+            </Label>
+            <Input
               id="phone"
               type="tel"
               autoComplete="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none"
             />
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-[var(--color-danger)]">
+              {error}
+            </p>
+          )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-          >
-            {loading ? 'Creating account…' : 'Create account'}
-          </button>
+          <Button type="submit" loading={loading} className="w-full">
+            Create account
+          </Button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-zinc-500">
+        <p className="mt-6 text-center text-sm text-[var(--color-fg-muted)]">
           Already have an account?{' '}
-          <Link href="/login" className="font-medium text-zinc-900 hover:underline">Sign in</Link>
+          <Link href="/login" className="font-medium text-[var(--color-fg)] hover:underline">
+            Sign in
+          </Link>
         </p>
       </div>
     </main>

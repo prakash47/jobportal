@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { Button, Card, Input, Label } from '@jobportal/ui';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -35,46 +36,48 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center justify-center p-6 font-sans">
+    <main className="mx-auto flex min-h-screen max-w-md items-center justify-center p-6">
       <div className="w-full">
-        <h1 className="text-2xl font-semibold tracking-tight">Reset your password</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Reset your password</h1>
+        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
           Enter the email associated with your account. We will send you a reset link valid for 15 minutes.
         </p>
 
         {submitted ? (
-          <p className="mt-8 rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm">
-            If an account exists for <span className="font-medium">{email}</span>, a reset link is on its way. Check your inbox.
-          </p>
+          <Card className="mt-8 bg-[var(--color-bg-muted)] p-4 text-sm text-[var(--color-fg)]" role="status">
+            If an account exists for{' '}
+            <span className="font-medium">{email}</span>, a reset link is on its way. Check your inbox.
+          </Card>
         ) : (
           <form onSubmit={onSubmit} className="mt-8 space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium">Email</label>
-              <input
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
                 id="email"
                 type="email"
                 autoComplete="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none"
               />
             </div>
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && (
+              <p role="alert" className="text-sm text-[var(--color-danger)]">
+                {error}
+              </p>
+            )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-            >
-              {loading ? 'Sending…' : 'Send reset link'}
-            </button>
+            <Button type="submit" loading={loading} className="w-full">
+              Send reset link
+            </Button>
           </form>
         )}
 
-        <p className="mt-6 text-center text-sm text-zinc-500">
-          <Link href="/login" className="hover:text-zinc-900">Back to sign in</Link>
+        <p className="mt-6 text-center text-sm text-[var(--color-fg-muted)]">
+          <Link href="/login" className="hover:text-[var(--color-fg)]">
+            Back to sign in
+          </Link>
         </p>
       </div>
     </main>

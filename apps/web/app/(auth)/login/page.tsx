@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Button, Input, Label } from '@jobportal/ui';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -37,52 +38,54 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center justify-center p-6 font-sans">
+    <main className="mx-auto flex min-h-screen max-w-md items-center justify-center p-6">
       <div className="w-full">
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
-        <p className="mt-1 text-sm text-zinc-500">Sign in to your JobPortal account.</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Welcome back</h1>
+        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">Sign in to your JobPortal account.</p>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium">Email</label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="email">Email</Label>
+            <Input
               id="email"
               type="email"
               autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none"
             />
           </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium">Password</label>
-            <input
+          <div className="space-y-1.5">
+            <Label htmlFor="password">Password</Label>
+            <Input
               id="password"
               type="password"
               autoComplete="current-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm focus:border-zinc-900 focus:outline-none"
             />
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-[var(--color-danger)]">
+              {error}
+            </p>
+          )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-          >
-            {loading ? 'Signing in…' : 'Sign in'}
-          </button>
+          <Button type="submit" loading={loading} className="w-full">
+            Sign in
+          </Button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-zinc-500">
-          <Link href="/forgot-password" className="hover:text-zinc-900">Forgot password?</Link>
+        <p className="mt-6 text-center text-sm text-[var(--color-fg-muted)]">
+          <Link href="/forgot-password" className="hover:text-[var(--color-fg)]">
+            Forgot password?
+          </Link>
           <span className="mx-2">·</span>
-          <Link href="/register" className="hover:text-zinc-900">Create account</Link>
+          <Link href="/register" className="hover:text-[var(--color-fg)]">
+            Create account
+          </Link>
         </p>
       </div>
     </main>
