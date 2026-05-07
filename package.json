@@ -13,7 +13,8 @@
       "@prisma/engines",
       "prisma",
       "sharp",
-      "@nestjs/core"
+      "@nestjs/core",
+      "argon2"
     ]
   },
   "scripts": {

@@ -7,14 +7,22 @@
   "types": "./src/index.ts",
   "scripts": {
     "lint": "echo 'no lint configured yet'",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo dist"
   },
   "dependencies": {
     "@jobportal/db": "workspace:*",
-    "@jobportal/types": "workspace:*"
+    "@jobportal/types": "workspace:*",
+    "argon2": "^0.41.0",
+    "jsonwebtoken": "^9.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.0"
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
   }
 }
