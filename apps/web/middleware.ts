@@ -44,6 +44,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse | u
     if (!(await isFlagEnabled(flagKey))) {
       return new NextResponse(null, { status: 404 });
     }
+  } else if (pathname === '/profile/resume/download') {
+    // SRS §4.3.4 + CLAUDE.md §4 — Layer 1 gate for the paid resume download.
+    // Layer 2 lives in the page server component; Layer 3 is the API.
+    if (!(await isFlagEnabled('feature.resume_download_pdf'))) {
+      return NextResponse.redirect(new URL('/profile/resume', request.url), 302);
+    }
   }
 
   // Forward the (canonical) pathname to layouts via header so they can
