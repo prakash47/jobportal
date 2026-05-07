@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@jobportal/ui';
 import { Building2, MapPin } from '@jobportal/ui/icons';
-import { buildCompanySlug } from '../../lib/url/slug';
 import { CompanyLogo } from './CompanyLogo';
 import { RatingStars } from './RatingStars';
 
@@ -30,9 +29,10 @@ export function CompanyCard({
   reviewCount,
   openingsCount,
 }: CompanyCardProps) {
-  const href = `/${buildCompanySlug({ name, id })}`;
-  // buildCompanySlug uses the company name to build the slug, but we should
-  // honour the persisted `slug` column when the names diverge (slug history).
+  // Always link via the persisted slug. buildCompanySlug() (in lib/url/slug)
+  // would re-derive from the name, which can drift after a rename — the
+  // server-side redirect in app/[companyOverview]/page.tsx fixes drift but
+  // the directory should already point at the canonical URL.
   const canonicalHref = `/${slug}-overview-${id}`;
 
   return (
@@ -71,9 +71,6 @@ export function CompanyCard({
             <RatingStars rating={averageRating} reviewCount={reviewCount} />
           </span>
         </div>
-        {/* Suppress unused-import warning for buildCompanySlug while we use
-            the persisted-slug variant. Kept for symmetry with parseCompanySlug. */}
-        <span hidden>{href}</span>
       </CardContent>
     </Card>
   );
