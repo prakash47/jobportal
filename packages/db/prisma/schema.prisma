@@ -69,6 +69,30 @@ enum EntitlementSource {
   REFERRAL
 }
 
+// SRS §4.3.4 — resume scan status. PENDING is the initial state after upload;
+// the ClamAV worker flips it to CLEAN or INFECTED. Only CLEAN resumes are
+// returned by GET /me/resume.
+enum ResumeScanStatus {
+  PENDING
+  CLEAN
+  INFECTED
+}
+
+// SRS §4.3.6 — every profile edit writes one row of this enum's actions to
+// ProfileAuditLog. The diff column captures before/after at field level.
+enum ProfileAuditAction {
+  PROFILE_UPDATE
+  EDUCATION_ADD
+  EDUCATION_UPDATE
+  EDUCATION_DELETE
+  EXPERIENCE_ADD
+  EXPERIENCE_UPDATE
+  EXPERIENCE_DELETE
+  SKILLS_UPDATE
+  RESUME_UPLOAD
+  RESUME_DELETE
+}
+
 // ============================================================
 // User & profile (SRS §8.2)
 // ============================================================
@@ -94,6 +118,7 @@ model User {
   usageRecords        UsageRecord[]
   sessions            Session[]
   passwordResetTokens PasswordResetToken[]
+  profileAuditLogs    ProfileAuditLog[]
 
   @@index([role])
 }
@@ -131,22 +156,104 @@ model PasswordResetToken {
 }
 
 model Candidate {
-  id                 Int      @id @default(autoincrement())
-  userId             Int      @unique
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  headline           String?
-  summary            String?
-  experienceYears    Int?
-  currentSalaryPaise Int?
-  currentCompanyId   Int?
-  currentCompany     Company? @relation(fields: [currentCompanyId], references: [id], onDelete: SetNull)
-  resumeUrl          String?
-  profileViews       Int      @default(0)
-  skillIds           Int[]
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                     Int      @id @default(autoincrement())
+  userId                 Int      @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline               String?
+  summary                String?
+  // SRS §4.3.1 — store experience in months for sub-year precision.
+  experienceMonths       Int?
+  currentTitle           String?
+  currentCompanyId       Int?
+  currentCompany         Company? @relation(fields: [currentCompanyId], references: [id], onDelete: SetNull)
+  currentSalaryPaise     Int?
+  expectedSalaryMinPaise Int?
+  expectedSalaryMaxPaise Int?
+  noticePeriodDays       Int?
+  preferredCityIds       Int[]
+  skillIds               Int[]
+  // Active resume points to the latest CLEAN row in Resume; older rows stay
+  // for audit but are never returned by GET /me/resume.
+  activeResumeId         Int?     @unique
+  activeResume           Resume?  @relation("ActiveResume", fields: [activeResumeId], references: [id], onDelete: SetNull)
+  // SRS §4.3.7 — denormalised completeness score (0–100), recomputed on every
+  // PATCH so the UI hot path is one row read.
+  profileCompleteness    Int      @default(0)
+  profileViews           Int      @default(0)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  educations  Education[]
+  experiences WorkExperience[]
+  resumes     Resume[]         @relation("CandidateResumes")
 
   @@index([currentCompanyId])
+}
+
+model Education {
+  id           Int       @id @default(autoincrement())
+  candidateId  Int
+  candidate    Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  institute    String
+  degree       String
+  fieldOfStudy String?
+  startYear    Int
+  endYear      Int?
+  grade        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([candidateId])
+}
+
+model WorkExperience {
+  id          Int       @id @default(autoincrement())
+  candidateId Int
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  companyName String
+  title       String
+  startDate   DateTime
+  endDate     DateTime?
+  isCurrent   Boolean   @default(false)
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([candidateId])
+}
+
+// SRS §4.3.4 — uploaded resume metadata. The actual file lives in R2 keyed by
+// r2Key; the row carries the bookkeeping (size, MIME, scan state). Soft-delete
+// via deletedAt so audit trails survive supersede-on-new-upload.
+model Resume {
+  id               Int              @id @default(autoincrement())
+  candidateId      Int
+  candidate        Candidate        @relation("CandidateResumes", fields: [candidateId], references: [id], onDelete: Cascade)
+  r2Key            String           @unique
+  originalFilename String
+  sizeBytes        Int
+  mimeType         String
+  scanStatus       ResumeScanStatus @default(PENDING)
+  uploadedAt       DateTime         @default(now())
+  deletedAt        DateTime?
+
+  activeOnCandidate Candidate? @relation("ActiveResume")
+
+  @@index([candidateId, deletedAt])
+}
+
+// SRS §4.3.6 — every profile edit (incl. single-field PATCHes). Diff is a
+// before/after object at field level; a missing key means "not changed".
+// Distinct from FlagAuditLog (admin-side feature-flag toggles).
+model ProfileAuditLog {
+  id        Int                @id @default(autoincrement())
+  userId    Int
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    ProfileAuditAction
+  diff      Json
+  createdAt DateTime           @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Recruiter {
