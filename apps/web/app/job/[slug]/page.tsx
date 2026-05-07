@@ -148,7 +148,7 @@ export default async function JobDetailPage({ params }: PageProps) {
       <Script
         id="ldjson-jobposting"
         type="application/ld+json"
-        strategy="beforeInteractive"
+        strategy="afterInteractive"
         // eslint-disable-next-line react/no-danger -- JSON.stringify output is JSON; we render inside <script>.
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
