@@ -12,16 +12,17 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@jobportal/auth": "workspace:*",
+    "@jobportal/db": "workspace:*",
+    "@jobportal/feature-flags": "workspace:*",
+    "@jobportal/search": "workspace:*",
+    "@jobportal/types": "workspace:*",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
-    "@jobportal/db": "workspace:*",
-    "@jobportal/search": "workspace:*",
-    "@jobportal/auth": "workspace:*",
-    "@jobportal/types": "workspace:*",
-    "@jobportal/feature-flags": "workspace:*"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",

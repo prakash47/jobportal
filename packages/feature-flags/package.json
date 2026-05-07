@@ -7,14 +7,19 @@
   "types": "./src/index.ts",
   "scripts": {
     "lint": "echo 'no lint configured yet'",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo dist"
   },
   "dependencies": {
     "@jobportal/db": "workspace:*",
-    "@jobportal/types": "workspace:*"
+    "@jobportal/types": "workspace:*",
+    "ioredis": "^5.5.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.0"
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.0.0"
   }
 }
