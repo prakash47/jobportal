@@ -120,6 +120,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   profileAuditLogs    ProfileAuditLog[]
   emailPreference     EmailPreference?
+  companyReviews      CompanyReview[]
 
   @@index([role])
 }
@@ -288,15 +289,44 @@ model Company {
   headquartersCity   City?     @relation(fields: [headquartersCityId], references: [id], onDelete: SetNull)
   employeeCount      String?
   foundedYear        Int?
+  // SRS §4.7.4 — denormalised review aggregates so the directory page renders
+  // in one query. Recomputed when reviews are written; the write path lands
+  // with the recruiter portal (Task 15).
+  averageRating      Float?
+  reviewCount        Int       @default(0)
+  // SRS §4.7.6 — CMS-managed array of { heading, body, imageUrl? } blocks for
+  // the /working-at-{slug} page. Admin tool to edit lands with Task 16.
+  workingAtSections  Json?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   jobs       Job[]
   recruiters Recruiter[]
   candidates Candidate[]
+  reviews    CompanyReview[]
 
   @@index([industryId])
   @@index([headquartersCityId])
+}
+
+// SRS §4.7.4 — read-only on the public profile page in this PR. Write paths
+// (recruiter approval / candidate submission) come later; the page renders
+// rating + count from Company's denormalised fields so it does not scan the
+// table on every render.
+model CompanyReview {
+  id         Int      @id @default(autoincrement())
+  companyId  Int
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId     Int?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  rating     Int
+  title      String?
+  body       String
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([companyId, createdAt])
 }
 
 // ============================================================
