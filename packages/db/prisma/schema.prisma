@@ -74,24 +74,60 @@ enum EntitlementSource {
 // ============================================================
 
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String
-  name         String
-  role         UserRole @default(CANDIDATE)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  phone         String?
+  emailVerified Boolean  @default(false)
+  role          UserRole @default(CANDIDATE)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  candidate     Candidate?
-  recruiter     Recruiter?
-  applications  Application[]
-  savedJobs     SavedJob[]
-  jobAlerts     JobAlert[]
-  subscriptions Subscription[]
-  entitlements  UserEntitlement[]
-  usageRecords  UsageRecord[]
+  candidate           Candidate?
+  recruiter           Recruiter?
+  applications        Application[]
+  savedJobs           SavedJob[]
+  jobAlerts           JobAlert[]
+  subscriptions       Subscription[]
+  entitlements        UserEntitlement[]
+  usageRecords        UsageRecord[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([role])
+}
+
+// Active refresh-token sessions per SRS §4.12.9.
+// refreshTokenHash = sha256(jti) — the raw token never lives in the DB.
+model Session {
+  id               Int       @id @default(autoincrement())
+  userId           Int
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String    @unique
+  deviceInfo       String?
+  ipAddress        String?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+// One-time password-reset tokens per SRS §4.12.5.
+// tokenHash = sha256(raw) — the raw token only lives in the email body.
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Candidate {
