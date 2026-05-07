@@ -306,7 +306,19 @@ importers:
       '@jobportal/types':
         specifier: workspace:*
         version: link:../types
+      dotenv:
+        specifier: ^16.4.0
+        version: 16.6.1
     devDependencies:
+      '@faker-js/faker':
+        specifier: ^9.3.0
+        version: 9.9.0
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.2
+      tsx:
+        specifier: ^4.0.0
+        version: 4.21.0
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
@@ -865,6 +877,10 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@faker-js/faker@9.9.0':
+    resolution: {integrity: sha512-OEl393iCOoo/z8bMezRlJu+GlRGlsKbUAN7jKB6LhnKoqKve5DXRpalbItIIcwnCjs1k/FOPjFzcA6Qn+H+YbA==}
+    engines: {node: '>=18.0.0', npm: '>=9.0.0'}
 
   '@floating-ui/core@1.7.5':
     resolution: {integrity: sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ==}
@@ -4999,6 +5015,8 @@ snapshots:
 
   '@esbuild/win32-x64@0.27.7':
     optional: true
+
+  '@faker-js/faker@9.9.0': {}
 
   '@floating-ui/core@1.7.5':
     dependencies:
