@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApplyDto, ListApplicationsQueryDto } from './dto';
 import { ApplicationsService } from './applications.service';
+import { ApplicationQuotaGuard } from './quota.guard';
 
 @Controller('me/applications')
 @UseGuards(JwtAuthGuard)
@@ -31,8 +32,13 @@ export class ApplicationsController {
     return this.service.list(user.sub, parsed.data);
   }
 
+  // Layer 1 of three-layer enforcement (CLAUDE.md §4 / SRS §4.11.16-17).
+  // ApplicationQuotaGuard runs preflight() before the controller method so we
+  // fast-fail without touching Postgres when the user is already at the daily
+  // limit. The atomic increment lives in the service (Layer 3).
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(ApplicationQuotaGuard)
   async apply(@Body() body: unknown, @CurrentUser() user: AccessClaims) {
     const parsed = ApplyDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);

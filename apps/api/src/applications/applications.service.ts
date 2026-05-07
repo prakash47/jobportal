@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { prisma, Prisma, type Application, type ApplicationStatus } from '@jobportal/db';
 import { EmailService } from '../email/email.service';
+import { ApplicationQuotaService } from './quota.service';
 import { buildHistoryEntry, canTransition, isTerminal } from './state-machine';
 
 const PAGE_SIZE = 20;
@@ -33,7 +34,10 @@ export interface ApplicationListPage {
 
 @Injectable()
 export class ApplicationsService {
-  constructor(private readonly email: EmailService) {}
+  constructor(
+    private readonly email: EmailService,
+    private readonly quota: ApplicationQuotaService,
+  ) {}
 
   async apply(userId: number, jobId: number, coverLetter?: string): Promise<Application> {
     // FR-4.12.8: email verification gates apply.
@@ -58,9 +62,12 @@ export class ApplicationsService {
       );
     }
 
-    // FR-4.2.6: UNIQUE(userId, jobId) — friendly 409, not 500.
+    // FR-4.2.6: UNIQUE(userId, jobId) — friendly 409, not 500. We check this
+    // BEFORE quota.consume so a duplicate-apply attempt does not cost a slot
+    // (Day 0 decision (a) per the PR plan).
+    let created: Application;
     try {
-      return await prisma.application.create({
+      created = await prisma.application.create({
         data: {
           userId,
           jobId,
@@ -75,6 +82,20 @@ export class ApplicationsService {
       }
       throw err;
     }
+
+    // Layer 3 of three-layer enforcement (CLAUDE.md §4 / SRS §4.11.16-17).
+    // Atomically increments the day counter; throws 429 if a race put us
+    // over the limit between the L1 preflight and here. On failure, roll
+    // back the Application row so the user does not consume a slot for an
+    // attempt the API ultimately rejected.
+    try {
+      await this.quota.consume(userId);
+    } catch (err) {
+      await prisma.application.delete({ where: { id: created.id } }).catch(() => undefined);
+      throw err;
+    }
+
+    return created;
   }
 
   // SRS §4.6.1 — paginated dashboard list joined with Job + Company so the
