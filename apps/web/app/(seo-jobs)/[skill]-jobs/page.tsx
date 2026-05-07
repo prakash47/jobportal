@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@jobportal/db';
 import { searchJobs } from '@jobportal/search';
 import { SrpShell } from '../../../components/srp';
-import { parseSrpSearchParams, skillBreadcrumb } from '../../../lib/srp';
+import { loadSrpUserContext, parseSrpSearchParams, skillBreadcrumb } from '../../../lib/srp';
 import type { ItemListEntry } from '../../../lib/seo/json-ld';
 
 const PAGE_SIZE = 20;
@@ -52,6 +52,7 @@ export default async function SkillJobsPage({ params, searchParams }: PageProps)
     prisma.city.findMany({ select: { slug: true, name: true }, orderBy: { name: 'asc' } }),
     prisma.industry.findMany({ select: { slug: true, name: true }, orderBy: { name: 'asc' } }),
   ]);
+  const userCtx = await loadSrpUserContext(results.hits.map((j) => j.id));
 
   const items: ItemListEntry[] = results.hits.map((j) => ({
     name: j.title,
@@ -76,6 +77,9 @@ export default async function SkillJobsPage({ params, searchParams }: PageProps)
       skills={skills}
       cities={cities}
       industries={industries}
+      isAuthed={userCtx.isAuthed}
+      savedJobIds={userCtx.savedJobIds}
+      returnTo={basePath}
     />
   );
 }

@@ -11,3 +11,4 @@ export {
   type SrpHrefInput,
   type SrpQuerySchema,
 } from './params';
+export { loadSrpUserContext, type SrpUserContext } from './user-context';

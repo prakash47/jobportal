@@ -54,7 +54,7 @@ export function ApplyButton({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/applications`, {
+      const res = await fetch(`${API_URL}/me/applications`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

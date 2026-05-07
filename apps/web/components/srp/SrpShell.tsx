@@ -35,6 +35,11 @@ export interface SrpShellProps {
   industries: FilterOption[];
   /** Optional banner shown above the results (e.g., "Searching for 'react'"). */
   resultsBanner?: ReactNode;
+  /** Per-user state — flips the JobCard save toggle into its right shape. */
+  isAuthed?: boolean;
+  savedJobIds?: Set<number>;
+  /** Path the login bounce should return to after sign-in. */
+  returnTo?: string;
 }
 
 export function SrpShell({
@@ -53,6 +58,9 @@ export function SrpShell({
   cities,
   industries,
   resultsBanner,
+  isAuthed = false,
+  savedJobIds,
+  returnTo,
 }: SrpShellProps) {
   const totalPages = Math.max(1, Math.ceil(resultCount / pageSize));
   const sidebar = (
@@ -97,7 +105,12 @@ export function SrpShell({
               <ul className="space-y-3">
                 {results.hits.map((job) => (
                   <li key={job.id}>
-                    <JobCard job={job} />
+                    <JobCard
+                      job={job}
+                      isAuthed={isAuthed}
+                      initialSaved={savedJobIds?.has(job.id) ?? false}
+                      {...(returnTo ? { returnTo } : {})}
+                    />
                   </li>
                 ))}
               </ul>
