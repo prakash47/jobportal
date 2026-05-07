@@ -1,7 +1,9 @@
 import { prisma } from '@jobportal/db';
+import { requireUser } from '../../../lib/auth/require-user';
 import { AlertForm } from '../../../components/alerts';
 
 export default async function NewAlertPage() {
+  await requireUser();
   const [skills, cities] = await Promise.all([
     prisma.skill.findMany({
       select: { slug: true, name: true },

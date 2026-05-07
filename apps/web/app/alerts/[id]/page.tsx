@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma, type Prisma } from '@jobportal/db';
 import { isFlagEnabled } from '@jobportal/feature-flags';
-import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { requireUser } from '../../../lib/auth/require-user';
 import { AlertForm, SendTestButton, type Frequency } from '../../../components/alerts';
 
 interface PageProps {
@@ -15,7 +15,7 @@ export default async function EditAlertPage({ params }: PageProps) {
   const alertId = Number(id);
   if (!Number.isFinite(alertId)) notFound();
 
-  const session = (await readUserFromCookie())!;
+  const session = await requireUser();
   const alert = await prisma.jobAlert.findUnique({ where: { id: alertId } });
   if (!alert || alert.userId !== session.sub) notFound();
 

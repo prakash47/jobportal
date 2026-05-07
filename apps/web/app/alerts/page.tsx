@@ -1,13 +1,13 @@
 import Link from 'next/link';
 import { prisma } from '@jobportal/db';
 import { Button } from '@jobportal/ui';
-import { readUserFromCookie } from '../../lib/auth/server-session';
+import { requireUser } from '../../lib/auth/require-user';
 import { AlertRow, AlertsEmpty } from '../../components/alerts';
 
 const MAX_ALERTS = 10;
 
 export default async function AlertsPage() {
-  const session = (await readUserFromCookie())!;
+  const session = await requireUser();
   const rows = await prisma.jobAlert.findMany({
     where: { userId: session.sub },
     orderBy: { createdAt: 'desc' },
