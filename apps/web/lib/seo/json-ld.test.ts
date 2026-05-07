@@ -69,6 +69,33 @@ describe('jobPosting', () => {
       value: { minValue: 1_000_000, maxValue: 2_000_000, unitText: 'YEAR' },
     });
   });
+
+  it('emits OccupationalExperienceRequirements when monthsOfExperience set', () => {
+    const out = jobPosting({
+      title: 'X',
+      description: 'Y',
+      datePosted: '2026-05-07',
+      hiringOrganization: { name: 'A' },
+      experienceRequirements: { monthsOfExperience: 36 },
+    });
+    expect(out['experienceRequirements']).toMatchObject({
+      '@type': 'OccupationalExperienceRequirements',
+      monthsOfExperience: 36,
+    });
+  });
+
+  it('emits url + directApply on the top-level node', () => {
+    const out = jobPosting({
+      title: 'X',
+      description: 'Y',
+      datePosted: '2026-05-07',
+      hiringOrganization: { name: 'A' },
+      url: 'https://www.jobportal.com/job/x-12345',
+      directApply: true,
+    });
+    expect(out['url']).toBe('https://www.jobportal.com/job/x-12345');
+    expect(out['directApply']).toBe(true);
+  });
 });
 
 describe('organization', () => {

@@ -1,14 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button, Input, Label } from '@jobportal/ui';
+import { safeNext } from '../../../lib/auth/safe-next';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = safeNext(searchParams.get('next'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +32,7 @@ export default function LoginPage() {
         const body = (await res.json().catch(() => ({}))) as { message?: string };
         throw new Error(body.message ?? 'Login failed');
       }
-      router.push('/');
+      router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

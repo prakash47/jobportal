@@ -41,6 +41,22 @@ const config: NextConfig = {
       // },
     ];
   },
+
+  // SRS §4.2.10 — Cloudflare edge cache rule for job detail pages: 60s TTL
+  // with 1h SWR. Page also exports `revalidate = 60` so Next.js ISR matches.
+  async headers() {
+    return [
+      {
+        source: '/job/:slug',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, s-maxage=60, stale-while-revalidate=3600',
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default config;

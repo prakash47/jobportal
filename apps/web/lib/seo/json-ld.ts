@@ -50,6 +50,11 @@ export interface JobPostingInput {
   baseSalary?: { currency: string; minValue?: number; maxValue?: number; unitText?: 'YEAR' | 'MONTH' | 'WEEK' | 'DAY' | 'HOUR' };
   identifier?: { name: string; value: string };
   directApply?: boolean;
+  // Months of prior experience required (Google for Jobs spec). We pass
+  // months — schema.org accepts an OccupationalExperienceRequirements node.
+  experienceRequirements?: { monthsOfExperience: number };
+  // Canonical URL for this posting (Google recommends url for direct-apply).
+  url?: string;
 }
 
 export function jobPosting(input: JobPostingInput) {
@@ -99,6 +104,13 @@ export function jobPosting(input: JobPostingInput) {
     };
   }
   if (input.directApply !== undefined) out['directApply'] = input.directApply;
+  if (input.experienceRequirements) {
+    out['experienceRequirements'] = {
+      '@type': 'OccupationalExperienceRequirements',
+      monthsOfExperience: input.experienceRequirements.monthsOfExperience,
+    };
+  }
+  if (input.url) out['url'] = input.url;
   return out;
 }
 
