@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { IconButton } from '@jobportal/ui';
-import { Linkedin, Link as LinkIcon, Twitter } from '@jobportal/ui/icons';
+import { Linkedin, LinkIcon, Twitter } from '@jobportal/ui/icons';
 
 const SHARE_LINK_CLASSES =
   'inline-flex size-8 items-center justify-center rounded-md text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]';
