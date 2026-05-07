@@ -116,6 +116,18 @@ describe('ApplicationQuotaService.getUserTier', () => {
     ]);
     expect(await svc.getUserTier(42)).toBe('ENTERPRISE');
   });
+
+  // Status filter passes ACTIVE + TRIALING only — PAST_DUE rows have
+  // currentPeriodEnd in the past by definition, so the date filter would
+  // exclude them anyway. Pinning this here so a refactor doesn't silently
+  // re-introduce a contradictory filter.
+  it('queries only ACTIVE + TRIALING subscriptions whose period has not lapsed', async () => {
+    mockedPrisma.subscription.findMany.mockResolvedValue([]);
+    await svc.getUserTier(42);
+    const where = mockedPrisma.subscription.findMany.mock.calls[0]?.[0]?.where;
+    expect(where.status.in).toEqual(['ACTIVE', 'TRIALING']);
+    expect(where.currentPeriodEnd.gt).toBeInstanceOf(Date);
+  });
 });
 
 describe('ApplicationQuotaService.preflight + consume', () => {

@@ -14,9 +14,12 @@ const TTL_SECONDS = 26 * 60 * 60;
 const DEFAULT_LIMIT = 10;
 
 // Per CLAUDE.md §0 — Day 0 plans are seeded but not active. A user counts as
-// "subscribed to PREMIUM" only if they hold a non-terminal Subscription row
-// AND that row's plan tier is the result.
-const NON_TERMINAL_STATUSES: SubscriptionStatus[] = ['ACTIVE', 'TRIALING', 'PAST_DUE'];
+// "subscribed to PREMIUM" only if they hold a paid + in-period Subscription
+// row. PAST_DUE is intentionally excluded: by definition the period has
+// lapsed and renewal failed, so the user effectively has no entitlement.
+// Grace-period semantics (e.g. honour PAST_DUE for 7 days past period end)
+// is an explicit Phase-2 chip when the subscription system goes live.
+const PAID_IN_PERIOD_STATUSES: SubscriptionStatus[] = ['ACTIVE', 'TRIALING'];
 
 const TIER_RANK: Record<SubscriptionTier, number> = {
   FREE: 0,
@@ -65,7 +68,7 @@ export class ApplicationQuotaService {
     const subs = await prisma.subscription.findMany({
       where: {
         userId,
-        status: { in: NON_TERMINAL_STATUSES },
+        status: { in: PAID_IN_PERIOD_STATUSES },
         currentPeriodEnd: { gt: new Date() },
       },
       select: { plan: { select: { tier: true } } },
