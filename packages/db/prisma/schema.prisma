@@ -383,8 +383,10 @@ model JobAlert {
   lastSentAt       DateTime?
   // SRS §4.5.6 — high-entropy token used by the one-click unsubscribe link in
   // every alert email. Random per-alert so leaking one token does not unlock
-  // the user's other alerts.
-  unsubscribeToken String    @unique @default(cuid())
+  // the user's other alerts. Defaulted at the DB layer (gen_random_uuid()) to
+  // match the migration and avoid prisma-migrate-diff drift; raw-SQL inserts
+  // get the same generation path as Prisma client inserts.
+  unsubscribeToken String    @unique @default(dbgenerated("gen_random_uuid()::text"))
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

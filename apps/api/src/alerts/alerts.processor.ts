@@ -127,9 +127,13 @@ export class AlertsProcessor {
 
     await this.email.sendJobAlert(alert.user.email, emailPayload);
 
-    // Persist the dedupe state AFTER successful send. On send failure BullMQ
-    // will retry; the dedupe set is unchanged so the same matches go again.
-    // Cap the persisted set size to avoid Postgres array bloat over time.
+    // Send-before-persist ordering — chosen failure mode: if Resend returns
+    // 200 and this DB write subsequently fails, BullMQ's retry will re-scan
+    // and re-email the same matches because lastSentJobIds never advanced.
+    // Accepted for MVP because Resend itself is at-least-once delivery, so
+    // the duplicate-email risk is bounded. Alternative considered: a
+    // SAVED→SENDING→SENT marker, queued as a follow-up chip. The retry
+    // wrapper also retries the persist via BullMQ's per-job retry policy.
     const persistedIds = [...alreadySent, ...newJobs.map((j) => j.id)].slice(-500);
     await prisma.jobAlert.update({
       where: { id: alertId },

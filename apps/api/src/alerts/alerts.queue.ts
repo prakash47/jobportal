@@ -67,10 +67,19 @@ export class AlertsQueueService implements OnModuleInit, OnApplicationShutdown {
       this.logger.warn(`enqueueScan called but queue is offline (alertId=${alertId})`);
       return;
     }
+    // Stable jobId per (alert, minute-bucket) so concurrent fires for the same
+    // alert (e.g. several jobs indexed in quick succession by the indexer hook)
+    // collapse into a single queued scan rather than running N parallel scans
+    // — dedupe makes them safe but they waste worker time.
+    const minuteBucket = Math.floor(Date.now() / 60_000);
     await this.queue.add(
       JOB_NAMES.SCAN_ALERT,
       { alertId } satisfies ScanAlertJobData,
-      { jobId: `scan-alert-${alertId}-${Date.now()}`, removeOnComplete: 100, removeOnFail: 100 },
+      {
+        jobId: `scan-alert-${alertId}-${minuteBucket}`,
+        removeOnComplete: 100,
+        removeOnFail: 100,
+      },
     );
   }
 

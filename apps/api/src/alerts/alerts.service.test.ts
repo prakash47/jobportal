@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@jobportal/db', () => ({
@@ -143,5 +143,15 @@ describe('AlertsService.canRunTest (killswitch)', () => {
   it('returns false when killswitch is ON', async () => {
     mockedFlag.mockResolvedValue(true);
     expect(await service.canRunTest()).toBe(false);
+  });
+
+  it('assertCanRunTestOrFail throws ForbiddenException when killswitch is ON (path the controller takes for POST :id/test → 403)', async () => {
+    mockedFlag.mockResolvedValue(true);
+    await expect(service.assertCanRunTestOrFail()).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('assertCanRunTestOrFail resolves when killswitch is OFF', async () => {
+    mockedFlag.mockResolvedValue(false);
+    await expect(service.assertCanRunTestOrFail()).resolves.toBeUndefined();
   });
 });
