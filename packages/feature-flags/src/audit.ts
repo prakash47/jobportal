@@ -1,11 +1,14 @@
-import { prisma } from '@jobportal/db';
+import { prisma, type Prisma } from '@jobportal/db';
 import type { Actor, FeatureFlag } from './types';
 
-// Cast the Prisma row into a Json-compatible record. The DB column is jsonb;
-// Prisma accepts plain objects. Date fields serialize to ISO strings.
-function toJson(flag: FeatureFlag | null): Record<string, unknown> {
+// Convert a Prisma row into a Json-compatible value for the FlagAuditLog
+// `before` / `after` columns. The DB column is jsonb; Prisma's typed input
+// is `Prisma.InputJsonValue`. JSON.parse(JSON.stringify(...)) produces a
+// plain object that satisfies that contract — Date fields serialize to ISO
+// strings, BigInts would throw (we don't have any here).
+function toJson(flag: FeatureFlag | null): Prisma.InputJsonValue {
   if (flag === null) return {};
-  return JSON.parse(JSON.stringify(flag)) as Record<string, unknown>;
+  return JSON.parse(JSON.stringify(flag)) as Prisma.InputJsonValue;
 }
 
 export async function writeFlagAuditLog(
