@@ -30,7 +30,7 @@ export function SaveButton({ jobId, jobSlug, isAuthed, initialSaved }: SaveButto
     setBusy(true);
     setSaved(target); // optimistic
     try {
-      const res = await fetch(`${API_URL}/saved-jobs/${jobId}`, {
+      const res = await fetch(`${API_URL}/me/saved-jobs/${jobId}`, {
         method: target ? 'POST' : 'DELETE',
         credentials: 'include',
       });

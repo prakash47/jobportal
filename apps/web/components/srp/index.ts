@@ -1,5 +1,6 @@
 export { FilterSidebar, type FilterOption, type FilterSidebarProps } from './FilterSidebar';
-export { JobCard } from './JobCard';
+export { JobCard, type JobCardProps } from './JobCard';
+export { JobCardSaveToggle, type JobCardSaveToggleProps } from './JobCardSaveToggle';
 export { MobileFilterSheet } from './MobileFilterSheet';
 export { MobileStickyBar } from './MobileStickyBar';
 export { RelatedSearches } from './RelatedSearches';

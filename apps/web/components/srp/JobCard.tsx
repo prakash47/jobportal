@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Badge, Card, CardContent, CardHeader } from '@jobportal/ui';
 import { Briefcase, MapPin } from '@jobportal/ui/icons';
 import type { JobDoc } from '@jobportal/search';
+import { JobCardSaveToggle } from './JobCardSaveToggle';
 
 function formatPostedAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -35,7 +36,15 @@ function formatExperience(min: number | null, max: number | null): string | null
   return `up to ${toY(max as number)} yrs`;
 }
 
-export function JobCard({ job }: { job: JobDoc }) {
+export interface JobCardProps {
+  job: JobDoc;
+  isAuthed?: boolean;
+  initialSaved?: boolean;
+  /** Same-origin path login should bounce back to (e.g. '/jobs?q=react'). */
+  returnTo?: string;
+}
+
+export function JobCard({ job, isAuthed = false, initialSaved = false, returnTo }: JobCardProps) {
   const salary = formatSalary(job.salaryMin, job.salaryMax);
   const exp = formatExperience(job.minExperienceMonths, job.maxExperienceMonths);
 
@@ -57,6 +66,13 @@ export function JobCard({ job }: { job: JobDoc }) {
               {job.companyName}
             </Link>
           </div>
+          <JobCardSaveToggle
+            jobId={job.id}
+            jobSlug={job.canonicalSlug}
+            isAuthed={isAuthed}
+            initialSaved={initialSaved}
+            {...(returnTo ? { returnTo } : {})}
+          />
         </div>
       </CardHeader>
       <CardContent className="pt-0">
