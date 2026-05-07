@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { isFlagEnabled } from '@jobportal/feature-flags';
-import { prisma, type SubscriptionTier } from '@jobportal/db';
+import { prisma, type SubscriptionStatus, type SubscriptionTier } from '@jobportal/db';
 import { RedisService } from '../redis/redis.service';
 
 // SRS §4.11.16-17 — daily-application quota for free-tier users.
@@ -16,7 +16,7 @@ const DEFAULT_LIMIT = 10;
 // Per CLAUDE.md §0 — Day 0 plans are seeded but not active. A user counts as
 // "subscribed to PREMIUM" only if they hold a non-terminal Subscription row
 // AND that row's plan tier is the result.
-const NON_TERMINAL_STATUSES = ['ACTIVE', 'TRIALING', 'PAST_DUE'] as const;
+const NON_TERMINAL_STATUSES: SubscriptionStatus[] = ['ACTIVE', 'TRIALING', 'PAST_DUE'];
 
 const TIER_RANK: Record<SubscriptionTier, number> = {
   FREE: 0,
@@ -65,7 +65,7 @@ export class ApplicationQuotaService {
     const subs = await prisma.subscription.findMany({
       where: {
         userId,
-        status: { in: NON_TERMINAL_STATUSES as unknown as SubscriptionTier[] },
+        status: { in: NON_TERMINAL_STATUSES },
         currentPeriodEnd: { gt: new Date() },
       },
       select: { plan: { select: { tier: true } } },
