@@ -1,0 +1,7 @@
+/* Storybook entry — pulls in Tailwind 4 + JobPortal tokens for the preview iframe. */
+@import "tailwindcss";
+@import "./theme.css";
+
+body {
+  padding: 1.5rem;
+}

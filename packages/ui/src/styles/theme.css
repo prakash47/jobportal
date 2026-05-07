@@ -1,19 +1,148 @@
-/* JobPortal design tokens — Tailwind 4 CSS-first config (CLAUDE.md §2).
- * Imported by each app's globals.css AFTER `@import "tailwindcss"`.
- * No tailwind.config.ts file — Tailwind 4 reads tokens from @theme blocks.
+/* JobPortal design tokens — Tailwind 4 CSS-first config (CLAUDE.md §1, §2; SRS §3.1).
+ *
+ * No tailwind.config.ts — all tokens live in @theme blocks here. Apps import this
+ * AFTER `@import "tailwindcss"`.
+ *
+ * Color space: OKLCH (perceptually uniform; Tailwind 4 native).
+ * Dark mode: [data-theme="dark"] selector overrides surface/foreground tokens.
+ * Acceptance test (CLAUDE.md §2): would this look at home next to linear.app?
  */
 
 @theme {
-  /* Colors — OKLCH (Tailwind 4 default) */
-  --color-primary: oklch(0.55 0.20 254);
+  /* ============================================================
+   * Neutral scale (slight cool tilt — zinc-leaning)
+   * ============================================================ */
+  --color-neutral-50:  oklch(0.985 0.002 270);
+  --color-neutral-100: oklch(0.97  0.003 270);
+  --color-neutral-200: oklch(0.92  0.004 270);
+  --color-neutral-300: oklch(0.87  0.005 270);
+  --color-neutral-400: oklch(0.71  0.006 270);
+  --color-neutral-500: oklch(0.555 0.007 270);
+  --color-neutral-600: oklch(0.44  0.008 270);
+  --color-neutral-700: oklch(0.37  0.008 270);
+  --color-neutral-800: oklch(0.27  0.007 270);
+  --color-neutral-900: oklch(0.205 0.006 270);
+  --color-neutral-950: oklch(0.13  0.005 270);
+
+  /* ============================================================
+   * Primary — restrained blue (CLAUDE.md §2 + SRS §3.1)
+   * --color-primary-600 ~ rgb(10, 102, 194)
+   * ============================================================ */
+  --color-primary-50:  oklch(0.97 0.014 254);
+  --color-primary-100: oklch(0.93 0.034 254);
+  --color-primary-200: oklch(0.88 0.072 254);
+  --color-primary-300: oklch(0.80 0.115 254);
+  --color-primary-400: oklch(0.70 0.165 254);
+  --color-primary-500: oklch(0.62 0.195 254);
+  --color-primary-600: oklch(0.55 0.20  254);
+  --color-primary-700: oklch(0.47 0.18  254);
+  --color-primary-800: oklch(0.39 0.15  254);
+  --color-primary-900: oklch(0.32 0.12  254);
+  --color-primary-950: oklch(0.22 0.08  254);
+
+  /* ============================================================
+   * Semantic — functional only, NOT brand accents
+   * ============================================================ */
   --color-success: oklch(0.65 0.18 145);
-  --color-danger: oklch(0.60 0.22 25);
+  --color-warning: oklch(0.78 0.18 80);
+  --color-danger:  oklch(0.60 0.22 25);
 
-  /* Typography */
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* ============================================================
+   * Surface tokens — semantic, swap on theme change
+   * ============================================================ */
+  --color-bg:           var(--color-neutral-50);
+  --color-bg-elevated:  oklch(1 0 0);
+  --color-bg-muted:     var(--color-neutral-100);
+  --color-fg:           var(--color-neutral-900);
+  --color-fg-muted:     var(--color-neutral-600);
+  --color-fg-subtle:    var(--color-neutral-400);
+  --color-border:       var(--color-neutral-200);
+  --color-border-strong:var(--color-neutral-300);
+  --color-ring:         var(--color-primary-500);
 
-  /* Radius */
+  /* ============================================================
+   * Typography — type scale 12/14/16/18/20/24/30/36/48
+   * ============================================================ */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+
+  --text-xs:   0.75rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.25rem;
+  --text-2xl:  1.5rem;
+  --text-3xl:  1.875rem;
+  --text-4xl:  2.25rem;
+  --text-5xl:  3rem;
+
+  /* ============================================================
+   * Radius — restrained (CLAUDE.md §2)
+   * ============================================================ */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
+
+  /* ============================================================
+   * Container — 1200px max per SRS §3.1
+   * ============================================================ */
+  --container-max: 75rem;
+
+  /* ============================================================
+   * Motion — 150–250ms ease-out per CLAUDE.md §2
+   * ============================================================ */
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 250ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ============================================================
+ * Dark mode — override surface tokens on [data-theme="dark"]
+ * ============================================================ */
+[data-theme="dark"] {
+  --color-bg:           var(--color-neutral-950);
+  --color-bg-elevated:  var(--color-neutral-900);
+  --color-bg-muted:     var(--color-neutral-800);
+  --color-fg:           var(--color-neutral-50);
+  --color-fg-muted:     var(--color-neutral-300);
+  --color-fg-subtle:    var(--color-neutral-500);
+  --color-border:       var(--color-neutral-800);
+  --color-border-strong:var(--color-neutral-700);
+}
+
+/* ============================================================
+ * Base resets
+ * ============================================================ */
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color-scheme: light dark;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+  }
+
+  /* Respect prefers-reduced-motion (SRS §3.1 a11y). */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Visible focus ring on all interactive elements (SRS §3.1 a11y). */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
 }
