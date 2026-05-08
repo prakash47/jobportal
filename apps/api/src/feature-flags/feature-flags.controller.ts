@@ -11,7 +11,9 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import type { AccessClaims } from '@jobportal/auth';
 import { isCriticalFlag } from '@jobportal/feature-flags';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { FeatureFlagsService } from './feature-flags.service';
 import { AdminGuard } from './admin.guard';
 import { AuditLogQuerySchema, FlagPatchSchema } from './dto';
@@ -47,7 +49,11 @@ export class FeatureFlagsController {
 
   @Patch(':key')
   @HttpCode(HttpStatus.OK)
-  async update(@Param('key') key: string, @Body() body: unknown) {
+  async update(
+    @Param('key') key: string,
+    @CurrentUser() user: AccessClaims,
+    @Body() body: unknown,
+  ) {
     const result = FlagPatchSchema.safeParse(body);
     if (!result.success) {
       throw new BadRequestException(result.error.issues);
@@ -65,14 +71,10 @@ export class FeatureFlagsController {
       );
     }
 
-    // STUB actor — userId still 0 until the JWT actor is wired into req.user
-    // (tracked in chore/admin-flag-real-actor). role is set to 'ADMIN' here
-    // so the new setFlag boundary check has the right shape; the userId
-    // assertion will start passing as soon as the JWT plumbing lands. Until
-    // then, expect setFlag to reject every PATCH at runtime — a deliberate
-    // tradeoff: a noisy 500 is better than silently writing changedById=0
-    // into the audit log forever.
-    const actor = { userId: 0, role: 'ADMIN' as const };
+    // AdminGuard has already verified user.role === 'ADMIN'; we still
+    // pass it through so the @jobportal/feature-flags assertion has the
+    // right shape (defense-in-depth at the storage boundary).
+    const actor = { userId: user.sub, email: user.email, role: 'ADMIN' as const };
     return this.service.update(key, patch, actor, reason);
   }
 }
