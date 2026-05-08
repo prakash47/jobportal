@@ -161,10 +161,6 @@ docker-compose.override.yml
 .history/
 
 # ---------- Local-only docs (NOT pushed to remote) ----------
-# Patterns are anchored to the repo root with leading '/' so per-workspace
-# READMEs (apps/*/README.md, packages/*/README.md) remain trackable.
-# These root-level files contain product strategy / spec material and stay on the dev machine.
-/CLAUDE.md
-/README.md
-/SETUP_GUIDE.md
+# /docs/ is kept local — it contains the SRS PDF and other strategy
+# material that doesn't belong in a public repo.
 /docs/
