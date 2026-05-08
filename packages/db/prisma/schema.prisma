@@ -23,9 +23,26 @@ enum UserRole {
 
 enum JobStatus {
   DRAFT
+  PENDING_MODERATION
   ACTIVE
   EXPIRED
   CLOSED
+}
+
+// SRS §4.9.3 — wizard "employment type" step. The Schema.org JobPosting JSON-LD
+// already references this set in apps/web/lib/seo/json-ld.ts.
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACTOR
+  INTERN
+}
+
+// SRS §4.9.3 — wizard "work mode" step. Filterable on the public SRP later.
+enum WorkMode {
+  ONSITE
+  REMOTE
+  HYBRID
 }
 
 enum ApplicationStatus {
@@ -131,6 +148,7 @@ model User {
   profileAuditLogs    ProfileAuditLog[]
   emailPreference     EmailPreference?
   companyReviews      CompanyReview[]
+  postedJobs          Job[]                @relation("PostedJobs")
 
   @@index([role])
 }
@@ -358,6 +376,10 @@ model Job {
   shortDescription   String?
   companyId          Int
   company            Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // SRS §4.9.3 — recruiter ownership. SetNull on the FK so a recruiter
+  // departure does not cascade-delete their jobs (admin reassigns later).
+  postedById         Int?
+  postedBy           User?           @relation("PostedJobs", fields: [postedById], references: [id], onDelete: SetNull)
   primaryCityId      Int?
   primaryCity        City?           @relation(fields: [primaryCityId], references: [id], onDelete: SetNull)
   cityIds            Int[]
@@ -367,6 +389,10 @@ model Job {
   functionalAreaId   Int?
   functionalArea     FunctionalArea? @relation(fields: [functionalAreaId], references: [id], onDelete: SetNull)
   status             JobStatus       @default(ACTIVE)
+  // SRS §4.9.3 wizard step 5 — defaults match the most common case so a
+  // recruiter who skips the step still ships a sensible JSON-LD payload.
+  employmentType     EmploymentType  @default(FULL_TIME)
+  workMode           WorkMode        @default(ONSITE)
   postedAt           DateTime        @default(now())
   expiresAt          DateTime?
   salaryMinPaise     Int?
@@ -382,20 +408,24 @@ model Job {
   @@index([status, postedAt])
   @@index([primaryCityId, status])
   @@index([companyId, status])
+  @@index([postedById, status])
 }
 
 model Application {
-  id            Int               @id @default(autoincrement())
-  userId        Int
-  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  jobId         Int
-  job           Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  status        ApplicationStatus @default(APPLIED)
-  resumeUrl     String?
-  coverLetter   String?
-  statusHistory Json?
-  appliedAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id             Int               @id @default(autoincrement())
+  userId         Int
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId          Int
+  job            Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  status         ApplicationStatus @default(APPLIED)
+  resumeUrl      String?
+  coverLetter    String?
+  statusHistory  Json?
+  // SRS §4.9.6 — recruiter-only freeform notes. Single field for MVP; a
+  // multi-note timestamped audit trail is queued as a follow-up chip.
+  recruiterNotes String?
+  appliedAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   @@unique([userId, jobId])
   @@index([userId, status])
