@@ -37,6 +37,17 @@ export class NotificationsPreferencesService {
     userId: number,
     patch: UpdateNotificationPreferencesInput,
   ): Promise<NotificationPreferences> {
+    // Strip undefined keys so explicit-undefined values from a Zod-parsed
+    // partial object don't survive into the Prisma input — Prisma's
+    // generated types under exactOptionalPropertyTypes reject `key:
+    // undefined` even though the runtime behavior is "skip this field".
+    // Result is typed as Record<string, boolean> so the spread + assignment
+    // are accepted without an extra cast.
+    const cleanPatch: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(patch)) {
+      if (typeof v === 'boolean') cleanPatch[k] = v;
+    }
+
     const upserted = await prisma.emailPreference.upsert({
       where: { userId },
       // create-only path: anything the patch didn't set falls back to the
@@ -44,10 +55,10 @@ export class NotificationsPreferencesService {
       create: {
         userId,
         ...DEFAULTS,
-        ...patch,
+        ...cleanPatch,
       },
       // update path: only the keys present in the patch are written.
-      update: patch,
+      update: cleanPatch,
       select: {
         jobAlertsEnabled: true,
         applicationStatusEnabled: true,

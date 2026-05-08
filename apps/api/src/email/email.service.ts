@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ResendClient } from './resend-client';
 import { TransactionalEmailQueueService } from './transactional-email.queue';
 import type {
@@ -18,8 +18,6 @@ import type {
 // — wrapping it in another queue would just be a wasted Redis hop.
 @Injectable()
 export class EmailService {
-  private readonly logger = new Logger(EmailService.name);
-
   constructor(
     private readonly queue: TransactionalEmailQueueService,
     private readonly resend: ResendClient,

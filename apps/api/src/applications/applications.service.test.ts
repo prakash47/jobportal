@@ -49,6 +49,14 @@ describe('ApplicationsService.apply', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    fakeEmail.enqueueApplicationSubmitted.mockResolvedValue(undefined);
+    fakeEmail.enqueueApplicationStatusChange.mockResolvedValue(undefined);
+    fakeQuota.consume.mockResolvedValue({
+      count: 1,
+      limit: 10,
+      unlimited: false,
+      upgradeAvailable: false,
+    });
     service = new ApplicationsService(fakeEmail as unknown as never, fakeQuota as unknown as never);
   });
 
@@ -181,6 +189,14 @@ describe('ApplicationsService.list', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    fakeEmail.enqueueApplicationSubmitted.mockResolvedValue(undefined);
+    fakeEmail.enqueueApplicationStatusChange.mockResolvedValue(undefined);
+    fakeQuota.consume.mockResolvedValue({
+      count: 1,
+      limit: 10,
+      unlimited: false,
+      upgradeAvailable: false,
+    });
     service = new ApplicationsService(fakeEmail as unknown as never, fakeQuota as unknown as never);
   });
 
@@ -222,6 +238,14 @@ describe('ApplicationsService.withdraw', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    fakeEmail.enqueueApplicationSubmitted.mockResolvedValue(undefined);
+    fakeEmail.enqueueApplicationStatusChange.mockResolvedValue(undefined);
+    fakeQuota.consume.mockResolvedValue({
+      count: 1,
+      limit: 10,
+      unlimited: false,
+      upgradeAvailable: false,
+    });
     service = new ApplicationsService(fakeEmail as unknown as never, fakeQuota as unknown as never);
   });
 

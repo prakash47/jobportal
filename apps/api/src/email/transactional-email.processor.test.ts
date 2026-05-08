@@ -129,7 +129,12 @@ describe('TransactionalEmailProcessor.handle', () => {
       payload: { verifyUrl: 'https://jobportal.com/verify?token=abc' },
     });
     expect(resend.send).toHaveBeenCalledOnce();
-    const call = resend.send.mock.calls[0][0];
+    const call = resend.send.mock.calls[0]?.[0] as {
+      to: string;
+      subject: string;
+      html: string;
+      text: string;
+    };
     expect(call.to).toBe('verify@example.com');
     expect(call.subject).toMatch(/verify/i);
     expect(call.html).toContain('Verify');

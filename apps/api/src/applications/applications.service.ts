@@ -113,13 +113,20 @@ export class ApplicationsService {
     }
 
     // SRS §4.13 — confirmation to the candidate. Fire-and-log so a Resend
-    // outage cannot turn a successful apply into a 5xx.
+    // outage cannot turn a successful apply into a 5xx. The .catch handler
+    // keeps a Redis blip from leaking as an unhandled rejection.
     const webBase = process.env.WEB_URL ?? 'http://localhost:3000';
-    void this.email.enqueueApplicationSubmitted(user.email, userId, {
-      jobTitle: job.title,
-      companyName: job.company.name,
-      applicationUrl: `${webBase}/applications/${created.id}`,
-    });
+    this.email
+      .enqueueApplicationSubmitted(user.email, userId, {
+        jobTitle: job.title,
+        companyName: job.company.name,
+        applicationUrl: `${webBase}/applications/${created.id}`,
+      })
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `application-submitted enqueue failed for application ${created.id}: ${(err as Error).message}`,
+        );
+      });
 
     return created;
   }
@@ -211,13 +218,19 @@ export class ApplicationsService {
 
     // Fire-and-log; don't block the response on email backend latency.
     const webBase = process.env.WEB_URL ?? 'http://localhost:3000';
-    void this.email.enqueueApplicationStatusChange(existing.user.email, userId, {
-      jobTitle: existing.job.title,
-      companyName: existing.job.company.name,
-      from: existing.status,
-      to: 'WITHDRAWN',
-      applicationUrl: `${webBase}/applications/${applicationId}`,
-    });
+    this.email
+      .enqueueApplicationStatusChange(existing.user.email, userId, {
+        jobTitle: existing.job.title,
+        companyName: existing.job.company.name,
+        from: existing.status,
+        to: 'WITHDRAWN',
+        applicationUrl: `${webBase}/applications/${applicationId}`,
+      })
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `withdraw status-change enqueue failed for application ${applicationId}: ${(err as Error).message}`,
+        );
+      });
 
     return updated;
   }

@@ -81,9 +81,20 @@ export class AuthController {
     // L3 no-op is sufficient and a reasonable failure mode (user signs up,
     // emails are deferred until killswitch lifts).
     await this.emailVerify.issueAndSend(userId, parsed.data.email);
-    void this.email.enqueueRegistrationConfirmation(parsed.data.email, userId, {
-      name: parsed.data.name,
-    });
+    // Fire-and-log: enqueue is fast, but a Redis blip should not flip a
+    // successful registration into a 5xx. The verify email above IS awaited
+    // because the user can't apply without it; this welcome email is
+    // strictly cosmetic.
+    this.email
+      .enqueueRegistrationConfirmation(parsed.data.email, userId, {
+        name: parsed.data.name,
+      })
+      .catch(() => {
+        // Logger isn't injected into the controller; the queue-level
+        // logging in TransactionalEmailQueueService already covers offline
+        // cases. Other failures (Redis ack timeout) are rare enough that
+        // swallowing here is acceptable for a welcome email.
+      });
     return { ok: true };
   }
 
