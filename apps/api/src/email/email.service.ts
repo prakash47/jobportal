@@ -1,91 +1,132 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Resend } from 'resend';
+import { Injectable } from '@nestjs/common';
+import { ResendClient } from './resend-client';
+import { TransactionalEmailQueueService } from './transactional-email.queue';
+import type {
+  ApplicationStatusChangePayload,
+  ApplicationSubmittedPayload,
+  EmailVerificationPayload,
+  JobPostedConfirmationPayload,
+  PasswordResetPayload,
+  PaymentReceiptPayload,
+  RegistrationConfirmationPayload,
+} from './templates';
 
-// Redact one-time tokens from any URL embedded in the email body before
-// logging. Reset and email-verification URLs include `?token=<value>` —
-// anyone with read access to API stdout (operators, log shippers, support
-// staff) could otherwise hijack a password reset or pre-verify a fresh
-// account by grabbing the link from logs.
-//
-// We strip both `?token=` and `&token=` and replace the value with [REDACTED].
-// The redaction also fires on a few common token query keys we might add
-// later (`code`, `confirm`, etc.) to be safe.
-const TOKEN_PARAM = /([?&])(token|code|confirm|nonce|t)=[^&\s)]+/gi;
-
-function redactTokens(s: string): string {
-  return s.replace(TOKEN_PARAM, '$1$2=[REDACTED]');
-}
-
+// SRS §4.13 — public producer API. Every transactional email goes through a
+// queue (enqueue* methods) so a Resend hiccup retries automatically rather
+// than 5xx-ing the user request. The one exception is sendJobAlert, which
+// is already invoked from inside a BullMQ worker (the alert digest worker)
+// — wrapping it in another queue would just be a wasted Redis hop.
 @Injectable()
 export class EmailService {
-  async sendEmailVerification(toEmail: string, verifyUrl: string): Promise<void> {
-    await this.send(toEmail, 'Verify your JobPortal email', `Click to verify: ${verifyUrl}`);
-  }
+  constructor(
+    private readonly queue: TransactionalEmailQueueService,
+    private readonly resend: ResendClient,
+  ) {}
 
-  async sendPasswordReset(toEmail: string, resetUrl: string): Promise<void> {
-    await this.send(toEmail, 'Reset your JobPortal password', `Reset link (expires in 15 min): ${resetUrl}`);
-  }
-
-  // SRS §4.6.3 — application-status change notifications. Real send wires up
-  // in feature/email-pipeline (Task 18) which adds Resend + BullMQ batching.
-  // For now we log; the call sites in applications.service still fire so the
-  // observable contract is correct.
-  async sendApplicationStatusChange(
-    toEmail: string,
-    opts: { jobTitle: string; companyName: string; from: string; to: string },
+  enqueueRegistrationConfirmation(
+    to: string,
+    userId: number | null,
+    payload: RegistrationConfirmationPayload,
   ): Promise<void> {
-    const subject = `Update on your application for ${opts.jobTitle}`;
-    const body =
-      `Your application for "${opts.jobTitle}" at ${opts.companyName} has moved ` +
-      `from ${opts.from} to ${opts.to}.`;
-    await this.send(toEmail, subject, body);
+    return this.queue.enqueue({
+      kind: 'registration_confirmation',
+      to,
+      userId,
+      payload,
+    });
   }
 
-  // SRS §4.5.3 — job-alert email. Sends via Resend when RESEND_API_KEY is
-  // set; logs the rendered subject + plain text otherwise so dev runs work
-  // without a configured Resend account. The HTML body never goes to logs
-  // (too large + already mirrored in the text part).
+  enqueueEmailVerification(
+    to: string,
+    userId: number | null,
+    payload: EmailVerificationPayload,
+  ): Promise<void> {
+    return this.queue.enqueue({
+      kind: 'email_verification',
+      to,
+      userId,
+      payload,
+    });
+  }
+
+  enqueuePasswordReset(
+    to: string,
+    userId: number | null,
+    payload: PasswordResetPayload,
+  ): Promise<void> {
+    return this.queue.enqueue({
+      kind: 'password_reset',
+      to,
+      userId,
+      payload,
+    });
+  }
+
+  enqueueApplicationSubmitted(
+    to: string,
+    userId: number | null,
+    payload: ApplicationSubmittedPayload,
+  ): Promise<void> {
+    return this.queue.enqueue({
+      kind: 'application_submitted',
+      to,
+      userId,
+      payload,
+    });
+  }
+
+  enqueueApplicationStatusChange(
+    to: string,
+    userId: number | null,
+    payload: ApplicationStatusChangePayload,
+  ): Promise<void> {
+    return this.queue.enqueue({
+      kind: 'application_status_change',
+      to,
+      userId,
+      payload,
+    });
+  }
+
+  enqueueJobPostedConfirmation(
+    to: string,
+    userId: number | null,
+    payload: JobPostedConfirmationPayload,
+  ): Promise<void> {
+    return this.queue.enqueue({
+      kind: 'job_posted_confirmation',
+      to,
+      userId,
+      payload,
+    });
+  }
+
+  enqueuePaymentReceipt(
+    to: string,
+    userId: number | null,
+    payload: PaymentReceiptPayload,
+  ): Promise<void> {
+    return this.queue.enqueue({
+      kind: 'payment_receipt',
+      to,
+      userId,
+      payload,
+    });
+  }
+
+  // SRS §4.5.3 — direct-send carve-out. The alert digest worker is itself a
+  // BullMQ job; double-queueing for retries would make traceability worse
+  // and slow the worker down. If this throws, the caller's `failed` listener
+  // logs and BullMQ retries the digest job per its own attempt config.
   async sendJobAlert(
-    toEmail: string,
+    to: string,
     payload: { subject: string; html: string; text: string },
   ): Promise<void> {
-    const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.RESEND_FROM ?? 'JobPortal <alerts@jobportal.com>';
-    if (!apiKey) {
-      console.log('[email] (stub — Resend not configured; not a real send)');
-      console.log(`  to: ${toEmail}`);
-      console.log(`  subject: ${payload.subject}`);
-      console.log(`  text: ${payload.text}`);
-      return;
-    }
-    const resend = new Resend(apiKey);
-    try {
-      await resend.emails.send({
-        from,
-        to: toEmail,
-        subject: payload.subject,
-        html: payload.html,
-        text: payload.text,
-      });
-    } catch (err: unknown) {
-      const log = new Logger(EmailService.name);
-      log.error(`Resend send failed for ${toEmail}: ${(err as Error).message}`);
-      throw err;
-    }
-  }
-
-  // Stub. Real Resend integration arrives in feature/email-pipeline.
-  // Until then, log to console with token values redacted — operators can
-  // confirm an email "would have" gone out without being able to consume
-  // the link themselves. Per CLAUDE.md §9 (security baselines: secrets must
-  // never be logged in cleartext).
-  private async send(to: string, subject: string, body: string): Promise<void> {
-    if (process.env.RESEND_API_KEY) {
-      console.warn('[email] RESEND_API_KEY is set but the Resend client is not yet wired (feature/email-pipeline). Falling back to console.');
-    }
-    console.log('[email] (stub — token values redacted; not a real send)');
-    console.log(`  to: ${to}`);
-    console.log(`  subject: ${subject}`);
-    console.log(`  body: ${redactTokens(body)}`);
+    await this.resend.send({
+      to,
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+    });
   }
 }

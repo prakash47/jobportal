@@ -5,6 +5,7 @@ vi.mock('@jobportal/feature-flags', () => ({ isFlagEnabled: vi.fn() }));
 vi.mock('@jobportal/db', () => ({
   prisma: {
     recruiter: { findUnique: vi.fn() },
+    user: { findUnique: vi.fn() },
     job: {
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -28,6 +29,7 @@ const mockedFlag = isFlagEnabled as ReturnType<typeof vi.fn>;
 const mockedSync = syncJob as ReturnType<typeof vi.fn>;
 const mocked = prisma as unknown as {
   recruiter: { findUnique: ReturnType<typeof vi.fn> };
+  user: { findUnique: ReturnType<typeof vi.fn> };
   job: {
     findUnique: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
@@ -50,6 +52,10 @@ const fakeCachePurge = {
   purgeJob: vi.fn(),
 } as { purgeJob: ReturnType<typeof vi.fn> };
 
+const fakeEmail = {
+  enqueueJobPostedConfirmation: vi.fn().mockResolvedValue(undefined),
+} as { enqueueJobPostedConfirmation: ReturnType<typeof vi.fn> };
+
 const validInput = {
   publishMode: 'PUBLISH' as const,
   title: 'Senior Frontend Engineer',
@@ -64,12 +70,15 @@ describe('RecruiterJobsService', () => {
     fakeQuota.consume.mockResolvedValue({});
     fakeAlertsHook.onJobIndexed.mockResolvedValue(undefined);
     fakeCachePurge.purgeJob.mockResolvedValue(undefined);
+    fakeEmail.enqueueJobPostedConfirmation.mockResolvedValue(undefined);
     mockedSync.mockResolvedValue(undefined);
+    mocked.user.findUnique.mockResolvedValue({ email: 'recruiter@acme.com' });
     mocked.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) => fn(prisma));
     service = new RecruiterJobsService(
       fakeQuota as unknown as never,
       fakeAlertsHook as unknown as never,
       fakeCachePurge as unknown as never,
+      fakeEmail as unknown as never,
     );
   });
 

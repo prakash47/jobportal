@@ -32,7 +32,9 @@ export class RecruiterWorkEmailService {
     );
     const base = process.env.RECRUITER_URL ?? 'http://localhost:3001';
     const url = `${base}/verify-email/${encodeURIComponent(token)}`;
-    await this.email.sendEmailVerification(workEmail, url);
+    // userId=null because email_verification is mandatory (no preference
+    // gating); skipping the recruiter→user lookup keeps the hot path lean.
+    await this.email.enqueueEmailVerification(workEmail, null, { verifyUrl: url });
   }
 
   // Idempotent: re-clicking the link after success is a no-op that still

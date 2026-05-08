@@ -46,7 +46,7 @@ export class ApplicationsService {
     // FR-4.12.8: email verification gates apply.
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { emailVerified: true },
+      select: { emailVerified: true, email: true },
     });
     if (!user) throw new NotFoundException('User not found');
     if (!user.emailVerified) {
@@ -56,7 +56,12 @@ export class ApplicationsService {
     // FR-4.2.5 + 4.2.7: only ACTIVE jobs accept applications.
     const job = await prisma.job.findUnique({
       where: { id: jobId },
-      select: { status: true },
+      select: {
+        status: true,
+        title: true,
+        canonicalSlug: true,
+        company: { select: { name: true } },
+      },
     });
     if (!job) throw new NotFoundException('Job not found');
     if (job.status !== 'ACTIVE') {
@@ -106,6 +111,22 @@ export class ApplicationsService {
       }
       throw err;
     }
+
+    // SRS §4.13 — confirmation to the candidate. Fire-and-log so a Resend
+    // outage cannot turn a successful apply into a 5xx. The .catch handler
+    // keeps a Redis blip from leaking as an unhandled rejection.
+    const webBase = process.env.WEB_URL ?? 'http://localhost:3000';
+    this.email
+      .enqueueApplicationSubmitted(user.email, userId, {
+        jobTitle: job.title,
+        companyName: job.company.name,
+        applicationUrl: `${webBase}/applications/${created.id}`,
+      })
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `application-submitted enqueue failed for application ${created.id}: ${(err as Error).message}`,
+        );
+      });
 
     return created;
   }
@@ -196,12 +217,20 @@ export class ApplicationsService {
     });
 
     // Fire-and-log; don't block the response on email backend latency.
-    void this.email.sendApplicationStatusChange(existing.user.email, {
-      jobTitle: existing.job.title,
-      companyName: existing.job.company.name,
-      from: existing.status,
-      to: 'WITHDRAWN',
-    });
+    const webBase = process.env.WEB_URL ?? 'http://localhost:3000';
+    this.email
+      .enqueueApplicationStatusChange(existing.user.email, userId, {
+        jobTitle: existing.job.title,
+        companyName: existing.job.company.name,
+        from: existing.status,
+        to: 'WITHDRAWN',
+        applicationUrl: `${webBase}/applications/${applicationId}`,
+      })
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `withdraw status-change enqueue failed for application ${applicationId}: ${(err as Error).message}`,
+        );
+      });
 
     return updated;
   }

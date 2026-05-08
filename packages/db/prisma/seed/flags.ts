@@ -53,6 +53,11 @@ const flags: FlagSeed[] = [
   { key: 'killswitch.job_alerts', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable job alerts (kill)' },
   { key: 'killswitch.resume_uploads', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable resume uploads (kill)' },
   { key: 'killswitch.new_registrations', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable new user registrations (kill)' },
+  // SRS §4.13 — emergency stop for the transactional-email pipeline. Flips
+  // the worker into a no-op (jobs ack but don't send) and the API rejects
+  // user-triggered resends. Job-alert digests are gated separately by
+  // killswitch.job_alerts so support can pause one without the other.
+  { key: 'killswitch.transactional_emails', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable all transactional emails (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {

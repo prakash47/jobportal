@@ -8,7 +8,7 @@ import { PasswordResetService } from './password-reset.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 import { PerEmailThrottleGuard } from './per-email-throttle.guard';
-import { EmailService } from '../email/email.service';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
@@ -16,18 +16,20 @@ import { EmailService } from '../email/email.service';
     // is enforced via the @Throttle({ default: { limit: 5 } }) decorator on
     // /login. Sane global default for everything else.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    // EmailModule owns EmailService now (was awkwardly co-located with auth
+    // before SRS §4.13 landed).
+    EmailModule,
   ],
   controllers: [AuthController],
   providers: [
     AuthService,
     EmailVerificationService,
     PasswordResetService,
-    EmailService,
     JwtAuthGuard,
     RolesGuard,
     PerEmailThrottleGuard,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
-  exports: [AuthService, JwtAuthGuard, RolesGuard, EmailService],
+  exports: [AuthService, JwtAuthGuard, RolesGuard, EmailModule],
 })
 export class AuthModule {}

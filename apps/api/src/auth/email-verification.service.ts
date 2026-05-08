@@ -24,7 +24,7 @@ export class EmailVerificationService {
     });
     const base = process.env.WEB_URL ?? 'http://localhost:3000';
     const url = `${base}/verify-email?token=${encodeURIComponent(token)}`;
-    await this.email.sendEmailVerification(email, url);
+    await this.email.enqueueEmailVerification(email, userId, { verifyUrl: url });
   }
 
   async verify(token: string): Promise<number> {

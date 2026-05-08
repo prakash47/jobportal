@@ -29,7 +29,10 @@ export class PasswordResetService {
 
     const base = process.env.WEB_URL ?? 'http://localhost:3000';
     const url = `${base}/reset-password?token=${encodeURIComponent(raw)}`;
-    await this.email.sendPasswordReset(email, url);
+    await this.email.enqueuePasswordReset(email, user.id, {
+      resetUrl: url,
+      expiresInMinutes: RESET_TTL_MINUTES,
+    });
   }
 
   async reset(token: string, newPassword: string): Promise<void> {

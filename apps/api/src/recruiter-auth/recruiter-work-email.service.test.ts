@@ -16,8 +16,8 @@ const mocked = prisma as unknown as {
 };
 
 const fakeEmail = {
-  sendEmailVerification: vi.fn().mockResolvedValue(undefined),
-} as { sendEmailVerification: ReturnType<typeof vi.fn> };
+  enqueueEmailVerification: vi.fn().mockResolvedValue(undefined),
+} as { enqueueEmailVerification: ReturnType<typeof vi.fn> };
 
 const ACCESS_SECRET = 'test-secret';
 const NAMESPACED = `${ACCESS_SECRET}:recruiter-work-email`;
@@ -43,10 +43,11 @@ describe('RecruiterWorkEmailService', () => {
 
   it('issueAndSend emits a token URL pointing at /verify-email/<token>', async () => {
     await service.issueAndSend(99, 'anjali@acme.com');
-    expect(fakeEmail.sendEmailVerification).toHaveBeenCalledTimes(1);
-    const [to, url] = fakeEmail.sendEmailVerification.mock.calls[0]!;
+    expect(fakeEmail.enqueueEmailVerification).toHaveBeenCalledTimes(1);
+    const [to, userId, payload] = fakeEmail.enqueueEmailVerification.mock.calls[0]!;
     expect(to).toBe('anjali@acme.com');
-    expect(url).toMatch(/^http:\/\/localhost:3001\/verify-email\//);
+    expect(userId).toBeNull();
+    expect(payload.verifyUrl).toMatch(/^http:\/\/localhost:3001\/verify-email\//);
   });
 
   it('verify happy path flips workEmailVerified=true and returns the recruiterId', async () => {

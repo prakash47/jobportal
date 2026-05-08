@@ -10,6 +10,7 @@ import { prisma, Prisma, type Job, type JobStatus } from '@jobportal/db';
 import { syncJob } from '@jobportal/search';
 import { AlertsIndexerHook } from '../alerts/alerts.indexer-hook';
 import { CachePurgeService } from '../cache-purge/cache-purge.service';
+import { EmailService } from '../email/email.service';
 import { RecruiterPostQuotaService } from '../recruiter-post-quota/quota.service';
 import type {
   CreateRecruiterJobInput,
@@ -39,6 +40,7 @@ export class RecruiterJobsService {
     private readonly quota: RecruiterPostQuotaService,
     private readonly alertsHook: AlertsIndexerHook,
     private readonly cachePurge: CachePurgeService,
+    private readonly email: EmailService,
   ) {}
 
   async list(
@@ -172,6 +174,15 @@ export class RecruiterJobsService {
     // backend latency.
     if (created.status === 'ACTIVE') {
       this.firePublishSideEffects(created);
+      // SRS §4.13 — confirmation to the recruiter that the listing went
+      // live. Only on first publish (and reopen below); editing an already-
+      // ACTIVE job re-fires firePublishSideEffects but should NOT spam the
+      // recruiter with a fresh "your job is live" email.
+      this.fireJobPostedEmail(userId, created).catch((err: unknown) => {
+        this.logger.warn(
+          `job-posted email enqueue failed for job ${created.id}: ${(err as Error).message}`,
+        );
+      });
     }
     return created;
   }
@@ -229,6 +240,11 @@ export class RecruiterJobsService {
       data: { status: 'ACTIVE' },
     });
     this.firePublishSideEffects(updated);
+    this.fireJobPostedEmail(userId, updated).catch((err: unknown) => {
+      this.logger.warn(
+        `job-posted email enqueue failed for job ${updated.id}: ${(err as Error).message}`,
+      );
+    });
     return updated;
   }
 
@@ -253,6 +269,25 @@ export class RecruiterJobsService {
     });
     this.cachePurge.purgeJob(job.canonicalSlug).catch((err: unknown) => {
       this.logger.warn(`cachePurge.purgeJob failed: ${(err as Error).message}`);
+    });
+  }
+
+  // SRS §4.13 — recruiter notification on first publish + reopen. Looks up
+  // the recruiter's login email; deliberately not the workEmail (workEmail
+  // is for company verification, login email is the canonical channel for
+  // transactional notifications and matches password reset etc.).
+  private async fireJobPostedEmail(userId: number, job: Job): Promise<void> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    if (!user) return;
+    const webBase = process.env.WEB_URL ?? 'http://localhost:3000';
+    const recruiterBase = process.env.RECRUITER_URL ?? 'http://localhost:3001';
+    await this.email.enqueueJobPostedConfirmation(user.email, userId, {
+      jobTitle: job.title,
+      jobUrl: `${webBase}/job/${job.canonicalSlug}`,
+      applicantsUrl: `${recruiterBase}/jobs/${job.id}/applicants`,
     });
   }
 }
