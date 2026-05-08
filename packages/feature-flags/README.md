@@ -10,8 +10,8 @@ import { isFlagEnabled, setFlag, listFlags, getFlag, FLAG } from '@jobportal/fea
 // Evaluate
 const allowed = await isFlagEnabled(FLAG.FEAT_BULK_APPLY, { userId: 42, tier: 'PREMIUM' });
 
-// Toggle (admin)
-await setFlag(FLAG.SERVICES_RESUME_WRITING, { enabled: true }, { userId: 1 }, 'launching service');
+// Toggle (admin) — actor.role must be 'ADMIN' and actor.userId > 0; setFlag throws otherwise.
+await setFlag(FLAG.SERVICES_RESUME_WRITING, { enabled: true }, { userId: 1, role: 'ADMIN' }, 'launching service');
 
 // List / get
 const all = await listFlags();

@@ -151,6 +151,16 @@ export async function setFlag(
   actor: Actor,
   reason?: string,
 ): Promise<FeatureFlag> {
+  // Defense-in-depth boundary check. The admin controller already runs
+  // behind AdminGuard, but a future internal caller could hand in a bare
+  // {userId} or {userId: 0} (the historical stub from before
+  // feature/auth-jwt-system). Refuse both — flag mutations must be
+  // attributable to an authenticated admin so the audit log stays
+  // trustworthy.
+  if (actor.userId <= 0 || actor.role !== 'ADMIN') {
+    throw new Error('setFlag requires an authenticated ADMIN actor');
+  }
+
   const before = (await prisma.featureFlag.findUnique({ where: { key } })) as FeatureFlag | null;
   if (!before) {
     throw new Error(`Unknown flag key: ${key}`);

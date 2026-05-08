@@ -36,4 +36,9 @@ export type FlagPatch = Partial<{
 export type Actor = {
   userId: number;
   email?: string;
+  // Optional today, but setFlag asserts role === 'ADMIN' before writing.
+  // The admin controller is the only sanctioned caller and now passes
+  // 'ADMIN' explicitly; older callers that handed in a bare {userId}
+  // start failing the assertion, which is the point of the check.
+  role?: 'ADMIN';
 };
