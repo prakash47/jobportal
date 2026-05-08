@@ -269,17 +269,24 @@ model ProfileAuditLog {
 }
 
 model Recruiter {
-  id           Int      @id @default(autoincrement())
-  userId       Int      @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  companyId    Int
-  company      Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  designation  String?
-  contactPhone String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                Int      @id @default(autoincrement())
+  userId            Int      @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId         Int
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  designation       String?
+  contactPhone      String?
+  // SRS §4.9.1 — work email is distinct from User.email (which is the login
+  // identifier). Verification establishes the recruiter has access to the
+  // claimed company's mailbox; admin still verifies the recruiter↔company
+  // association before any job-post can land (Task 16 + Task 17).
+  workEmail         String
+  workEmailVerified Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([companyId])
+  @@index([workEmailVerified])
 }
 
 // ============================================================
