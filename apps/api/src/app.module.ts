@@ -8,6 +8,7 @@ import { ClamAVModule } from './clamav/clamav.module';
 import { EmailModule } from './email/email.module';
 import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
 import { JobLifecycleModule } from './job-lifecycle/job-lifecycle.module';
+import { NotificationsPreferencesModule } from './notifications-preferences/notifications-preferences.module';
 import { ProfileModule } from './profile/profile.module';
 import { RecruiterApplicantsModule } from './recruiter-applicants/recruiter-applicants.module';
 import { RecruiterAuthModule } from './recruiter-auth/recruiter-auth.module';
@@ -37,6 +38,7 @@ import { StorageModule } from './storage/storage.module';
     RecruiterJobsModule,
     RecruiterApplicantsModule,
     JobLifecycleModule,
+    NotificationsPreferencesModule,
   ],
   controllers: [AppController],
 })
