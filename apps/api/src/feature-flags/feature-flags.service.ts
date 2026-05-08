@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import {
   type Actor,
+  type AuditLogPage,
   type FeatureFlag,
   type FlagPatch,
   getFlag,
+  listAuditLog,
   listFlags,
   setFlag,
 } from '@jobportal/feature-flags';
@@ -20,5 +22,9 @@ export class FeatureFlagsService {
 
   update(key: string, patch: FlagPatch, actor: Actor, reason?: string): Promise<FeatureFlag> {
     return setFlag(key, patch, actor, reason);
+  }
+
+  auditLog(opts: { page?: number; flagKey?: string }): Promise<AuditLogPage> {
+    return listAuditLog(opts);
   }
 }

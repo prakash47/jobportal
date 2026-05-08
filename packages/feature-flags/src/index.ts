@@ -13,5 +13,14 @@ export type {
 } from './types';
 export { evaluate } from './evaluator';
 export { bucket } from './hash';
-export { evaluateFlag, getFlag, isFlagEnabled, listFlags, setFlag } from './api';
+export {
+  evaluateFlag,
+  getFlag,
+  isFlagEnabled,
+  listAuditLog,
+  listFlags,
+  setFlag,
+  type AuditLogEntry,
+  type AuditLogPage,
+} from './api';
 export { disconnectCache, invalidateFlag } from './cache';

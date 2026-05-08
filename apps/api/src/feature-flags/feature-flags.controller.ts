@@ -8,11 +8,12 @@ import {
   NotFoundException,
   Param,
   Patch,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { FeatureFlagsService } from './feature-flags.service';
 import { AdminGuard } from './admin.guard';
-import { FlagPatchSchema } from './dto';
+import { AuditLogQuerySchema, FlagPatchSchema } from './dto';
 
 @Controller('admin/feature-flags')
 @UseGuards(AdminGuard)
@@ -22,6 +23,18 @@ export class FeatureFlagsController {
   @Get()
   list() {
     return this.service.list();
+  }
+
+  // SRS §7.7 — paginated audit log for /admin/audit-log?type=feature_flag.
+  // Defined BEFORE the @Get(':key') route so 'audit-log' isn't swallowed
+  // by the param matcher.
+  @Get('audit-log')
+  auditLog(@Query() query: unknown) {
+    const result = AuditLogQuerySchema.safeParse(query);
+    if (!result.success) {
+      throw new BadRequestException(result.error.issues);
+    }
+    return this.service.auditLog(result.data);
   }
 
   @Get(':key')
