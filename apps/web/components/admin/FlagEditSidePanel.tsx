@@ -16,6 +16,7 @@ import {
   type AdminFeatureFlag,
   type SubscriptionTier,
 } from '../../lib/admin/types';
+import { arraysEqual, parseUserIds, setEqual } from '../../lib/admin/flag-edit-helpers';
 
 const TIERS: SubscriptionTier[] = ['FREE', 'BASIC', 'PREMIUM', 'ENTERPRISE'];
 
@@ -95,14 +96,18 @@ export function FlagEditSidePanel({ flag, open, onOpenChange, onSave }: FlagEdit
     if (flag.type === 'USER_TARGETED') {
       const parsed = parseUserIds(userIds);
       if (parsed.error) return { error: parsed.error };
-      if (!arraysEqual(parsed.ids, flag.targetUserIds)) {
+      // Set-equality (order-insensitive). If the DB row was ever written
+      // with a non-canonical order, a strict array compare would produce
+      // a spurious PATCH on every save with no real change — that adds
+      // audit-log noise for changes that didn't happen.
+      if (!setEqual(parsed.ids, flag.targetUserIds)) {
         patch.targetUserIds = parsed.ids;
       }
     }
 
     if (flag.type === 'TIER_GATED') {
       const next = TIERS.filter((t) => tiers.has(t));
-      if (!arraysEqual(next, flag.requiredTiers)) {
+      if (!setEqual(next, flag.requiredTiers)) {
         patch.requiredTiers = next;
       }
     }
@@ -115,6 +120,8 @@ export function FlagEditSidePanel({ flag, open, onOpenChange, onSave }: FlagEdit
           error: 'Press Enter to add the cohort you typed, or clear it before saving.',
         };
       }
+      // Cohorts ARE order-sensitive in the spec (no canonical sort) so
+      // strict array compare is correct here.
       if (!arraysEqual(cohorts, flag.cohorts)) {
         patch.cohorts = cohorts;
       }
@@ -318,26 +325,3 @@ export function FlagEditSidePanel({ flag, open, onOpenChange, onSave }: FlagEdit
   );
 }
 
-function parseUserIds(raw: string): { ids: number[]; error: null } | { ids: never; error: string } {
-  const tokens = raw
-    .split(/[\s,]+/)
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0);
-  const out: number[] = [];
-  for (const t of tokens) {
-    const n = Number(t);
-    if (!Number.isInteger(n) || n <= 0) {
-      return { ids: undefined as never, error: `Not a positive integer: "${t}"` };
-    }
-    if (!out.includes(n)) out.push(n);
-  }
-  return { ids: out, error: null };
-}
-
-function arraysEqual<T>(a: T[], b: T[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
