@@ -14,8 +14,8 @@
 
 - **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13).
 - **Phase 1 progress**: **16 of 18** build-order items merged. Remaining: sitemap/SEO, observability.
-- **Branch state**: `develop` is the integration tip (28 PRs merged); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #28 — `chore/progress-tracking` (this file + the CLAUDE.md §12 rule that requires reading + updating it).
+- **Branch state**: `develop` is the integration tip (30 PRs merged); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #30 — `chore/track-root-docs` (CLAUDE.md, README.md, SETUP_GUIDE.md no longer gitignored — published to GitHub).
 - **Test counts on develop**: 232 API + 133 web + 37 feature-flags = 402 unit tests, all green.
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2.
 
@@ -49,6 +49,10 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #30 — `chore/track-root-docs` · 2026-05-08
+
+User reversed the local-only decision for the three root-level docs: `CLAUDE.md`, `README.md`, `SETUP_GUIDE.md` are now tracked and pushed to GitHub. `.gitignore` was simplified — only `/docs/` (which holds the SRS PDF and other strategy material) stays local. Verified beforehand that the three files contain no real secrets (only placeholder env names like `JWT_ACCESS_SECRET="dev-…replace-me"` and the docker-compose dev `POSTGRES_PASSWORD: jobportal` which is also already public in `infra/docker-compose.yml`). Future CLAUDE.md edits now travel with the repo, so the §12 read-PROGRESS.md-on-session-start protocol works for fresh checkouts too — not just the original dev machine.
 
 ### PR #28 — `chore/progress-tracking` · 2026-05-08
 
