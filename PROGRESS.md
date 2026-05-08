@@ -14,8 +14,8 @@
 
 - **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13).
 - **Phase 1 progress**: **16 of 18** build-order items merged. Remaining: sitemap/SEO, observability.
-- **Branch state**: `develop` is the integration tip (27 PRs merged); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #27 — `fix/admin-flag-real-actor` (admin flag PATCH plumbed through real JWT actor).
+- **Branch state**: `develop` is the integration tip (28 PRs merged); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #28 — `chore/progress-tracking` (this file + the CLAUDE.md §12 rule that requires reading + updating it).
 - **Test counts on develop**: 232 API + 133 web + 37 feature-flags = 402 unit tests, all green.
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2.
 
@@ -49,6 +49,10 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #28 — `chore/progress-tracking` · 2026-05-08
+
+Added this file (`PROGRESS.md`) at the repo root and a corresponding rule in CLAUDE.md §12 (local-only) requiring it to be read at session start after CLAUDE.md, and updated immediately after any PR merges to develop. Initial content covered all 27 prior PRs, the Phase 1 16/18 progress, and 4 open follow-up chips. CLAUDE.md is gitignored so its rule changes stay on the user's local machine; the protocol still works because the developer with CLAUDE.md is the one running the session.
 
 ### PR #27 — `fix/admin-flag-real-actor` · 2026-05-08
 
