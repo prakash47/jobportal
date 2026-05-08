@@ -6,10 +6,11 @@ config({ path: resolve(__dirname, '../../../.env') });
 
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/client';
-import { seedFlags } from './seed/flags';
-import { seedPlans } from './seed/plans';
-import { seedIndustries } from './seed/industries';
+import { seedArticles } from './seed/articles';
 import { seedCities } from './seed/cities';
+import { seedFlags } from './seed/flags';
+import { seedIndustries } from './seed/industries';
+import { seedPlans } from './seed/plans';
 import { seedSkills } from './seed/skills';
 
 // Prisma 7's Rust-free client requires a driver adapter. The schema's datasource
@@ -32,6 +33,9 @@ async function main(): Promise<void> {
 
   console.log('[seed] skills...');
   await seedSkills(prisma);
+
+  console.log('[seed] career-advice articles...');
+  await seedArticles(prisma);
 
   console.log('[seed] complete.');
 }

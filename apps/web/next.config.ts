@@ -65,6 +65,18 @@ const config: NextConfig = {
           },
         ],
       },
+      // SRS §4.8.1 — career-advice index: 1h TTL with 6h SWR. The detail
+      // pages are SSG (generateStaticParams) so Cloudflare honours the
+      // Next-emitted s-maxage on the static output.
+      {
+        source: '/career-advice',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, s-maxage=3600, stale-while-revalidate=21600',
+          },
+        ],
+      },
     ];
   },
 };
