@@ -40,6 +40,10 @@ const flags: FlagSeed[] = [
   // Recruiter
   { key: 'recruiter.resdex.enabled', type: 'BOOLEAN', category: 'recruiter', uiLabel: 'ResDex candidate search' },
   { key: 'recruiter.bulk_messaging.enabled', type: 'BOOLEAN', category: 'recruiter', uiLabel: 'Bulk recruiter messaging' },
+  { key: 'feature.recruiter_post_quota', type: 'TIER_GATED', category: 'recruiter', uiLabel: 'Lift recruiter post quota for paid tiers' },
+
+  // Moderation
+  { key: 'moderation.jobs.enabled', type: 'BOOLEAN', category: 'moderation', uiLabel: 'Route new jobs through admin moderation' },
 
   // Experiments
   { key: 'experiment.new_homepage', type: 'COHORT_TARGETED', category: 'experiments', uiLabel: 'New homepage A/B test' },

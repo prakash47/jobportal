@@ -1,0 +1,61 @@
+import { z } from 'zod';
+
+const employmentType = z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACTOR', 'INTERN']);
+const workMode = z.enum(['ONSITE', 'REMOTE', 'HYBRID']);
+
+// SRS §4.9.3 — wizard payload. publishMode determines the final status:
+//   DRAFT → status='DRAFT' (saved, not visible, doesn't consume quota)
+//   PUBLISH → status='ACTIVE' (or 'PENDING_MODERATION' when the moderation
+//             flag is on); consumes quota.
+const baseFields = z
+  .object({
+    title: z.string().min(3).max(200),
+    description: z.string().min(10).max(50_000),
+    shortDescription: z.string().max(280).optional(),
+    primaryCityId: z.number().int().positive().optional(),
+    cityIds: z.array(z.number().int().positive()).max(10).optional(),
+    skillIds: z.array(z.number().int().positive()).max(20).optional(),
+    industryId: z.number().int().positive().optional(),
+    functionalAreaId: z.number().int().positive().optional(),
+    employmentType: employmentType.optional(),
+    workMode: workMode.optional(),
+    salaryMinPaise: z.number().int().min(0).optional(),
+    salaryMaxPaise: z.number().int().min(0).optional(),
+    experienceMinYears: z.number().int().min(0).max(60).optional(),
+    experienceMaxYears: z.number().int().min(0).max(60).optional(),
+    expiresAt: z.iso.datetime().optional(),
+  })
+  .strict();
+
+export const CreateRecruiterJobDto = baseFields
+  .extend({ publishMode: z.enum(['DRAFT', 'PUBLISH']) })
+  .refine(
+    (v) =>
+      v.salaryMinPaise === undefined ||
+      v.salaryMaxPaise === undefined ||
+      v.salaryMinPaise <= v.salaryMaxPaise,
+    { message: 'salaryMin must be <= salaryMax' },
+  )
+  .refine(
+    (v) =>
+      v.experienceMinYears === undefined ||
+      v.experienceMaxYears === undefined ||
+      v.experienceMinYears <= v.experienceMaxYears,
+    { message: 'experienceMin must be <= experienceMax' },
+  );
+export type CreateRecruiterJobInput = z.infer<typeof CreateRecruiterJobDto>;
+
+// PATCH allows the same shape minus publishMode; status transitions go via
+// dedicated /close /reopen endpoints to keep the surface explicit.
+export const UpdateRecruiterJobDto = baseFields.partial();
+export type UpdateRecruiterJobInput = z.infer<typeof UpdateRecruiterJobDto>;
+
+export const ListRecruiterJobsQueryDto = z
+  .object({
+    status: z
+      .enum(['ALL', 'DRAFT', 'PENDING_MODERATION', 'ACTIVE', 'EXPIRED', 'CLOSED'])
+      .optional(),
+    page: z.coerce.number().int().min(1).optional(),
+  })
+  .strict();
+export type ListRecruiterJobsQuery = z.infer<typeof ListRecruiterJobsQueryDto>;
