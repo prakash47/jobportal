@@ -10,6 +10,7 @@ const ITEMS = [
   { href: '/profile/experience', label: 'Experience' },
   { href: '/profile/skills', label: 'Skills' },
   { href: '/profile/resume', label: 'Resume' },
+  { href: '/settings/notifications', label: 'Notifications' },
 ] as const;
 
 export function ProfileNav() {
