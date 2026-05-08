@@ -24,8 +24,8 @@ const mocked = prisma as unknown as {
 };
 
 const fakeEmail = {
-  sendApplicationStatusChange: vi.fn().mockResolvedValue(undefined),
-} as { sendApplicationStatusChange: ReturnType<typeof vi.fn> };
+  enqueueApplicationStatusChange: vi.fn().mockResolvedValue(undefined),
+} as { enqueueApplicationStatusChange: ReturnType<typeof vi.fn> };
 
 const fakeStorage = {
   getSignedDownloadUrl: vi.fn().mockResolvedValue('https://signed.example/x'),
@@ -33,6 +33,7 @@ const fakeStorage = {
 
 const ownedApp = {
   id: 99,
+  userId: 7,
   status: 'APPLIED' as const,
   statusHistory: [],
   recruiterNotes: null,
@@ -50,7 +51,7 @@ describe('RecruiterApplicantsService.list', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    fakeEmail.sendApplicationStatusChange.mockResolvedValue(undefined);
+    fakeEmail.enqueueApplicationStatusChange.mockResolvedValue(undefined);
     service = new RecruiterApplicantsService(
       fakeEmail as unknown as never,
       fakeStorage as unknown as never,
@@ -86,7 +87,7 @@ describe('RecruiterApplicantsService.transition', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    fakeEmail.sendApplicationStatusChange.mockResolvedValue(undefined);
+    fakeEmail.enqueueApplicationStatusChange.mockResolvedValue(undefined);
     service = new RecruiterApplicantsService(
       fakeEmail as unknown as never,
       fakeStorage as unknown as never,
@@ -132,8 +133,9 @@ describe('RecruiterApplicantsService.transition', () => {
 
     // Email is fire-and-log; let the .catch attach.
     await Promise.resolve();
-    expect(fakeEmail.sendApplicationStatusChange).toHaveBeenCalledWith(
+    expect(fakeEmail.enqueueApplicationStatusChange).toHaveBeenCalledWith(
       'cand@example.com',
+      7,
       expect.objectContaining({ from: 'APPLIED', to: 'IN_REVIEW' }),
     );
   });

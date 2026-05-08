@@ -124,18 +124,21 @@ export class RecruiterApplicantsService {
       },
     });
 
-    // Fire-and-log: don't block the recruiter's response on email backend
-    // latency. The `.catch` keeps the unhandledRejection out of stdout.
+    // Fire-and-log: enqueue is fast (Redis push) but a Redis blip should
+    // not turn a successful state-machine transition into a 5xx for the
+    // recruiter. The `.catch` keeps unhandledRejection out of stdout.
+    const webBase = process.env.WEB_URL ?? 'http://localhost:3000';
     this.email
-      .sendApplicationStatusChange(app.user.email, {
+      .enqueueApplicationStatusChange(app.user.email, app.userId, {
         jobTitle: app.job.title,
         companyName: app.job.company.name,
         from: app.status,
         to: toStatus,
+        applicationUrl: `${webBase}/applications/${applicationId}`,
       })
       .catch((err: unknown) => {
         this.logger.warn(
-          `status-change email failed for application ${applicationId}: ${
+          `status-change email enqueue failed for application ${applicationId}: ${
             err instanceof Error ? err.message : String(err)
           }`,
         );
