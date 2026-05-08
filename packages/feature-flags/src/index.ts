@@ -1,7 +1,7 @@
 // @jobportal/feature-flags — backend-controlled feature flag system (SRS §7).
 // Three-layer enforcement (middleware / page / API) per CLAUDE.md §4.
 
-export { CRITICAL_FLAGS, FLAG, type FlagKey } from './keys';
+export { CRITICAL_FLAGS, FLAG, isCriticalFlag, type FlagKey } from './keys';
 export type {
   Actor,
   EvaluationContext,
