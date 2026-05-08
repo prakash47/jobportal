@@ -16,7 +16,21 @@ import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import remarkRehype from 'remark-rehype';
 import { unified, type Processor } from 'unified';
-import type { Element, Root } from 'hast';
+
+// Minimal hast shape we care about — defined inline so we don't need to add
+// @types/hast just for two property reads. The full types live in 'hast' but
+// importing them transitively pulls in @types/unist plumbing.
+interface HastElement {
+  type: 'element';
+  tagName: string;
+  properties?: Record<string, unknown>;
+  children?: HastNode[];
+}
+type HastNode = HastElement | { type: string; children?: HastNode[] };
+interface HastRoot {
+  type: 'root';
+  children: HastNode[];
+}
 
 // Extend the default sanitize schema so Shiki's class-based highlight markup
 // survives. Shiki emits <pre><code class="..."><span class="..."> with style
@@ -43,12 +57,12 @@ const SANITIZE_SCHEMA = {
 // still gets browser-level perf hints. True next/image integration arrives
 // with the MDX migration chip.
 function rehypeImageHints() {
-  return (tree: Root) => {
-    const visit = (node: Root | Element): void => {
-      if ('children' in node) {
+  return (tree: HastRoot) => {
+    const visit = (node: HastRoot | HastElement): void => {
+      if (node.children) {
         for (const child of node.children) {
           if (child.type === 'element') {
-            const el = child as Element;
+            const el = child as HastElement;
             if (el.tagName === 'img') {
               el.properties = { loading: 'lazy', decoding: 'async', ...el.properties };
             }
@@ -61,9 +75,14 @@ function rehypeImageHints() {
   };
 }
 
-let processor: Processor<Root, Root, Root, Root, string> | null = null;
+// The unified Processor generic chain depends on the plugins; ts-infers as
+// `Processor<...>` but we don't read the intermediate types. Cast through
+// unknown for the singleton storage.
+type StringProcessor = Processor<undefined, undefined, undefined, undefined, string>;
 
-async function getProcessor(): Promise<Processor<Root, Root, Root, Root, string>> {
+let processor: StringProcessor | null = null;
+
+async function getProcessor(): Promise<StringProcessor> {
   if (processor) return processor;
   processor = unified()
     .use(remarkParse)
@@ -74,7 +93,7 @@ async function getProcessor(): Promise<Processor<Root, Root, Root, Root, string>
       themes: { light: 'github-light', dark: 'github-dark' },
     })
     .use(rehypeSanitize, SANITIZE_SCHEMA)
-    .use(rehypeStringify) as Processor<Root, Root, Root, Root, string>;
+    .use(rehypeStringify) as unknown as StringProcessor;
   return processor;
 }
 
