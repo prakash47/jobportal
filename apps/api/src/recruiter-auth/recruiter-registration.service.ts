@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { prisma, type User } from '@jobportal/db';
 import {
@@ -37,6 +38,8 @@ export interface RegisterRecruiterResult {
 
 @Injectable()
 export class RecruiterRegistrationService {
+  private readonly logger = new Logger(RecruiterRegistrationService.name);
+
   constructor(private readonly workEmail: RecruiterWorkEmailService) {}
 
   async register(
@@ -110,7 +113,17 @@ export class RecruiterRegistrationService {
 
     // Fire-and-log: do NOT block the response on the email backend. If send
     // fails the recruiter can hit a /resend endpoint (lands with Task 16).
-    void this.workEmail.issueAndSend(created.recruiterId, input.workEmail);
+    // .catch() rather than `void` so a Resend failure logs cleanly instead
+    // of triggering Node's unhandledRejection warning.
+    this.workEmail
+      .issueAndSend(created.recruiterId, input.workEmail)
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `recruiter ${created.recruiterId} work-email send failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      });
 
     return {
       user: created.user,
