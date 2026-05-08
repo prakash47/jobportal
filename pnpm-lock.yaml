@@ -87,6 +87,9 @@ importers:
       '@types/cookie-parser':
         specifier: ^1.4.10
         version: 1.4.10(@types/express@5.0.6)
+      '@types/jsonwebtoken':
+        specifier: ^9.0.0
+        version: 9.0.10
       '@types/mime-types':
         specifier: ^3.0.1
         version: 3.0.1
@@ -96,6 +99,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.2
+      jsonwebtoken:
+        specifier: ^9.0.0
+        version: 9.0.3
       ts-node:
         specifier: ^10.9.0
         version: 10.9.2(@types/node@24.12.2)(typescript@5.9.3)
