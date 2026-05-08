@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Badge, Button, Input } from '@jobportal/ui';
+import { Badge, Input } from '@jobportal/ui';
 import {
   CATEGORY_LABEL,
   CATEGORY_ORDER,
@@ -10,6 +10,7 @@ import {
 } from '../../lib/admin/types';
 import { FlagToggleRow } from './FlagToggleRow';
 import { CriticalFlagConfirm } from './CriticalFlagConfirm';
+import { FlagEditSidePanel, type PatchPayload } from './FlagEditSidePanel';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -22,6 +23,7 @@ export function FeatureFlagsTable({ initial }: { initial: AdminFeatureFlag[] }) 
   const [error, setError] = useState<string | null>(null);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [confirmFlag, setConfirmFlag] = useState<AdminFeatureFlag | null>(null);
+  const [editFlag, setEditFlag] = useState<AdminFeatureFlag | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -169,13 +171,7 @@ export function FeatureFlagsTable({ initial }: { initial: AdminFeatureFlag[] }) 
                         flag={f}
                         pending={pendingKey === f.key}
                         onToggle={() => onToggle(f)}
-                        onEdit={() => {
-                          // Side panel comes in commit 5. For now, advanced
-                          // edits surface a hint until the panel lands.
-                          setError(
-                            `Advanced editing for ${f.type} flags lands in the next commit. Use a direct PATCH for now.`,
-                          );
-                        }}
+                        onEdit={() => setEditFlag(f)}
                       />
                     ))}
                   </tbody>
@@ -198,6 +194,20 @@ export function FeatureFlagsTable({ initial }: { initial: AdminFeatureFlag[] }) 
               // Error already surfaced via setError; keep dialog open so
               // the admin can retry without re-entering the reason.
             }
+          }}
+        />
+      )}
+
+      {editFlag && (
+        <FlagEditSidePanel
+          flag={editFlag}
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditFlag(null);
+          }}
+          onSave={async (patch: PatchPayload) => {
+            await patchFlag(editFlag.key, patch);
+            setEditFlag(null);
           }}
         />
       )}
