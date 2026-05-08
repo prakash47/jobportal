@@ -106,6 +106,19 @@ export class RecruiterPostQuotaService {
     if (state.monthly.count >= state.monthly.limit) throw this.over(state, 'monthly');
   }
 
+  // Refund — DECR both keys. Caller uses this when the post-consume work
+  // (e.g. the Prisma transaction) fails so the recruiter does not permanently
+  // lose a slot. Best-effort: a Redis blip just leaves a slot consumed and
+  // the natural TTL roll-over reconciles within 26h.
+  async refund(userId: number): Promise<void> {
+    try {
+      await this.redis.client().decr(this.keyDaily(userId));
+      await this.redis.client().decr(this.keyMonthly(userId));
+    } catch (err) {
+      this.logger.warn(`refund() failed for user ${userId}: ${(err as Error).message}`);
+    }
+  }
+
   // Layer 3 — atomic. INCR both keys; if either now exceeds the limit, DECR
   // both back and throw 429. EXPIRE-on-first ensures stale keys roll over.
   async consume(userId: number): Promise<RecruiterQuotaState> {

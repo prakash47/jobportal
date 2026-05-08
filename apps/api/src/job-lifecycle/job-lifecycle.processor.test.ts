@@ -7,6 +7,7 @@ vi.mock('@jobportal/search', () => ({ syncJob: vi.fn().mockResolvedValue(undefin
 
 import { prisma } from '@jobportal/db';
 import { syncJob } from '@jobportal/search';
+import { CachePurgeService } from '../cache-purge/cache-purge.service';
 import { JobLifecycleProcessor } from './job-lifecycle.processor';
 
 const mocked = prisma as unknown as {
@@ -16,11 +17,13 @@ const mockedSync = syncJob as ReturnType<typeof vi.fn>;
 
 describe('JobLifecycleProcessor.expireStaleJobs', () => {
   let proc: JobLifecycleProcessor;
+  let cachePurge: { purgeJob: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     vi.resetAllMocks();
     mockedSync.mockResolvedValue(undefined);
-    proc = new JobLifecycleProcessor();
+    cachePurge = { purgeJob: vi.fn().mockResolvedValue(undefined) };
+    proc = new JobLifecycleProcessor(cachePurge as unknown as CachePurgeService);
   });
 
   afterEach(() => {
@@ -55,6 +58,10 @@ describe('JobLifecycleProcessor.expireStaleJobs', () => {
     expect(mockedSync).toHaveBeenCalledWith(1, 'remove');
     expect(mockedSync).toHaveBeenCalledWith(2, 'remove');
     expect(mockedSync).toHaveBeenCalledWith(3, 'remove');
+    expect(cachePurge.purgeJob).toHaveBeenCalledTimes(3);
+    expect(cachePurge.purgeJob).toHaveBeenCalledWith('foo-1');
+    expect(cachePurge.purgeJob).toHaveBeenCalledWith('bar-2');
+    expect(cachePurge.purgeJob).toHaveBeenCalledWith('baz-3');
   });
 
   it('JOB_EXPIRY_DISABLED=1 short-circuits without DB read', async () => {

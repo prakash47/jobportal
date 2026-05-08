@@ -16,7 +16,6 @@ import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser, Roles } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
-import { RecruiterPostQuotaGuard } from '../recruiter-post-quota/quota.guard';
 import { RecruiterPostQuotaService } from '../recruiter-post-quota/quota.service';
 import {
   CreateRecruiterJobDto,
@@ -55,14 +54,19 @@ export class RecruiterJobsController {
     return this.service.getOne(user.sub, id);
   }
 
-  // Layer 1 of three-layer quota enforcement. The guard's preflight() runs
-  // BEFORE the controller method. The guard short-circuits drafts via the
-  // body check would be ideal, but the guard runs before the body is parsed
-  // — instead, the service's create() decides whether to consume based on
-  // publishMode, so saving a draft never touches Redis.
+  // SRS §4.9.7 + CLAUDE.md §4 — three-layer quota enforcement (action, not
+  // route). For job posting the layers are:
+  //   L1 (UI): wizard's Publish button is disabled at-limit (cosmetic)
+  //   L2 (Server-rendered hint): wizard server entry reads /quota and shows
+  //       the at-limit message
+  //   L3 (API service): RecruiterPostQuotaService.consume() inside
+  //       service.create() — atomic INCR + DECR-revert; the only trusted
+  //       check
+  // The earlier RecruiterPostQuotaGuard L1 was dropped because it ran
+  // BEFORE body parsing and rejected draft-saves at-limit even though
+  // drafts never consume. The L3 atomic consume is the trust boundary.
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(RecruiterPostQuotaGuard)
   async create(@CurrentUser() user: AccessClaims, @Body() body: unknown) {
     const parsed = CreateRecruiterJobDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);

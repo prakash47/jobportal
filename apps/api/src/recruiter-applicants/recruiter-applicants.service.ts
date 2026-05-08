@@ -74,12 +74,13 @@ export class RecruiterApplicantsService {
 
   // Owner check: the recruiter owns the JOB the application belongs to.
   // Returns the loaded application + side-data needed by the action paths
-  // so the caller doesn't re-query.
+  // (incl. the candidate's userId so getResumeUrl doesn't re-query).
   private async ownedApplicationOrThrow(userId: number, applicationId: number) {
     const app = await prisma.application.findUnique({
       where: { id: applicationId },
       select: {
         id: true,
+        userId: true,
         status: true,
         statusHistory: true,
         recruiterNotes: true,
@@ -165,10 +166,7 @@ export class RecruiterApplicantsService {
   ): Promise<{ url: string; expiresInSeconds: number; filename: string }> {
     const app = await this.ownedApplicationOrThrow(userId, applicationId);
     const candidate = await prisma.candidate.findUnique({
-      where: { userId: (await prisma.application.findUnique({
-        where: { id: app.id },
-        select: { userId: true },
-      }))!.userId },
+      where: { userId: app.userId },
       select: { activeResume: true },
     });
     if (!candidate?.activeResume || candidate.activeResume.deletedAt !== null) {
