@@ -7,6 +7,7 @@ import { CachePurgeModule } from './cache-purge/cache-purge.module';
 import { ClamAVModule } from './clamav/clamav.module';
 import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
 import { ProfileModule } from './profile/profile.module';
+import { RecruiterApplicantsModule } from './recruiter-applicants/recruiter-applicants.module';
 import { RecruiterAuthModule } from './recruiter-auth/recruiter-auth.module';
 import { RecruiterJobsModule } from './recruiter-jobs/recruiter-jobs.module';
 import { RecruiterPostQuotaModule } from './recruiter-post-quota/quota.module';
@@ -31,6 +32,7 @@ import { StorageModule } from './storage/storage.module';
     AlertsModule,
     RecruiterPostQuotaModule,
     RecruiterJobsModule,
+    RecruiterApplicantsModule,
   ],
   controllers: [AppController],
 })
