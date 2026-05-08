@@ -65,8 +65,14 @@ export class FeatureFlagsController {
       );
     }
 
-    // STUB actor — real userId comes from the JWT context once feature/auth-jwt-system lands.
-    const actor = { userId: 0 };
+    // STUB actor — userId still 0 until the JWT actor is wired into req.user
+    // (tracked in chore/admin-flag-real-actor). role is set to 'ADMIN' here
+    // so the new setFlag boundary check has the right shape; the userId
+    // assertion will start passing as soon as the JWT plumbing lands. Until
+    // then, expect setFlag to reject every PATCH at runtime — a deliberate
+    // tradeoff: a noisy 500 is better than silently writing changedById=0
+    // into the audit log forever.
+    const actor = { userId: 0, role: 'ADMIN' as const };
     return this.service.update(key, patch, actor, reason);
   }
 }

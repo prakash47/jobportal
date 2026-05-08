@@ -2,17 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@jobportal/db', () => ({
   prisma: {
-    featureFlag: { findUnique: vi.fn() },
+    featureFlag: { findUnique: vi.fn(), update: vi.fn() },
     flagAuditLog: { findMany: vi.fn(), count: vi.fn() },
     user: { findMany: vi.fn() },
   },
 }));
 
 import { prisma } from '@jobportal/db';
-import { listAuditLog } from './api';
+import { listAuditLog, setFlag } from './api';
 
 const mocked = prisma as unknown as {
-  featureFlag: { findUnique: ReturnType<typeof vi.fn> };
+  featureFlag: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   flagAuditLog: {
     findMany: ReturnType<typeof vi.fn>;
     count: ReturnType<typeof vi.fn>;
@@ -126,5 +126,53 @@ describe('listAuditLog', () => {
     };
     expect(args.skip).toBe(50);
     expect(args.take).toBe(25);
+  });
+});
+
+describe('setFlag — actor assertion', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('rejects userId === 0 (the historical stub)', async () => {
+    await expect(
+      setFlag('services.menu.visible', { enabled: true }, { userId: 0, role: 'ADMIN' }),
+    ).rejects.toThrow(/authenticated ADMIN actor/);
+    // Assertion fires before any DB read.
+    expect(mocked.featureFlag.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects negative userId', async () => {
+    await expect(
+      setFlag('services.menu.visible', { enabled: true }, { userId: -1, role: 'ADMIN' }),
+    ).rejects.toThrow(/authenticated ADMIN actor/);
+  });
+
+  it('rejects when role is missing', async () => {
+    await expect(
+      // @ts-expect-error — Actor.role is optional in the type, so a bare
+      // {userId} is still callable; the runtime check is what enforces it.
+      setFlag('services.menu.visible', { enabled: true }, { userId: 1 }),
+    ).rejects.toThrow(/authenticated ADMIN actor/);
+    expect(mocked.featureFlag.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects role !== ADMIN', async () => {
+    await expect(
+      // @ts-expect-error — covering a runtime caller that hands in a
+      // different role string.
+      setFlag('services.menu.visible', { enabled: true }, { userId: 1, role: 'CANDIDATE' }),
+    ).rejects.toThrow(/authenticated ADMIN actor/);
+  });
+
+  it('passes the assertion when both userId > 0 and role === ADMIN are set', async () => {
+    // Past the assertion, the function still hits prisma — we just need
+    // the unknown-key error to surface, which proves the assertion
+    // didn't fire. Side effects (audit, cache, notify) all live behind
+    // the loadFlag null branch and never run.
+    mocked.featureFlag.findUnique.mockResolvedValue(null);
+    await expect(
+      setFlag('services.menu.visible', { enabled: true }, { userId: 1, role: 'ADMIN' }),
+    ).rejects.toThrow(/Unknown flag key/);
   });
 });

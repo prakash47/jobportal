@@ -34,7 +34,7 @@ describe('FeatureFlagsController.update — reason enforcement', () => {
     expect(service.update).toHaveBeenCalledWith(
       'killswitch.job_alerts',
       { enabled: true },
-      { userId: 0 },
+      { userId: 0, role: 'ADMIN' },
       'launching alerts',
     );
   });
@@ -44,7 +44,7 @@ describe('FeatureFlagsController.update — reason enforcement', () => {
     expect(service.update).toHaveBeenCalledWith(
       'feature.bulk_apply',
       { enabled: true },
-      { userId: 0 },
+      { userId: 0, role: 'ADMIN' },
       undefined,
     );
   });
