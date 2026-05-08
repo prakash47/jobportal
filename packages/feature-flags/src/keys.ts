@@ -42,11 +42,31 @@ export const FLAG = {
 
 export type FlagKey = (typeof FLAG)[keyof typeof FLAG];
 
-// Flags whose toggle should fire a Slack notification (SRS §7.13).
-export const CRITICAL_FLAGS: ReadonlyArray<FlagKey> = [
+// Flags whose toggle is "critical" for SRS §7.13 (Slack notification) and
+// SRS §7.7 (admin UI confirmation modal). Two rules:
+//   1. Any key starting with `killswitch.` — by definition, killing
+//      something at runtime is always critical.
+//   2. Two cross-cutting non-killswitch flags whose toggle reshapes the
+//      whole product: services menu visibility and the master
+//      subscription switch.
+//
+// Rule (1) being prefix-based means new killswitch flags inherit critical
+// status automatically — important so a future `killswitch.foo` doesn't
+// silently bypass the Slack alert and the admin confirmation prompt.
+const NON_KILLSWITCH_CRITICAL = new Set<string>([
   FLAG.SERVICES_MENU_VISIBLE,
   FLAG.SUBSCRIPTION_SYSTEM,
-  FLAG.KILL_JOB_ALERTS,
-  FLAG.KILL_RESUME_UPLOADS,
-  FLAG.KILL_NEW_REGISTRATIONS,
-];
+]);
+
+export function isCriticalFlag(key: string): boolean {
+  if (key.startsWith('killswitch.')) return true;
+  return NON_KILLSWITCH_CRITICAL.has(key);
+}
+
+// Kept for back-compat where consumers import the array form. Resolved
+// at module load against the current FLAG keys; future flags added to
+// FLAG that should be critical will need to land via isCriticalFlag()
+// (which is the source of truth).
+export const CRITICAL_FLAGS: ReadonlyArray<FlagKey> = (
+  Object.values(FLAG) as FlagKey[]
+).filter(isCriticalFlag);

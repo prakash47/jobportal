@@ -1,4 +1,4 @@
-import { CRITICAL_FLAGS, type FlagKey } from './keys';
+import { isCriticalFlag } from './keys';
 import type { Actor, FeatureFlag } from './types';
 
 // Slack webhook stub for critical flag changes (SRS §7.13).
@@ -9,8 +9,7 @@ export async function notifyCriticalChange(
   actor: Actor,
   reason?: string,
 ): Promise<void> {
-  const isCritical = CRITICAL_FLAGS.includes(after.key as FlagKey);
-  if (!isCritical) return;
+  if (!isCriticalFlag(after.key)) return;
 
   const verb = before === null
     ? 'created'

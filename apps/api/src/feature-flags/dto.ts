@@ -12,3 +12,12 @@ export const FlagPatchSchema = z.object({
 });
 
 export type FlagPatchDto = z.infer<typeof FlagPatchSchema>;
+
+export const AuditLogQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).optional(),
+    flagKey: z.string().min(1).max(120).optional(),
+  })
+  .strict();
+
+export type AuditLogQueryDto = z.infer<typeof AuditLogQuerySchema>;
