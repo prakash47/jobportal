@@ -69,6 +69,16 @@ enum EntitlementSource {
   REFERRAL
 }
 
+// SRS §4.8 — career-advice article state machine. PUBLISHED articles render
+// at /career-advice; DRAFT and ARCHIVED are admin-only. The ?status filter
+// on the admin index will use this enum once the authoring tool lands
+// (Task 19).
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 // SRS §4.3.4 — resume scan status. PENDING is the initial state after upload;
 // the ClamAV worker flips it to CLEAN or INFECTED. Only CLEAN resumes are
 // returned by GET /me/resume.
@@ -443,19 +453,30 @@ model EmailPreference {
 // ============================================================
 
 model Article {
-  id              Int       @id @default(autoincrement())
-  slug            String    @unique
+  id              Int           @id @default(autoincrement())
+  slug            String        @unique
   title           String
+  // Markdown source. Rendered to HTML server-side via the unified + remark +
+  // rehype + Shiki pipeline at apps/web/lib/cms/markdown.ts.
   body            String
   excerpt         String?
   authorName      String
-  status          String    @default("DRAFT")
+  status          ArticleStatus @default(DRAFT)
   publishedAt     DateTime?
   readTimeMinutes Int?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  // SRS §4.8 — multi-tag taxonomy. String[] keeps the schema light; a Tag
+  // join table lands when we add tag-cloud aggregations (chip).
+  tags            String[]      @default([])
+  // Optional FAQ block per SRS §4.8.3 — array of { question, answer } pairs.
+  // When present, the detail page emits a FAQPage JSON-LD entity in addition
+  // to the Article one.
+  faqs            Json?
+  coverImageUrl   String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@index([status, publishedAt])
+  @@index([tags], type: Gin)
 }
 
 // ============================================================
