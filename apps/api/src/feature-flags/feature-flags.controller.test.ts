@@ -77,7 +77,7 @@ describe('FeatureFlagsController.update — reason enforcement', () => {
     expect(service.update).toHaveBeenCalledWith(
       'feature.bulk_apply',
       { enabled: true },
-      expect.objectContaining({ userId: 99, email: 'admin2@example.com' }),
+      { userId: 99, email: 'admin2@example.com', role: 'ADMIN' },
       undefined,
     );
   });
