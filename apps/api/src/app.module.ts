@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { AlertsModule } from './alerts/alerts.module';
 import { AppController } from './app.controller';
 import { ApplicationsModule } from './applications/applications.module';
@@ -21,6 +22,10 @@ import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
+    // SentryModule.forRoot() wires Sentry into the Nest request
+    // lifecycle (auto-trace per request, breadcrumb the route handler).
+    // Must come BEFORE any module whose providers we want traced.
+    SentryModule.forRoot(),
     RedisModule,
     EmailModule,
     AuthModule,

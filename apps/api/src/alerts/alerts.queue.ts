@@ -1,5 +1,7 @@
 import { Injectable, Logger, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker, type ConnectionOptions } from 'bullmq';
+import * as Sentry from '@sentry/nestjs';
+import { isTelemetryEnabled } from '@jobportal/observability';
 import { AlertsProcessor, JOB_NAMES, type ScanAlertJobData } from './alerts.processor';
 
 const QUEUE_NAME = 'job-alerts';
@@ -53,6 +55,17 @@ export class AlertsQueueService implements OnModuleInit, OnApplicationShutdown {
     );
     this.worker.on('failed', (job, err) => {
       this.logger.error(`alerts job ${job?.id} failed: ${err.message}`);
+      // Phase 1 item 18 — capture worker failures to Sentry. Alerts
+      // worker has no DLQ (jobs are re-driven by the next daily cron),
+      // so Sentry is the only path to operator visibility on a stuck
+      // alert. Gated by killswitch.telemetry.
+      isTelemetryEnabled().then((on) => {
+        if (!on) return;
+        Sentry.captureException(err, {
+          tags: { queue: QUEUE_NAME, jobName: job?.name },
+          extra: { jobId: job?.id, data: job?.data },
+        });
+      }).catch(() => undefined);
     });
     this.logger.log(`alerts queue + worker online on ${QUEUE_NAME}`);
   }

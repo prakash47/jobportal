@@ -1,7 +1,14 @@
+// Sentry init MUST be the very first import — it patches http / fetch /
+// pg / ioredis on require. Putting it after AppModule would mean those
+// modules load unpatched and trace data silently goes missing. See
+// instrument.ts for the full rationale.
+import './instrument';
+
 import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { SentryGlobalFilter } from './observability/sentry.filter';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -17,6 +24,12 @@ async function bootstrap(): Promise<void> {
     origin: allowedOrigins,
     credentials: true,
   });
+
+  // Global Sentry exception filter — captures every unhandled exception
+  // and forwards to Sentry (gated by killswitch.telemetry). Registered
+  // last so it sits OUTSIDE per-controller filters.
+  const { httpAdapter } = app.get(HttpAdapterHost);
+  app.useGlobalFilters(new SentryGlobalFilter(httpAdapter));
 
   const port = Number(process.env.PORT) || 4000;
   await app.listen(port);

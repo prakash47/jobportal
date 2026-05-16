@@ -1,5 +1,7 @@
 import { Injectable, Logger, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker, type ConnectionOptions, type Job } from 'bullmq';
+import * as Sentry from '@sentry/nestjs';
+import { isTelemetryEnabled } from '@jobportal/observability';
 import {
   TransactionalEmailProcessor,
   type TransactionalEmailJob,
@@ -80,8 +82,29 @@ export class TransactionalEmailQueueService
       this.logger.error(
         `transactional-email job ${job.id} dead-lettered after ${attemptsMade} attempts: ${err.message}`,
       );
+      // Phase 1 item 18 — terminal failure goes to Sentry as well as the
+      // DLQ so on-call gets a real alert. Closes the PR #24 follow-up
+      // chip ("Sentry alerting on terminal DLQ failure"). Gated by
+      // killswitch.telemetry so the admin can mute it in an incident.
+      const payload = job.data as TransactionalEmailJob;
+      isTelemetryEnabled().then((on) => {
+        if (!on) return;
+        Sentry.captureException(err, {
+          tags: { queue: 'transactional-emails', kind: payload.kind },
+          extra: {
+            jobId: job.id,
+            attemptsMade,
+            to: payload.to,
+            userId: payload.userId,
+          },
+        });
+      }).catch(() => {
+        // Telemetry check failed — already defaults to ON inside
+        // isTelemetryEnabled, so this branch fires only on bug. Don't
+        // double-log.
+      });
       this.dlq
-        .recordTerminalFailure(job.data as TransactionalEmailJob, err)
+        .recordTerminalFailure(payload, err)
         .catch((dlqErr: unknown) => {
           this.logger.error(
             `DLQ insert itself failed for job ${job.id}: ${(dlqErr as Error).message}`,
