@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition, type FormEvent } from 'reac
 import { useRouter } from 'next/navigation';
 import { Search } from '@jobportal/ui/icons';
 import { cn } from '@jobportal/ui';
+import { EVENTS, track } from '../../lib/analytics/posthog';
 
 interface SuggestResponse {
   suggestions: string[];
@@ -40,6 +41,11 @@ export function SearchInput({ initialValue = '' }: { initialValue?: string }) {
     const trimmed = term.trim();
     if (!trimmed) return;
     setOpen(false);
+    // Phase 1 item 18 — record the query length, not the query itself.
+    // The literal text can contain PII (e.g. "jobs near 123 Main St")
+    // and we don't need it for analytics; the length distribution +
+    // submission rate are the signals we want.
+    track(EVENTS.SEARCH_PERFORMED, { queryLength: trimmed.length });
     startTransition(() => {
       router.push(`/jobs?q=${encodeURIComponent(trimmed)}`);
     });

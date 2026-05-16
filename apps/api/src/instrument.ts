@@ -32,7 +32,13 @@ if (DSN) {
       // exception filter where we DO have async context. beforeSend
       // is the second line of defence: scrub PII from anything the SDK
       // auto-captured before it leaves the process.
-      return scrubSentryEvent(event);
+      //
+      // scrubSentryEvent is intentionally SDK-agnostic (so the helper
+      // package stays testable without @sentry/types). The structural
+      // shapes match at runtime; cast suppresses the TS mismatch
+      // between Sentry's ErrorEvent and our generic constraint under
+      // exactOptionalPropertyTypes.
+      return scrubSentryEvent(event as Parameters<typeof scrubSentryEvent>[0]) as typeof event;
     },
   });
 }

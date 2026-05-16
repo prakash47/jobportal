@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Input, Label, RadioGroup, RadioItem } from '@jobportal/ui';
+import { EVENTS, track } from '../../lib/analytics/posthog';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -116,6 +117,11 @@ export function AlertForm({ initial, skillCatalogue, cityCatalogue }: AlertFormP
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { message?: string };
         throw new Error(body.message ?? `Save failed (${res.status})`);
+      }
+      // Phase 1 item 18 — only fire on CREATE, not edit. The event is
+      // about conversion (a new alert is a strong signal), not edits.
+      if (!initial.id) {
+        track(EVENTS.JOB_ALERT_CREATED, { frequency });
       }
       router.push('/alerts');
       router.refresh();

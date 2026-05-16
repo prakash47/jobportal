@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@jobportal/ui';
 import { Bookmark, BookmarkCheck } from '@jobportal/ui/icons';
+import { EVENTS, track } from '../../lib/analytics/posthog';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -35,6 +36,10 @@ export function SaveButton({ jobId, jobSlug, isAuthed, initialSaved }: SaveButto
         credentials: 'include',
       });
       if (!res.ok) throw new Error(`Save failed (${res.status})`);
+      // Phase 1 item 18 — fire only after the API confirms; on revert
+      // we don't want a "saved" event recorded for a save that didn't
+      // actually persist.
+      track(target ? EVENTS.JOB_SAVED : EVENTS.JOB_UNSAVED, { jobId });
     } catch {
       setSaved(!target); // revert
     } finally {

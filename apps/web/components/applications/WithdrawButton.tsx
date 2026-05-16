@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@jobportal/ui';
+import { EVENTS, track } from '../../lib/analytics/posthog';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -31,6 +32,9 @@ export function WithdrawButton({
         const body = (await res.json().catch(() => ({}))) as { message?: string };
         throw new Error(body.message ?? `Withdraw failed (${res.status})`);
       }
+      // Phase 1 item 18 — fire only after API confirms. Withdraw is a
+      // strong negative signal worth funneling for product feedback.
+      track(EVENTS.APPLICATION_WITHDRAWN, { applicationId });
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Withdraw failed');

@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const config: NextConfig = {
   reactStrictMode: true,
@@ -14,6 +15,7 @@ const config: NextConfig = {
     '@jobportal/auth',
     '@jobportal/types',
     '@jobportal/feature-flags',
+    '@jobportal/observability',
   ],
 
   // Image domains — Cloudflare R2 + Cloudflare CDN. Add company logo CDN here
@@ -113,4 +115,20 @@ const config: NextConfig = {
   },
 };
 
-export default config;
+// Phase 1 item 18 — withSentryConfig adds the webpack plugin for
+// sourcemap upload + a few performance-tracing default settings. When
+// SENTRY_AUTH_TOKEN is blank (local dev, CI builds without secrets),
+// the plugin silently skips the upload — the build still succeeds.
+export default withSentryConfig(config, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  // Hide source maps from public-facing prod bundles; upload is still
+  // visible to Sentry for stack-trace resolution.
+  hideSourceMaps: true,
+  // Quieter build output — only warn if upload fails.
+  silent: !process.env.CI,
+  // Disable telemetry to Sentry's own analytics; we already have our
+  // own observability stack.
+  telemetry: false,
+});

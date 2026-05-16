@@ -2,6 +2,8 @@ import './globals.css';
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { CanonicalLink } from '../lib/seo';
+import { AnalyticsProvider } from '../components/AnalyticsProvider';
+import { readUserFromCookie } from '../lib/auth/server-session';
 
 export const metadata: Metadata = {
   title: 'JobPortal',
@@ -16,12 +18,27 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const pathname = h.get('x-canonical-pathname') ?? '/';
   const search = h.get('x-canonical-search') ?? undefined;
 
+  // Resolve the authenticated user once at the root so AnalyticsProvider
+  // can identify them to PostHog on first render. readUserFromCookie
+  // returns null for anon visitors, which keeps the identify call from
+  // firing (correct — anons keep their PostHog distinct_id).
+  const user = await readUserFromCookie();
+
   return (
     <html lang="en">
       <head>
         <CanonicalLink path={pathname} search={search ?? undefined} />
       </head>
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <AnalyticsProvider
+          user={
+            user
+              ? { sub: user.sub, email: user.email, role: String(user.role) }
+              : null
+          }
+        />
+        {children}
+      </body>
     </html>
   );
 }
