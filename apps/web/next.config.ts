@@ -77,6 +77,38 @@ const config: NextConfig = {
           },
         ],
       },
+      // SRS §4.15 — sitemap. Googlebot polls roughly daily; 24h TTL is the
+      // right sweet spot. SWR 48h covers the case where regeneration is
+      // slow or the origin is briefly unavailable.
+      {
+        source: '/sitemap.xml',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, s-maxage=86400, stale-while-revalidate=172800',
+          },
+        ],
+      },
+      {
+        source: '/sitemap/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, s-maxage=86400, stale-while-revalidate=172800',
+          },
+        ],
+      },
+      // robots.txt rarely changes. 7d TTL with month-long SWR is generous
+      // but a stale robots.txt is harmless — crawlers re-fetch lazily.
+      {
+        source: '/robots.txt',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, s-maxage=604800, stale-while-revalidate=2592000',
+          },
+        ],
+      },
     ];
   },
 };

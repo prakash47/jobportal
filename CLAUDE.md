@@ -197,7 +197,9 @@ Refer to SRS §6.1 for the complete pattern catalog. Every page has a Schema.org
 - SEO landing pages: `ItemList` + `BreadcrumbList`
 - Sitemap auto-generated; sharded at 50k+ URLs (Next.js `generateSitemaps`)
 - Closed/expired jobs: `<meta name="robots" content="noindex">`
-- Auth pages, dashboard pages, admin: `noindex`
+- Auth pages, dashboard pages (`/profile/*`, `/applications`, `/saved-jobs`, `/alerts/*`, `/settings/*`), admin (`/admin/*`): `noindex`
+- `robots.txt` (at `apps/web/app/robots.ts`) disallows the same set — defense-in-depth for well-behaved crawlers
+- Sitemap (`apps/web/app/sitemap.ts`) only includes ACTIVE jobs + PUBLISHED articles + all companies + SEO landings with ≥1 ACTIVE job. Sharded at 40k per shard (50k Google ceiling)
 - Cloudflare cache rules per SRS §4.2.10 / §4.7.6
 
 ---
