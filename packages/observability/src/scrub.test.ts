@@ -68,10 +68,20 @@ describe('scrubSentryEvent', () => {
       request: { url: '/x?token=abc', query_string: 'token=abc&q=python' },
     });
     expect(out.request?.url).toBe('/x?token=[REDACTED]');
-    // query_string by itself has no leading ?/& — the regex requires
-    // one, so a bare "token=abc" is NOT scrubbed. We pass the test by
-    // confirming a leading '?' or '&' is required (documented behavior).
-    expect(out.request?.query_string).toBe('token=abc&q=python');
+    // Sentry's Node SDK emits query_string without the leading ? — the
+    // scrubber prepends one so the regex matches anyway, then strips
+    // it back off. Verifies the fix for the PR #32 reviewer-flagged
+    // PII leak.
+    expect(out.request?.query_string).toBe('token=[REDACTED]&q=python');
+  });
+
+  it('query_string with multiple sensitive params is scrubbed', () => {
+    const out = scrubSentryEvent({
+      request: { query_string: 'token=a&nonce=b&q=python' },
+    });
+    expect(out.request?.query_string).toBe(
+      'token=[REDACTED]&nonce=[REDACTED]&q=python',
+    );
   });
 
   it('scrubs event.message', () => {

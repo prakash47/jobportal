@@ -23,7 +23,10 @@ function ensureInit(): PostHog | null {
       api_host: HOST,
       // Five hand-picked events, not autocapture — see file comment.
       autocapture: false,
-      capture_pageview: true,
+      // 'history_change' picks up Next.js App Router pushState
+      // navigations as pageviews. Plain `true` only fires on hard
+      // refreshes and would miss every in-app navigation.
+      capture_pageview: 'history_change',
       capture_pageleave: true,
       // Session recording is bandwidth-heavy; deferred to a follow-up.
       disable_session_recording: true,

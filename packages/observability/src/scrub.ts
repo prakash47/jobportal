@@ -38,8 +38,14 @@ export function scrubSentryEvent<
   },
 >(event: T): T {
   if (event.request?.url) event.request.url = scrubUrl(event.request.url);
-  if (event.request?.query_string)
-    event.request.query_string = scrubUrl(event.request.query_string);
+  if (event.request?.query_string) {
+    // Sentry's Node SDK emits query_string without a leading ?, but our
+    // regex requires ? or & as the leading sigil. Prepend a ? so the
+    // first token in a bare "token=abc&foo=bar" string is also matched,
+    // then strip it back off.
+    const withSigil = '?' + event.request.query_string;
+    event.request.query_string = scrubUrl(withSigil).slice(1);
+  }
   if (event.message) event.message = scrubMessage(event.message);
   if (event.exception?.values) {
     for (const v of event.exception.values) {
