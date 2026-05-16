@@ -16,7 +16,7 @@
 - **Phase 1 progress**: **17 of 18** build-order items merged. Remaining: observability (Sentry + PostHog).
 - **Branch state**: `develop` is the integration tip (31 PRs merged); `main` is still the initial scaffold (no production release cut yet).
 - **Last merge**: PR #31 — `feature/sitemap-and-seo` (sharded sitemap + robots.txt per SRS §4.15).
-- **Test counts on develop**: 232 API + 152 web + 37 feature-flags = 421 unit tests, all green.
+- **Test counts on develop**: 232 API + 162 web + 37 feature-flags = 431 unit tests, all green.
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2.
 
 ---
@@ -57,9 +57,11 @@ Sharded sitemap + robots per SRS §4.15 — closes Phase 1 item 17. Two commits:
 1. `robots.ts` (Next 16 metadata route) disallowing authenticated routes / auth flow pages / admin / API; sitemap reference at bottom. Cache-Control headers added in `next.config.ts` for `/sitemap.xml` (24h TTL, 48h SWR) and `/robots.txt` (7d TTL, 30d SWR). CLAUDE.md §6 noindex bullet expanded to enumerate the exact route prefixes that are gated.
 2. Sharded sitemap using Next 16's `generateSitemaps` + default export. Shard layout: 0=static (homepage + /jobs + /companies + /career-advice), 1=companies (every seeded row gets both `/<slug>-overview-<id>` and `/working-at-<slug>-<id>`), 2=PUBLISHED articles, 3=SEO landings (skill / city / skill×city — combo expansion filtered via raw `UNNEST(skillIds)` to combos with ≥1 ACTIVE job to avoid thin-content pages), 4+=ACTIVE jobs at 40k per shard (50k Google ceiling minus 20% headroom). Per-row `lastModified = updatedAt` so changed content gets re-crawled.
 
-Helpers extracted to `apps/web/lib/seo/sitemap-shards.ts` for testability; 19 unit tests cover shard-ID layout, ACTIVE/PUBLISHED filtering, shard-count math (zero / one / boundary / over-boundary), the `UNNEST` combo filter, and orphan ID defense.
+Helpers extracted to `apps/web/lib/seo/sitemap-shards.ts` for testability.
 
-Deliberately deferred: ISR pre-rendering of SEO landings (perf concern, not §4.15), Search Console auto-submission (one-time manual), image / news / video sitemaps. **421 total unit tests; net-new TS errors: 0.**
+Independent reviewer found two blockers + two discussion items, fixed in the same PR before merge: (1) **Next 16 sitemap signature** — `id` is now `Promise<string>`, not `number`; the original code would have silently fallen through every switch case and broken all shards at runtime. (2) **Offset pagination across shard regenerations** — `skip`/`take` over the ACTIVE-job set can drop or duplicate rows when status flips between cached shard fetches; switched to id-range pagination (`id BETWEEN N*40000 AND (N+1)*40000`) so each shard owns a deterministic id range that's stable across regenerations. (3) **`groupBy({by:['skillIds']})`** groups by whole-array values, not per-element; replaced with `SELECT DISTINCT UNNEST(...)`. (4) **Duplicate `prisma.city.findMany`** — folded into one query. Added a default-export integration test that exercises the Next 16 signature so a future regression is caught immediately.
+
+Deliberately deferred: ISR pre-rendering of SEO landings (perf concern, not §4.15), Search Console auto-submission (one-time manual), image / news / video sitemaps. **29 sitemap tests + integration tests; 431 total unit tests; net-new TS errors: 0.**
 
 ### PR #30 — `chore/track-root-docs` · 2026-05-08
 

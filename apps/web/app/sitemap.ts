@@ -43,11 +43,15 @@ export async function generateSitemaps(): Promise<Array<{ id: number }>> {
   return ids;
 }
 
-export default async function sitemap({
-  id,
-}: {
-  id: number;
+// Next 16 changed the prop shape: `id` is now Promise<string> (was
+// `number` in Next 15). Forgetting to await it makes every `case`
+// silently fall through to `default` (a Promise object never equals a
+// number literal) and breaks every shard payload at runtime — caught
+// by the integration test in sitemap-shards.test.ts.
+export default async function sitemap(props: {
+  id: Promise<string>;
 }): Promise<MetadataRoute.Sitemap> {
+  const id = Number(await props.id);
   switch (id) {
     case SHARD_STATIC:
       return getStaticUrls();
@@ -59,7 +63,7 @@ export default async function sitemap({
       return getLandingUrls();
     default: {
       const shardIndex = id - SHARD_JOBS_BASE;
-      if (shardIndex < 0) return [];
+      if (!Number.isFinite(shardIndex) || shardIndex < 0) return [];
       return getJobShard(shardIndex);
     }
   }
