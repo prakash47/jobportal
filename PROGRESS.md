@@ -13,10 +13,10 @@
 ## Snapshot — 2026-05-08
 
 - **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13).
-- **Phase 1 progress**: **16 of 18** build-order items merged. Remaining: sitemap/SEO, observability.
-- **Branch state**: `develop` is the integration tip (30 PRs merged); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #30 — `chore/track-root-docs` (CLAUDE.md, README.md, SETUP_GUIDE.md no longer gitignored — published to GitHub).
-- **Test counts on develop**: 232 API + 133 web + 37 feature-flags = 402 unit tests, all green.
+- **Phase 1 progress**: **17 of 18** build-order items merged. Remaining: observability (Sentry + PostHog).
+- **Branch state**: `develop` is the integration tip (31 PRs merged); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #31 — `feature/sitemap-and-seo` (sharded sitemap + robots.txt per SRS §4.15).
+- **Test counts on develop**: 232 API + 152 web + 37 feature-flags = 421 unit tests, all green.
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2.
 
 ---
@@ -39,7 +39,7 @@
 - [x] **14. career-advice-cms** — PR #21 (SRS §4.8)
 - [x] **15. recruiter-portal** — PRs #22 (registration + shell, SRS §4.9.1-2) + #23 (job posting + applicants, SRS §4.9.3-7)
 - [x] **16. admin-console** — PR #25 (SRS §4.16, §7.7)
-- [ ] **17. sitemap-and-seo** — TODO (SRS §4.15). Sitemap auto-generation, sharded at 50k+ URLs, robots rules per SRS §4.15.
+- [x] **17. sitemap-and-seo** — PR #31 (SRS §4.15)
 - [ ] **18. observability** — TODO. Sentry + PostHog wiring per CLAUDE.md §1 stack list.
 
 **Bonus shipped (not in original Phase 1 list but landed early)**: notifications + transactional email (PR #24, SRS §4.13).
@@ -49,6 +49,17 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #31 — `feature/sitemap-and-seo` · 2026-05-08
+
+Sharded sitemap + robots per SRS §4.15 — closes Phase 1 item 17. Two commits:
+
+1. `robots.ts` (Next 16 metadata route) disallowing authenticated routes / auth flow pages / admin / API; sitemap reference at bottom. Cache-Control headers added in `next.config.ts` for `/sitemap.xml` (24h TTL, 48h SWR) and `/robots.txt` (7d TTL, 30d SWR). CLAUDE.md §6 noindex bullet expanded to enumerate the exact route prefixes that are gated.
+2. Sharded sitemap using Next 16's `generateSitemaps` + default export. Shard layout: 0=static (homepage + /jobs + /companies + /career-advice), 1=companies (every seeded row gets both `/<slug>-overview-<id>` and `/working-at-<slug>-<id>`), 2=PUBLISHED articles, 3=SEO landings (skill / city / skill×city — combo expansion filtered via raw `UNNEST(skillIds)` to combos with ≥1 ACTIVE job to avoid thin-content pages), 4+=ACTIVE jobs at 40k per shard (50k Google ceiling minus 20% headroom). Per-row `lastModified = updatedAt` so changed content gets re-crawled.
+
+Helpers extracted to `apps/web/lib/seo/sitemap-shards.ts` for testability; 19 unit tests cover shard-ID layout, ACTIVE/PUBLISHED filtering, shard-count math (zero / one / boundary / over-boundary), the `UNNEST` combo filter, and orphan ID defense.
+
+Deliberately deferred: ISR pre-rendering of SEO landings (perf concern, not §4.15), Search Console auto-submission (one-time manual), image / news / video sitemaps. **421 total unit tests; net-new TS errors: 0.**
 
 ### PR #30 — `chore/track-root-docs` · 2026-05-08
 
