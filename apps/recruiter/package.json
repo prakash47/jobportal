@@ -14,10 +14,12 @@
   "dependencies": {
     "@jobportal/auth": "workspace:*",
     "@jobportal/db": "workspace:*",
+    "@jobportal/observability": "workspace:*",
     "@jobportal/search": "workspace:*",
     "@jobportal/types": "workspace:*",
     "@jobportal/ui": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.0",
+    "@sentry/nextjs": "^10.53.0",
     "next": "^16.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

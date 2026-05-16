@@ -10,14 +10,14 @@
 
 ---
 
-## Snapshot — 2026-05-08
+## Snapshot — 2026-05-17
 
 - **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13).
-- **Phase 1 progress**: **17 of 18** build-order items merged. Remaining: observability (Sentry + PostHog).
-- **Branch state**: `develop` is the integration tip (31 PRs merged); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #31 — `feature/sitemap-and-seo` (sharded sitemap + robots.txt per SRS §4.15).
-- **Test counts on develop**: 232 API + 162 web + 37 feature-flags = 431 unit tests, all green.
-- **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2.
+- **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.** Next gate is the production release cut to `main`.
+- **Branch state**: `develop` is the integration tip (32 PRs merged); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #32 — `feature/observability` (Sentry + PostHog wiring, closes Phase 1).
+- **Test counts on develop**: 235 API + 162 web + 37 feature-flags + 18 observability = 452 unit tests, all green.
+- **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2 / Sentry / PostHog.
 
 ---
 
@@ -40,7 +40,7 @@
 - [x] **15. recruiter-portal** — PRs #22 (registration + shell, SRS §4.9.1-2) + #23 (job posting + applicants, SRS §4.9.3-7)
 - [x] **16. admin-console** — PR #25 (SRS §4.16, §7.7)
 - [x] **17. sitemap-and-seo** — PR #31 (SRS §4.15)
-- [ ] **18. observability** — TODO. Sentry + PostHog wiring per CLAUDE.md §1 stack list.
+- [x] **18. observability** — PR #32 (Sentry on web + recruiter + API + 3 BullMQ workers; PostHog on web with 5 product events)
 
 **Bonus shipped (not in original Phase 1 list but landed early)**: notifications + transactional email (PR #24, SRS §4.13).
 
@@ -49,6 +49,19 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #32 — `feature/observability` · 2026-05-17
+
+Sentry + PostHog wiring — **closes Phase 1**. Four commits:
+
+1. New `@jobportal/observability` package with SDK-agnostic scrubbers (URL + message + Sentry-event), `isTelemetryEnabled()` helper backed by the cached flag evaluator, and a new `killswitch.telemetry` seed flag. `.env.example` extended with `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`, `SENTRY_TRACES_SAMPLE_RATE`, `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN`.
+2. `@sentry/nestjs` on the API: `instrument.ts` as the very-first import, `SentryModule.forRoot()`, a global `SentryGlobalFilter` gated by killswitch.telemetry that skips 4xx HttpExceptions and forwards 5xx-class errors. All three BullMQ workers (transactional-emails, alerts, job-lifecycle) capture failures to Sentry with queue + jobId + attempts tags. Closes the PR #24 follow-up chip on terminal-DLQ alerting.
+3. `@sentry/nextjs` + `posthog-js` on apps/web: per-runtime configs (client / server / edge), `instrumentation.ts` re-exports `captureRequestError as onRequestError`, `app/global-error.tsx` minimal recovery UI, `next.config.ts` wrapped with `withSentryConfig` for sourcemap upload (silent skip when SENTRY_AUTH_TOKEN blank), `lib/analytics/posthog.ts` lazy wrapper, `AnalyticsProvider` in root layout for user identify. Five hand-picked events wired (JOB_APPLY_CLICKED, JOB_SAVED/UNSAVED, JOB_ALERT_CREATED, SEARCH_PERFORMED, APPLICATION_WITHDRAWN) — `autocapture: false` deliberately, search records `queryLength` only (free-text can contain PII).
+4. `@sentry/nextjs` on apps/recruiter: same shape as web minus PostHog (B2B funnel analytics deferred to Phase 2).
+
+All Sentry config files use the new v10 `sourcemaps.deleteSourcemapsAfterUpload` option (was `hideSourceMaps` in v9). Build-time options conditionally added so `exactOptionalPropertyTypes: true` accepts blank env vars. Sentry's beforeSend hook everywhere routes through `scrubSentryEvent` to strip `?token=`/`?code=`/`?nonce=`/`?confirm=`/`?t=` from URLs and error messages before they leave the process.
+
+Deliberately deferred: ISR Sentry replay (bandwidth-heavy), GDPR consent banner (needs legal review), `apps/services` Sentry (placeholder app, no real routes yet), `posthog-node` server events, custom Sentry dashboards (configured in Sentry UI), PostHog on recruiter. **21 new tests** (18 in @jobportal/observability + 3 in SentryGlobalFilter). 452 total tests passing.
 
 ### PR #31 — `feature/sitemap-and-seo` · 2026-05-08
 
@@ -193,7 +206,7 @@ Initial monorepo: pnpm workspaces + Turborepo. `apps/` (web, recruiter, services
 
 These were spawned during reviews but deferred. Pick one up when context next allows.
 
-1. **Harden DLQ `recordTerminalFailure` to await** — `apps/api/src/email/transactional-email.queue.ts`. Sync BullMQ `failed` listener fires `recordTerminalFailure(...).catch(...)` which is fire-and-forget. If the API exits between attempt 3 failing and the DLQ insert acking, the failure is silently lost. Switch to async listener + `await`. **Source: PR #24 reviewer.**
+1. **Harden DLQ `recordTerminalFailure` to await** — `apps/api/src/email/transactional-email.queue.ts`. Sync BullMQ `failed` listener fires `recordTerminalFailure(...).catch(...)` which is fire-and-forget. If the API exits between attempt 3 failing and the DLQ insert acking, the failure is silently lost. Switch to async listener + `await`. **Source: PR #24 reviewer.** Note: partially mitigated by PR #32 — terminal failures also fire to Sentry now, so an API exit mid-write no longer means total blindness.
 2. **`scripts/redrive-dlq.ts`** — drains the transactional-email DLQ back into the main queue. Standalone Node script. Optional `--dry-run` and `--max=N` flags. Doc comment in `transactional-email-dlq.queue.ts` already references this. **Source: PR #24 reviewer.**
 3. **Refactor `ApplicationQuotaService` onto shared `tier-resolver`** — `apps/api/src/applications/quota.service.ts` still has its own tier-resolution helper; PR #23 extracted a shared one at `apps/api/src/common/tier-resolver.ts`. Migrate to dedupe. **Source: PR #23 reviewer.**
 4. **Test `update()` triggering `firePublishSideEffects` for ACTIVE jobs** — `apps/api/src/recruiter-jobs/recruiter-jobs.service.test.ts`. Coverage gap from PR #23. **Source: PR #23 reviewer.**

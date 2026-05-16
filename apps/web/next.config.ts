@@ -119,16 +119,26 @@ const config: NextConfig = {
 // sourcemap upload + a few performance-tracing default settings. When
 // SENTRY_AUTH_TOKEN is blank (local dev, CI builds without secrets),
 // the plugin silently skips the upload — the build still succeeds.
-export default withSentryConfig(config, {
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-  authToken: process.env.SENTRY_AUTH_TOKEN,
-  // Hide source maps from public-facing prod bundles; upload is still
-  // visible to Sentry for stack-trace resolution.
-  hideSourceMaps: true,
+//
+// Build the options object dynamically so blank env vars don't survive
+// into the call — TypeScript's exactOptionalPropertyTypes rejects an
+// explicit `key: undefined` even though the runtime behavior is "skip
+// this field".
+const sentryOptions: Parameters<typeof withSentryConfig>[1] = {
+  sourcemaps: {
+    // Sourcemaps are uploaded to Sentry then deleted from the prod
+    // bundle so they're not publicly downloadable. Stack-trace
+    // resolution happens server-side in Sentry's UI.
+    deleteSourcemapsAfterUpload: true,
+  },
   // Quieter build output — only warn if upload fails.
   silent: !process.env.CI,
   // Disable telemetry to Sentry's own analytics; we already have our
   // own observability stack.
   telemetry: false,
-});
+};
+if (process.env.SENTRY_ORG) sentryOptions.org = process.env.SENTRY_ORG;
+if (process.env.SENTRY_PROJECT) sentryOptions.project = process.env.SENTRY_PROJECT;
+if (process.env.SENTRY_AUTH_TOKEN) sentryOptions.authToken = process.env.SENTRY_AUTH_TOKEN;
+
+export default withSentryConfig(config, sentryOptions);
