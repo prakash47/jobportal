@@ -5,6 +5,8 @@ import {
   OnApplicationShutdown,
 } from '@nestjs/common';
 import { Queue, Worker, type ConnectionOptions } from 'bullmq';
+import * as Sentry from '@sentry/nestjs';
+import { isTelemetryEnabled } from '@jobportal/observability';
 import { JOB_NAMES, JobLifecycleProcessor } from './job-lifecycle.processor';
 
 const QUEUE_NAME = 'job-lifecycle';
@@ -57,6 +59,17 @@ export class JobLifecycleQueueService implements OnApplicationBootstrap, OnAppli
     );
     this.worker.on('failed', (job, err) => {
       this.logger.error(`job-lifecycle ${job?.id} failed: ${err.message}`);
+      // Phase 1 item 18 — Sentry capture for daily expiry sweep
+      // failures. Cron jobs don't surface failures to a user — without
+      // Sentry, a stuck sweep would only show up as ACTIVE-but-expired
+      // listings still ranking in search. Gated by killswitch.telemetry.
+      isTelemetryEnabled().then((on) => {
+        if (!on) return;
+        Sentry.captureException(err, {
+          tags: { queue: QUEUE_NAME, jobName: job?.name },
+          extra: { jobId: job?.id },
+        });
+      }).catch(() => undefined);
     });
 
     const cron = process.env.JOB_LIFECYCLE_DAILY_CRON ?? DAILY_CRON_DEFAULT;

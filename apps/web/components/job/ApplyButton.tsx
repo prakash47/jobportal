@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@jobportal/ui';
 import { Check } from '@jobportal/ui/icons';
+import { EVENTS, track } from '../../lib/analytics/posthog';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -89,6 +90,11 @@ export function ApplyButton({
   }
 
   async function onClick() {
+    // Phase 1 item 18 — fire the event up-front so we capture intent
+    // even when the API rejects (anon redirect, 429, network error).
+    // outcome is filled in below for the successful path.
+    track(EVENTS.JOB_APPLY_CLICKED, { jobId });
+
     if (!isAuthed) {
       const next = `/job/${jobSlug}`;
       router.push(`/login?next=${encodeURIComponent(next)}`);
