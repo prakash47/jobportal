@@ -6,6 +6,11 @@ const config: NextConfig = {
   // SRS §6.1 rule 5 — never serve a trailing slash.
   trailingSlash: false,
 
+  // Native-module packages that must NOT be bundled by webpack — they
+  // require platform-specific binaries that the bundler can't ship.
+  // The runtime uses node:require directly instead.
+  serverExternalPackages: ['argon2', '@prisma/client', '@prisma/adapter-pg', 'pg'],
+
   // Workspace packages must be transpiled by Next so consumers in apps/web see
   // the latest TS source from packages/* without a manual build step.
   transpilePackages: [

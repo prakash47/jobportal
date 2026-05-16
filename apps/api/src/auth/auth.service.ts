@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { prisma } from '@jobportal/db';
-import type { Session, User } from '@jobportal/db';
+import type { User } from '@jobportal/db';
 import {
   type AccessClaims,
   hashJti,
@@ -148,12 +148,54 @@ export class AuthService {
       .catch(() => undefined);
   }
 
-  async me(userId: number): Promise<{ user: User; sessions: Session[] }> {
+  async me(userId: number): Promise<{
+    user: {
+      id: number;
+      email: string;
+      name: string;
+      phone: string | null;
+      emailVerified: boolean;
+      role: User['role'];
+      createdAt: Date;
+      updatedAt: Date;
+    };
+    sessions: Array<{
+      id: number;
+      deviceInfo: string | null;
+      ipAddress: string | null;
+      createdAt: Date;
+      lastUsedAt: Date;
+      expiresAt: Date;
+    }>;
+  }> {
+    // Per CLAUDE.md §9: passwordHash and refreshTokenHash MUST never
+    // leave the server. Explicit field selection here so a Prisma model
+    // change doesn't accidentally widen the response shape.
     const [user, sessions] = await Promise.all([
-      prisma.user.findUnique({ where: { id: userId } }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          phone: true,
+          emailVerified: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
       prisma.session.findMany({
         where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
         orderBy: { lastUsedAt: 'desc' },
+        select: {
+          id: true,
+          deviceInfo: true,
+          ipAddress: true,
+          createdAt: true,
+          lastUsedAt: true,
+          expiresAt: true,
+        },
       }),
     ]);
     if (!user) throw new UnauthorizedException();

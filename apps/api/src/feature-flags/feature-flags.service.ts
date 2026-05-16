@@ -45,7 +45,10 @@ export class FeatureFlagsService {
     return updated;
   }
 
-  auditLog(opts: { page?: number; flagKey?: string }): Promise<AuditLogPage> {
+  auditLog(opts: {
+    page?: number | undefined;
+    flagKey?: string | undefined;
+  }): Promise<AuditLogPage> {
     return listAuditLog(opts);
   }
 }

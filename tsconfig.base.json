@@ -32,6 +32,8 @@
       "@jobportal/auth/*": ["packages/auth/src/*"],
       "@jobportal/feature-flags": ["packages/feature-flags/src/index.ts"],
       "@jobportal/feature-flags/*": ["packages/feature-flags/src/*"],
+      "@jobportal/observability": ["packages/observability/src/index.ts"],
+      "@jobportal/observability/*": ["packages/observability/src/*"],
       "@jobportal/types": ["packages/types/src/index.ts"],
       "@jobportal/types/*": ["packages/types/src/*"]
     }

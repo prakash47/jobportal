@@ -7,6 +7,11 @@
 // Blank DSN → SDK is a no-op (per @sentry/node docs). Local dev runs
 // without a DSN; staging/prod set SENTRY_DSN in their env.
 
+// Load .env before anything reads process.env. NestJS doesn't auto-load
+// .env files and Prisma's adapter-pg captures DATABASE_URL at
+// instantiation time — so this import MUST come before AppModule's
+// transitive imports of the Prisma client.
+import 'dotenv/config';
 import * as Sentry from '@sentry/nestjs';
 import { scrubSentryEvent } from '@jobportal/observability';
 

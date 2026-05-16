@@ -149,9 +149,9 @@ describe('setFlag — actor assertion', () => {
   });
 
   it('rejects when role is missing', async () => {
+    // Actor.role is optional in the type, so a bare {userId} is
+    // statically callable; the runtime check is what enforces it.
     await expect(
-      // @ts-expect-error — Actor.role is optional in the type, so a bare
-      // {userId} is still callable; the runtime check is what enforces it.
       setFlag('services.menu.visible', { enabled: true }, { userId: 1 }),
     ).rejects.toThrow(/authenticated ADMIN actor/);
     expect(mocked.featureFlag.findUnique).not.toHaveBeenCalled();

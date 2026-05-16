@@ -3,7 +3,10 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useTransition, type ChangeEvent, type ReactNode } from 'react';
 import { Checkbox, Input, Label } from '@jobportal/ui';
-import { buildSrpHref, readSelections, type SrpHrefInput } from '../../lib/srp';
+// Direct path (NOT the lib/srp barrel) — the barrel re-exports
+// loadSrpUserContext which touches Prisma. Importing from the barrel
+// in a client component drags node:module into the browser bundle.
+import { buildSrpHref, readSelections, type SrpHrefInput } from '../../lib/srp/params';
 
 // All filter sub-components. Each reads/writes URL state via Next's router.
 // They share a common patch helper so each toggle produces the next canonical

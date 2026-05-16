@@ -60,7 +60,7 @@ export function JobCard({ job, isAuthed = false, initialSaved = false, returnTo 
               {job.title}
             </Link>
             <Link
-              href={`/${job.companySlug}-overview-${job.companyId}`}
+              href={`/company/${job.companySlug}-overview-${job.companyId}`}
               className="mt-0.5 inline-block text-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
             >
               {job.companyName}

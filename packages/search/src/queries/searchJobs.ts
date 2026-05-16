@@ -82,12 +82,21 @@ export async function searchJobs(params: SearchJobsParams = {}): Promise<SearchJ
       break;
   }
 
+  // ES SDK 9's QueryDslQueryContainer / SortCombinations types are
+  // exhaustive discriminated unions that don't accept Record<string,
+  // unknown> at the call boundary. The queries themselves are valid ES
+  // DSL; cast through unknown so the call type-checks without
+  // sacrificing structural validation in the rest of the file.
   const result = await es.search<JobDoc>({
     index: INDEX_ALIAS.jobs,
     from: Math.max(0, (page - 1) * pageSize),
     size: pageSize,
-    query,
-    sort: sortClause,
+    query: query as unknown as Parameters<typeof es.search>[0] extends { query?: infer Q }
+      ? Q
+      : never,
+    sort: sortClause as unknown as Parameters<typeof es.search>[0] extends { sort?: infer S }
+      ? S
+      : never,
     track_total_hits: true,
   });
 

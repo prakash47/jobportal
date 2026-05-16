@@ -93,7 +93,7 @@ export default async function WorkingAtPage({ params }: PageProps) {
   const sections = isSectionArray(company.workingAtSections) ? company.workingAtSections : [];
 
   const canonicalUrl = `${SITE}/working-at-${company.slug}-${company.id}`;
-  const profileUrl = `${SITE}/${company.slug}-overview-${company.id}`;
+  const profileUrl = `${SITE}/company/${company.slug}-overview-${company.id}`;
   const bc = breadcrumbList([
     { name: 'Home', url: `${SITE}/` },
     { name: 'Companies', url: `${SITE}/companies` },
@@ -130,7 +130,7 @@ export default async function WorkingAtPage({ params }: PageProps) {
               In the meantime, browse open roles or read reviews on the company page.
             </p>
             <Button asChild variant="secondary" className="mt-4">
-              <Link href={`/${company.slug}-overview-${company.id}`}>Visit company page</Link>
+              <Link href={`/company/${company.slug}-overview-${company.id}`}>Visit company page</Link>
             </Button>
           </div>
         ) : (
@@ -157,7 +157,7 @@ export default async function WorkingAtPage({ params }: PageProps) {
 
         <div className="border-t border-[var(--color-border)] pt-6">
           <Link
-            href={`/${company.slug}-overview-${company.id}`}
+            href={`/company/${company.slug}-overview-${company.id}`}
             className="inline-flex items-center text-sm font-medium text-[var(--color-primary-600)] hover:underline"
           >
             ← Back to {company.name}

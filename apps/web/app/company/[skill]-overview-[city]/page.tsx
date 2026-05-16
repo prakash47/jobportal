@@ -18,8 +18,14 @@ const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 // rule layer per CLAUDE.md §6.
 export const revalidate = 3600;
 
+// Route signature is `[skill]-overview-[city]` to satisfy Next 16's
+// per-directory slug-name uniqueness rule (the SRP routes already use
+// `skill` + `city` as slug names). The URL still matches the SRS §6
+// `/<slug>-overview-<id>` pattern: `params.skill` carries the company
+// slug, `params.city` carries the stringified id. Awkward names; renamed
+// inside this function to `slug` / `idPart` for clarity downstream.
 interface PageProps {
-  params: Promise<{ companyOverview: string }>;
+  params: Promise<{ skill: string; city: string }>;
 }
 
 async function loadCompany(id: number) {
@@ -43,8 +49,13 @@ async function loadCompany(id: number) {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { companyOverview } = await params;
-  const parsed = parseCompanySlug(companyOverview);
+  const { skill, city } = await params;
+  // Reconstruct the full `<slug>-overview-<id>` segment so the existing
+  // parseCompanySlug regex matches. Next 16 split it into two params
+  // at the static `-overview-` boundary because the directory name is
+  // [skill]-overview-[city] (the shape is forced by Next 16's per-
+  // directory slug-name uniqueness rule).
+  const parsed = parseCompanySlug(`${skill}-overview-${city}`);
   if (!parsed) return { title: 'Page not found — JobPortal' };
   const company = await loadCompany(parsed.id);
   if (!company) return { title: 'Page not found — JobPortal' };
@@ -57,13 +68,18 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title,
     description,
-    alternates: { canonical: `${SITE}/${company.slug}-overview-${company.id}` },
+    alternates: { canonical: `${SITE}/company/${company.slug}-overview-${company.id}` },
   };
 }
 
 export default async function CompanyProfilePage({ params }: PageProps) {
-  const { companyOverview } = await params;
-  const parsed = parseCompanySlug(companyOverview);
+  const { skill, city } = await params;
+  // Reconstruct the full `<slug>-overview-<id>` segment so the existing
+  // parseCompanySlug regex matches. Next 16 split it into two params
+  // at the static `-overview-` boundary because the directory name is
+  // [skill]-overview-[city] (the shape is forced by Next 16's per-
+  // directory slug-name uniqueness rule).
+  const parsed = parseCompanySlug(`${skill}-overview-${city}`);
   if (!parsed) notFound();
 
   const company = await loadCompany(parsed.id);
@@ -72,14 +88,14 @@ export default async function CompanyProfilePage({ params }: PageProps) {
   // SRS §6.1 + §4.7.5 — slug drift handling. The numeric ID is the permalink;
   // the descriptive slug can change. 308 to the canonical form.
   if (parsed.slug !== company.slug) {
-    permanentRedirect(`/${company.slug}-overview-${company.id}`);
+    permanentRedirect(`/company/${company.slug}-overview-${company.id}`);
   }
 
   const totalActive = await prisma.job.count({
     where: { companyId: company.id, status: 'ACTIVE' },
   });
 
-  const canonicalUrl = `${SITE}/${company.slug}-overview-${company.id}`;
+  const canonicalUrl = `${SITE}/company/${company.slug}-overview-${company.id}`;
 
   // SRS §4.7.3 — Organization + BreadcrumbList JSON-LD.
   const orgLd = organization({

@@ -52,8 +52,12 @@ export function readRefreshTokenCookie(req: Request): string | undefined {
 }
 
 export function cookieEnvFromProcess(): CookieEnv {
-  return {
-    domain: process.env.COOKIE_DOMAIN,
+  // Build the object conditionally so `domain: undefined` doesn't land
+  // in the result — under exactOptionalPropertyTypes: true, the field
+  // type `domain?: string` rejects an explicit undefined value.
+  const env: CookieEnv = {
     secure: process.env.NODE_ENV === 'production',
   };
+  if (process.env.COOKIE_DOMAIN) env.domain = process.env.COOKIE_DOMAIN;
+  return env;
 }

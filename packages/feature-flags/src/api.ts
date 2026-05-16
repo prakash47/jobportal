@@ -27,8 +27,8 @@ export interface AuditLogPage {
 const AUDIT_LOG_PAGE_SIZE = 25;
 
 export async function listAuditLog(opts: {
-  page?: number;
-  flagKey?: string;
+  page?: number | undefined;
+  flagKey?: string | undefined;
 } = {}): Promise<AuditLogPage> {
   const page = opts.page && opts.page >= 1 ? Math.floor(opts.page) : 1;
   // Resolve flagKey → flagId once so the WHERE clause stays an indexed
@@ -166,10 +166,18 @@ export async function setFlag(
     throw new Error(`Unknown flag key: ${key}`);
   }
 
+  // Strip explicit-undefined keys so they don't survive into the Prisma
+  // input — exactOptionalPropertyTypes rejects `key: undefined` even
+  // though Prisma's runtime treats missing/undefined the same way.
+  const cleanPatch: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (v !== undefined) cleanPatch[k] = v;
+  }
+
   const after = (await prisma.featureFlag.update({
     where: { key },
     data: {
-      ...patch,
+      ...cleanPatch,
       lastChangedById: actor.userId,
     },
   })) as FeatureFlag;

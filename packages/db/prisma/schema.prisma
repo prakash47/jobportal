@@ -3,8 +3,13 @@
 // DATABASE_URL is provided by prisma.config.ts (loads root .env), not env() here.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated"
+  provider     = "prisma-client"
+  output       = "../generated"
+  // CJS output so node-runtime consumers (NestJS via nest build, ts-node)
+  // can `require()` the client directly. ESM is the Prisma 7 default but
+  // fights NestJS's tsc-emitted CommonJS module graph and ts-node's CJS
+  // loader. Vitest still works either way.
+  moduleFormat = "cjs"
 }
 
 datasource db {

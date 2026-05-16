@@ -13,9 +13,10 @@
 ## Snapshot — 2026-05-17
 
 - **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13).
-- **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.** Next gate is the production release cut to `main`.
-- **Branch state**: `develop` is the integration tip (32 PRs merged); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #32 — `feature/observability` (Sentry + PostHog wiring, closes Phase 1).
+- **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
+- **Branch state**: `develop` is the integration tip (33 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #33 — `chore/local-dev-runtime-fixes` (first end-to-end local boot of the stack; fixed 41 files of runtime + Next 16 compat + a `/auth/me` PII leak).
+- **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. Workspace typecheck 11/11 green. Auth register/login/me + /me/notifications + /me/applications + /me/saved-jobs + /me/alerts all return 200 end-to-end.
 - **Test counts on develop**: 235 API + 162 web + 37 feature-flags + 18 observability = 452 unit tests, all green.
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2 / Sentry / PostHog.
 
@@ -49,6 +50,31 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #33 — `chore/local-dev-runtime-fixes` · 2026-05-17
+
+First end-to-end local boot of the full stack. Brought up Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API + web + recruiter, ran every public route and the candidate auth flow. Found and fixed 3 categories of issues in one sweep:
+
+**SECURITY (HIGH)** — `/auth/me` was leaking `User.passwordHash` and `Session.refreshTokenHash` in the response body. The handler returned `prisma.user.findUnique({where:{id}})` and `prisma.session.findMany({where:...})` without a `select:`, so every field of both models hit the wire. Replaced both queries with explicit `select:` of only non-sensitive fields. Verified before/after via curl. Tagged this as the only real defect found during QA — every other failure was infrastructure/runtime.
+
+**INFRASTRUCTURE**
+- `apps/api` had no `.env` loader. Prisma's `@prisma/adapter-pg` reads `DATABASE_URL` at adapter construction time; with the env unset, every query failed with `SASL: client password must be a string`. Added `import 'dotenv/config'` as the very first line of `instrument.ts` (before Sentry init, which is itself before AppModule).
+- The API `dev` script went through three iterations: `nest start --watch` couldn't resolve workspace TS packages at runtime (their `package.json` `main` points at `.ts` files); `tsx watch` dropped NestJS decorator metadata (DI silently injected `undefined` into AlertsScheduler.queueSvc); `ts-node` choked on the Prisma 7 generated client's ESM syntax in a CJS context. Settled on `node -r @swc-node/register src/main.ts` which handles both correctly.
+- `nest-cli.json` gained `entryFile: "apps/api/src/main"` so `nest build` produces a discoverable entry path (defaults emit to `dist/apps/api/src/main.js` due to workspace package inclusion).
+- Prisma schema gained `moduleFormat = "cjs"` on the client generator for consistent CJS interop.
+- `.env` copied to `apps/web/` and `apps/recruiter/` so Next.js auto-load picks up DATABASE_URL etc.
+
+**NEXT 16 COMPAT**
+- Per-directory slug-name uniqueness rule rejected `[companyOverview]` + `[skill]-jobs-in-[city]` coexisting at root. Moved company route to `/company/<slug>-overview-<id>`. 11 call sites + the sitemap updated.
+- `[skill]-jobs-in-[city]` (multi-token segment) hits a Turbopack invariant — archived to `_archived_routes/` (gitignored). Sitemap entry for that pattern commented out. Tracked as follow-up below.
+- Moved `jobs-in-[city]` and `[skill]-jobs` out of the `(seo-jobs)` route group to the app root, working around a route-group + multi-token Turbopack quirk. The `(seo-jobs)` group is now empty save for `/jobs` and `layout.tsx`.
+- Three client components (`Filters`, `SortSelect`, `SrpPaginationLink`) were importing from `lib/srp` barrel which re-exports `loadSrpUserContext` (server-only, touches Prisma). Turbopack dragged the chain into the client bundle. Replaced barrel imports with direct `lib/srp/params` imports.
+- All six Sentry config files (3 web + 3 recruiter) now import `scrubSentryEvent` from `@jobportal/observability/scrub` (sub-path, no Prisma chain) instead of the barrel. Added explicit `exports` map to observability's `package.json`.
+- `next.config.ts` gained `serverExternalPackages: ['argon2', '@prisma/client', '@prisma/adapter-pg', 'pg']` so webpack doesn't try to bundle native modules into the server runtime.
+
+**TYPECHECK (pre-existing errors swept)** — `cookieEnvFromProcess`, `searchJobs.ts` ES SDK boundary, `feature-flags/api.ts` stripUndefined, `email-verification.service.ts` jwt cast, `SrpHrefInput`, `CanonicalLinkProps`, `FlagPatch`, `listAuditLog` opts. All under `exactOptionalPropertyTypes: true`. After fixes: `pnpm -w typecheck` is 11/11 green.
+
+**Test counts**: 452 unit tests still green; no test regressions.
 
 ### PR #32 — `feature/observability` · 2026-05-17
 
@@ -204,12 +230,15 @@ Initial monorepo: pnpm workspaces + Turborepo. `apps/` (web, recruiter, services
 
 ## Open follow-up chips
 
-These were spawned during reviews but deferred. Pick one up when context next allows.
+These were spawned during reviews or QA but deferred. Pick one up when context next allows.
 
 1. **Harden DLQ `recordTerminalFailure` to await** — `apps/api/src/email/transactional-email.queue.ts`. Sync BullMQ `failed` listener fires `recordTerminalFailure(...).catch(...)` which is fire-and-forget. If the API exits between attempt 3 failing and the DLQ insert acking, the failure is silently lost. Switch to async listener + `await`. **Source: PR #24 reviewer.** Note: partially mitigated by PR #32 — terminal failures also fire to Sentry now, so an API exit mid-write no longer means total blindness.
 2. **`scripts/redrive-dlq.ts`** — drains the transactional-email DLQ back into the main queue. Standalone Node script. Optional `--dry-run` and `--max=N` flags. Doc comment in `transactional-email-dlq.queue.ts` already references this. **Source: PR #24 reviewer.**
 3. **Refactor `ApplicationQuotaService` onto shared `tier-resolver`** — `apps/api/src/applications/quota.service.ts` still has its own tier-resolution helper; PR #23 extracted a shared one at `apps/api/src/common/tier-resolver.ts`. Migrate to dedupe. **Source: PR #23 reviewer.**
 4. **Test `update()` triggering `firePublishSideEffects` for ACTIVE jobs** — `apps/api/src/recruiter-jobs/recruiter-jobs.service.test.ts`. Coverage gap from PR #23. **Source: PR #23 reviewer.**
+5. **SEO landing routes — sitemap.xml index 404, `/jobs-in-bangalore` and `/python-jobs` return 404** — Next 16 / Turbopack appears to choke on certain combinations of multi-token segments at the same directory level. Discovered during PR #33 QA. Workarounds applied: archived `[skill]-jobs-in-[city]`, moved remaining SEO routes to app root. Need a clean refactor — either consolidate all SEO landings under a single `[...slug]` catch-all that parses internally, or move them under a `/jobs/` prefix. Sitemap helper has the skill×city block commented out pending the refactor. **Source: PR #33 QA.**
+6. **Restore `[skill]-jobs-in-[city]` SEO landing** — currently archived to `_archived_routes/`. Re-introduce via the catch-all refactor in #5, or via a sub-path like `/jobs/<skill>-in-<city>/`. SRS §6 mentions this URL pattern. **Source: PR #33 QA.**
+7. **Test BullMQ worker captureException on terminal failure** — `apps/api/src/email/transactional-email.queue.ts`. The Sentry-capture path on terminal DLQ failure was added in PR #32 but has no unit test. **Source: PR #32 reviewer.**
 
 ---
 

@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
-import { scrubSentryEvent } from '@jobportal/observability';
+// Narrow import to avoid pulling @jobportal/db's Prisma client into
+// the Sentry init module.
+import { scrubSentryEvent } from '@jobportal/observability/scrub';
 
 const DSN = process.env.SENTRY_DSN;
 const TRACES_SAMPLE_RATE = Number(

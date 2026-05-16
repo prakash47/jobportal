@@ -25,13 +25,16 @@ export type EvaluationReason =
   | 'no_tier'
   | 'no_cohort';
 
-export type FlagPatch = Partial<{
-  enabled: boolean;
-  percentage: number | null;
-  targetUserIds: number[];
-  requiredTiers: SubscriptionTier[];
-  cohorts: string[];
-}>;
+// `| undefined` is explicit on every field so callers can pass parsed
+// values (e.g. from Zod's safeParse result) directly. Without it,
+// exactOptionalPropertyTypes rejects the call.
+export type FlagPatch = {
+  enabled?: boolean | undefined;
+  percentage?: number | null | undefined;
+  targetUserIds?: number[] | undefined;
+  requiredTiers?: SubscriptionTier[] | undefined;
+  cohorts?: string[] | undefined;
+};
 
 export type Actor = {
   userId: number;

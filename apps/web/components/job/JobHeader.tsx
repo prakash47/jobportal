@@ -42,7 +42,7 @@ export function JobHeader({
         </h1>
         <p className="text-sm text-[var(--color-fg-muted)]">
           <Link
-            href={`/${companySlug}-overview-${companyId}`}
+            href={`/company/${companySlug}-overview-${companyId}`}
             className="font-medium text-[var(--color-fg)] hover:underline"
           >
             {companyName}
