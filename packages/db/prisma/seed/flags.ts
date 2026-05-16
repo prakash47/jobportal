@@ -58,6 +58,11 @@ const flags: FlagSeed[] = [
   // user-triggered resends. Job-alert digests are gated separately by
   // killswitch.job_alerts so support can pause one without the other.
   { key: 'killswitch.transactional_emails', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable all transactional emails (kill)' },
+  // Phase 1 item 18 — emergency stop for telemetry capture (Sentry +
+  // PostHog). Flips the SDK beforeSend callback into a `return null` so
+  // events stop leaving the process. SDK init still runs (cheap, not
+  // gated) so flipping back ON is instant — no redeploy needed.
+  { key: 'killswitch.telemetry', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable Sentry + PostHog telemetry (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {
