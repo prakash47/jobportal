@@ -31,9 +31,9 @@ export function CompanyCard({
 }: CompanyCardProps) {
   // Always link via the persisted slug. buildCompanySlug() (in lib/url/slug)
   // would re-derive from the name, which can drift after a rename — the
-  // server-side redirect in app/[companyOverview]/page.tsx fixes drift but
-  // the directory should already point at the canonical URL.
-  const canonicalHref = `/${slug}-overview-${id}`;
+  // server-side redirect in app/company/[skill]-overview-[city]/page.tsx
+  // fixes drift but the directory should already point at the canonical URL.
+  const canonicalHref = `/company/${slug}-overview-${id}`;
 
   return (
     <Card className="transition-colors hover:border-[var(--color-border-strong)]">

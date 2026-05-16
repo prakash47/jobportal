@@ -5,17 +5,25 @@ import { Client } from '@elastic/elasticsearch';
 const globalForEs = globalThis as unknown as { __esClient?: Client };
 
 function buildClient(): Client {
-  return new Client({
+  // Build the options object conditionally so `auth: undefined` doesn't
+  // land in the result — under exactOptionalPropertyTypes: true, the
+  // ClientOptions auth field is BasicAuth | ApiKeyAuth | BearerAuth (no
+  // explicit-undefined allowed). Local dev with no creds passes the
+  // anonymous path by simply omitting the key.
+  const opts: ConstructorParameters<typeof Client>[0] = {
     node: process.env.ELASTICSEARCH_URL ?? 'http://localhost:9200',
-    auth:
-      process.env.ELASTICSEARCH_USERNAME && process.env.ELASTICSEARCH_PASSWORD
-        ? {
-            username: process.env.ELASTICSEARCH_USERNAME,
-            password: process.env.ELASTICSEARCH_PASSWORD,
-          }
-        : undefined,
     requestTimeout: 10_000,
-  });
+  };
+  if (
+    process.env.ELASTICSEARCH_USERNAME &&
+    process.env.ELASTICSEARCH_PASSWORD
+  ) {
+    opts.auth = {
+      username: process.env.ELASTICSEARCH_USERNAME,
+      password: process.env.ELASTICSEARCH_PASSWORD,
+    };
+  }
+  return new Client(opts);
 }
 
 export const es = globalForEs.__esClient ?? buildClient();

@@ -5,7 +5,9 @@
 // runtime is a different fetch implementation).
 
 import * as Sentry from '@sentry/nextjs';
-import { scrubSentryEvent } from '@jobportal/observability';
+// Narrow import — barrel pulls @jobportal/db's Prisma client which uses
+// node: APIs the Edge runtime can't execute.
+import { scrubSentryEvent } from '@jobportal/observability/scrub';
 
 const DSN = process.env.SENTRY_DSN;
 const TRACES_SAMPLE_RATE = Number(

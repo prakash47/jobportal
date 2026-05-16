@@ -34,7 +34,7 @@ export function ApplicationRow({ id, status, appliedAt, job }: ApplicationRowPro
         </Link>
         <p className="mt-0.5 truncate text-sm text-[var(--color-fg-muted)]">
           <Link
-            href={`/${job.company.slug}-overview-${job.company.id}`}
+            href={`/company/${job.company.slug}-overview-${job.company.id}`}
             className="hover:text-[var(--color-fg)]"
           >
             {job.company.name}

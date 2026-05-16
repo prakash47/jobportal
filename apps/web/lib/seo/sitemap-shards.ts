@@ -46,7 +46,7 @@ export async function getCompanyUrls(): Promise<MetadataRoute.Sitemap> {
   const out: Url[] = [];
   for (const c of rows) {
     out.push({
-      url: `${SITE}/${c.slug}-overview-${c.id}`,
+      url: `${SITE}/company/${c.slug}-overview-${c.id}`,
       lastModified: c.updatedAt,
       changeFrequency: 'weekly',
       priority: 0.6,
@@ -141,32 +141,13 @@ export async function getLandingUrls(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  // /<skill>-jobs-in-<city> Cartesian. Get every (cityId, skillId) pair
-  // that has at least one ACTIVE job in one DISTINCT UNNEST query. With
-  // 100 skills × 50 cities = 5000 possible combos this is a manageable
-  // scan; if it grows past ~50k the math here needs revisiting (likely
-  // move to a precomputed materialized view).
-  const activePairs = await prisma.$queryRaw<
-    Array<{ cityId: number; skillId: number }>
-  >`
-    SELECT DISTINCT
-      "primaryCityId" AS "cityId",
-      UNNEST("skillIds") AS "skillId"
-    FROM "Job"
-    WHERE status = 'ACTIVE'
-      AND "primaryCityId" IS NOT NULL
-  `;
-
-  for (const { cityId, skillId } of activePairs) {
-    const citySlug = cityById.get(Number(cityId));
-    const skillSlug = skillSlugById.get(Number(skillId));
-    if (!citySlug || !skillSlug) continue;
-    out.push({
-      url: `${SITE}/${skillSlug}-jobs-in-${citySlug}`,
-      changeFrequency: 'daily',
-      priority: 0.6,
-    });
-  }
+  // /<skill>-jobs-in-<city> Cartesian DEFERRED — the multi-token
+  // dynamic segment `[skill]-jobs-in-[city]` triggers a Next 16
+  // Invariant ("Could not resolve param value for segment"). Tracked in
+  // PROGRESS.md follow-ups; the route + this sitemap entry will be
+  // restored once the SEO landings are refactored into a catch-all or
+  // sub-path structure that Next 16 can resolve.
+  // const activePairs = await prisma.$queryRaw<...>...;
 
   return out;
 }

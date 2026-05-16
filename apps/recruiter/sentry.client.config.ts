@@ -1,5 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
-import { scrubSentryEvent } from '@jobportal/observability';
+// Narrow import to avoid pulling @jobportal/db's Prisma client (node:
+// APIs only) into the browser bundle.
+import { scrubSentryEvent } from '@jobportal/observability/scrub';
 
 // Phase 1 item 18 — Sentry browser-side init for apps/recruiter. Same
 // shape as apps/web (see web's sentry.client.config.ts for the full

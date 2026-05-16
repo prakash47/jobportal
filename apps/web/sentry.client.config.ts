@@ -2,7 +2,10 @@
 // by @sentry/nextjs at every client render. Blank DSN → SDK no-op.
 
 import * as Sentry from '@sentry/nextjs';
-import { scrubSentryEvent } from '@jobportal/observability';
+// Narrow import — the barrel index also re-exports isTelemetryEnabled
+// which pulls @jobportal/db's Prisma client (node: APIs only) and would
+// break the Edge/browser runtimes.
+import { scrubSentryEvent } from '@jobportal/observability/scrub';
 
 const DSN = process.env.NEXT_PUBLIC_SENTRY_DSN;
 const TRACES_SAMPLE_RATE = Number(

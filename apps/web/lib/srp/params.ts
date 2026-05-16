@@ -94,19 +94,24 @@ export function parseSrpSearchParams(searchParams: RawParams): SearchJobsParams 
 // Builds a canonical SRP href from a base path + a partial filter patch.
 // Used by the filter UI to produce the next URL when a checkbox toggles.
 // Query keys are sorted alphabetically per SRS §6.3 rule 4.
+//
+// `| undefined` is explicit on every field so callers can pass parsed
+// search-param values directly (e.g. `q: searchParams.q` where the
+// type is `string | undefined`). Without `| undefined` here,
+// exactOptionalPropertyTypes rejects the call.
 export type SrpHrefInput = {
-  q?: string;
-  skillSlugs?: string[];
-  citySlugs?: string[];
-  industrySlug?: string;
-  emp?: string[];
-  mode?: string[];
-  minExperienceMonths?: number;
-  maxExperienceMonths?: number;
-  salaryMin?: number;
-  postedWithinDays?: number;
-  sort?: 'relevance' | 'recent' | 'salary_desc';
-  page?: number;
+  q?: string | undefined;
+  skillSlugs?: string[] | undefined;
+  citySlugs?: string[] | undefined;
+  industrySlug?: string | undefined;
+  emp?: string[] | undefined;
+  mode?: string[] | undefined;
+  minExperienceMonths?: number | undefined;
+  maxExperienceMonths?: number | undefined;
+  salaryMin?: number | undefined;
+  postedWithinDays?: number | undefined;
+  sort?: 'relevance' | 'recent' | 'salary_desc' | undefined;
+  page?: number | undefined;
 };
 
 export function buildSrpHref(basePath: string, input: SrpHrefInput): string {

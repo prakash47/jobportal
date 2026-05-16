@@ -30,7 +30,7 @@ export class EmailVerificationService {
   async verify(token: string): Promise<number> {
     let userId: number;
     try {
-      const decoded = jwt.verify(token, this.secret(), { algorithms: ['HS256'] }) as {
+      const decoded = jwt.verify(token, this.secret(), { algorithms: ['HS256'] }) as unknown as {
         sub: number;
       };
       userId = Number(decoded.sub);

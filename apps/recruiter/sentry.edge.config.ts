@@ -1,5 +1,8 @@
 import * as Sentry from '@sentry/nextjs';
-import { scrubSentryEvent } from '@jobportal/observability';
+// Import scrub from its file path directly so the Edge runtime doesn't
+// transitively pull @jobportal/feature-flags → @jobportal/db's Prisma
+// client (which uses node: APIs Edge can't run).
+import { scrubSentryEvent } from '@jobportal/observability/scrub';
 
 const DSN = process.env.SENTRY_DSN;
 const TRACES_SAMPLE_RATE = Number(
