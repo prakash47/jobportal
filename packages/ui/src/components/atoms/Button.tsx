@@ -68,24 +68,27 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   //
   // Disabled handling: native `disabled` is meaningless on `<a>` (Slot's
   // most common target), so we forward as aria-disabled + data-disabled.
-  // aria-disabled is the correct semantic; data-disabled lets CSS target
-  // the disabled state (used by the disabled:opacity-50 / disabled:bg-…
-  // utilities in the variant classes via @custom-variant if needed by a
-  // future selector). Callers should still add tabIndex={-1} / href="#"
-  // on the inner Link when atCap-style gating matters for click handling.
+  // Callers should still gate the inner Link's href / tabIndex when click
+  // suppression matters; aria-disabled alone doesn't stop pointer events.
+  //
+  // ARIA attrs are added to the props object CONDITIONALLY rather than
+  // passed as `aria-busy={loading || undefined}`. The latter shape made
+  // Radix Slot 1.1.0 + React 19 emit different SSR vs CSR output (the
+  // attr appeared as a string on the server but was stripped on the
+  // client), producing a hydration mismatch on every Button asChild on
+  // the homepage. PR #34 review caught this.
   if (asChild) {
-    return (
-      <Slot
-        ref={ref as React.Ref<HTMLElement>}
-        aria-busy={loading || undefined}
-        aria-disabled={isDisabled || undefined}
-        data-disabled={isDisabled || undefined}
-        className={buttonClass}
-        {...props}
-      >
-        {children}
-      </Slot>
-    );
+    const slotProps: Record<string, unknown> = {
+      ref: ref as React.Ref<HTMLElement>,
+      className: buttonClass,
+      ...props,
+    };
+    if (loading) slotProps['aria-busy'] = true;
+    if (isDisabled) {
+      slotProps['aria-disabled'] = true;
+      slotProps['data-disabled'] = true;
+    }
+    return <Slot {...slotProps}>{children}</Slot>;
   }
 
   return (

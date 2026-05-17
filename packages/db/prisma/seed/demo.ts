@@ -593,9 +593,14 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
       }
     }
 
-    // Deterministic canonical slug so re-running upserts cleanly.
-    // Format: <company-slug>-<title-slug>-d<index>
-    const canonicalSlug = `${j.companySlug}-${slugify(j.title)}-d${String(idx + 1).padStart(3, '0')}`;
+    // Deterministic Job.id in a high range (100001+) so demo rows don't
+    // collide with auto-increment ids from real jobs (Postgres SERIAL
+    // sequence advances past these on first real insert). canonicalSlug
+    // ends with the actual id so the SRS §6.1 `<slug>-<id>` URL pattern
+    // resolves: parseJobSlug needs pure digits at the tail, not the
+    // earlier `-d001` shape which was breaking /job/<slug>.
+    const jobId = 100001 + idx;
+    const canonicalSlug = `${j.companySlug}-${slugify(j.title)}-${jobId}`;
 
     const postedAt = new Date(Date.now() - j.daysAgo * 24 * 60 * 60 * 1000);
     const expiresAt = new Date(postedAt.getTime() + 60 * 24 * 60 * 60 * 1000);
@@ -605,8 +610,9 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
     const salaryMaxPaise = j.salaryMaxLpa !== null ? j.salaryMaxLpa * LPA_TO_PAISE : null;
 
     await prisma.job.upsert({
-      where: { canonicalSlug },
+      where: { id: jobId },
       create: {
+        id: jobId,
         canonicalSlug,
         title: j.title,
         shortDescription: j.shortDescription,
@@ -649,7 +655,20 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
     });
   }
 
+  // Advance the SERIAL sequence past our explicit demo IDs. Postgres
+  // does NOT auto-advance Job_id_seq when an explicit id is inserted via
+  // create({ data: { id: 100001 } }) — so the next real `prisma.job.create()`
+  // without an id would allocate id=1 and collide with the very first demo
+  // row, repeating up to id=100050. setval ensures the next allocation is
+  // 100051. `true` = the next nextval() returns last_value+1; safe to call
+  // multiple times (idempotent).
+  const maxDemoJobId = 100000 + JOBS.length;
+  await prisma.$executeRawUnsafe(
+    `SELECT setval(pg_get_serial_sequence('"Job"', 'id'), $1, true)`,
+    maxDemoJobId,
+  );
+
   console.log(
-    `[seed:demo] complete — ${COMPANIES.length} companies, ${RECRUITERS.length} recruiters, ${REVIEWS.length} reviews, ${JOBS.length} jobs.`,
+    `[seed:demo] complete — ${COMPANIES.length} companies, ${RECRUITERS.length} recruiters, ${REVIEWS.length} reviews, ${JOBS.length} jobs. Job_id_seq advanced to ${maxDemoJobId}.`,
   );
 }

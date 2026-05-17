@@ -18,14 +18,20 @@ const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 // rule layer per CLAUDE.md §6.
 export const revalidate = 3600;
 
-// Route signature is `[skill]-overview-[city]` to satisfy Next 16's
-// per-directory slug-name uniqueness rule (the SRP routes already use
-// `skill` + `city` as slug names). The URL still matches the SRS §6
-// `/<slug>-overview-<id>` pattern: `params.skill` carries the company
-// slug, `params.city` carries the stringified id. Awkward names; renamed
-// inside this function to `slug` / `idPart` for clarity downstream.
+// Route signature: `/company/[handle]` where `handle` is the full
+// `<slug>-overview-<id>` segment. parseCompanySlug splits it back into
+// {slug, id}.
+//
+// Previous shape was `app/company/[skill]-overview-[city]/page.tsx` —
+// two dynamic segments separated by a literal in the same folder name.
+// Next 16 surfaces an InvariantError at request time ("Could not
+// resolve param value for segment: skill]-overview-[city") whenever
+// that pattern is hit. Same per-directory dynamic-segment uniqueness
+// class of bug that broke the root-level SEO landings (chip #5).
+// Consolidating into one dynamic param + internal parse is the
+// documented Next 16 workaround.
 interface PageProps {
-  params: Promise<{ skill: string; city: string }>;
+  params: Promise<{ handle: string }>;
 }
 
 async function loadCompany(id: number) {
@@ -49,13 +55,8 @@ async function loadCompany(id: number) {
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { skill, city } = await params;
-  // Reconstruct the full `<slug>-overview-<id>` segment so the existing
-  // parseCompanySlug regex matches. Next 16 split it into two params
-  // at the static `-overview-` boundary because the directory name is
-  // [skill]-overview-[city] (the shape is forced by Next 16's per-
-  // directory slug-name uniqueness rule).
-  const parsed = parseCompanySlug(`${skill}-overview-${city}`);
+  const { handle } = await params;
+  const parsed = parseCompanySlug(handle);
   if (!parsed) return { title: 'Page not found — JobPortal' };
   const company = await loadCompany(parsed.id);
   if (!company) return { title: 'Page not found — JobPortal' };
@@ -73,13 +74,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 export default async function CompanyProfilePage({ params }: PageProps) {
-  const { skill, city } = await params;
-  // Reconstruct the full `<slug>-overview-<id>` segment so the existing
-  // parseCompanySlug regex matches. Next 16 split it into two params
-  // at the static `-overview-` boundary because the directory name is
-  // [skill]-overview-[city] (the shape is forced by Next 16's per-
-  // directory slug-name uniqueness rule).
-  const parsed = parseCompanySlug(`${skill}-overview-${city}`);
+  const { handle } = await params;
+  const parsed = parseCompanySlug(handle);
   if (!parsed) notFound();
 
   const company = await loadCompany(parsed.id);

@@ -1,19 +1,21 @@
+// /working-at-[companyPath] page — dispatched from the [...path] catch-all.
+//
+// Original location: apps/web/app/working-at-[companyPath]/page.tsx (deleted).
+// Renders the CMS-managed life-at-company surface (SRS §4.7.6).
+
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { prisma } from '@jobportal/db';
 import { Button } from '@jobportal/ui';
-import { CompanyHero } from '../../components/companies';
-import { JsonLd } from '../../lib/seo';
-import { breadcrumbList } from '../../lib/seo/json-ld';
-import { parseWorkingAtSlug } from '../../lib/url/slug';
+import { CompanyHero } from '../../../components/companies';
+import { JsonLd } from '../../../lib/seo';
+import { breadcrumbList } from '../../../lib/seo/json-ld';
+import { parseWorkingAtSlug } from '../../../lib/url/slug';
 
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
-// SRS §4.7.6 — working-at content is SSR with edge cache. Same revalidate
-// policy as the profile page; the content is CMS-managed (admin tool lands
-// with Task 16) so we don't bust the cache often.
 export const revalidate = 3600;
 
 interface PageProps {
@@ -77,9 +79,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function WorkingAtPage({ params }: PageProps) {
   const { companyPath } = await params;
-  // The route folder strips the literal `working-at-` prefix; reconstruct the
-  // full string before handing to the existing parser so the regex stays the
-  // single source of truth.
+  // The dispatcher strips the literal `working-at-` prefix; reconstruct
+  // before handing to the existing parser so the regex stays the single
+  // source of truth.
   const parsed = parseWorkingAtSlug(`working-at-${companyPath}`);
   if (!parsed) notFound();
 
