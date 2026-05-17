@@ -10,6 +10,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:demo": "tsx prisma/seed-demo.ts",
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
     "lint": "echo 'no lint configured yet'",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
+    "argon2": "^0.41.0",
     "dotenv": "^16.4.0",
     "prisma": "^7.4.0",
     "tsx": "^4.0.0",

@@ -368,6 +368,9 @@ importers:
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
+      argon2:
+        specifier: ^0.41.0
+        version: 0.41.1
       dotenv:
         specifier: ^16.4.0
         version: 16.6.1
