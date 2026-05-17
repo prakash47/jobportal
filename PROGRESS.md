@@ -12,12 +12,13 @@
 
 ## Snapshot — 2026-05-17
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Real homepage now ships; Phase 1 build-order remains 18/18.
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Demo-ready local state: homepage renders against synthetic data.
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
-- **Branch state**: `develop` is the integration tip (34 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #34 — `feature/homepage` (real homepage replacing the 7-line placeholder, plus a Button-asChild fix that unblocked it and a PR-#33 leftover cleanup).
-- **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. `/` returns 200 + JSON-LD + all expected section landmarks. Workspace typecheck 11/11 green.
-- **Test counts on develop**: 235 API + 163 web + 37 feature-flags + 18 observability = 453 unit tests (162 → 163 web from the +3 home/queries tests, minus the no-net-change from 2 chip-#6 sitemap tests being deliberately skipped).
+- **Branch state**: `develop` is the integration tip (35 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #35 — `feature/demo-seed` (synthetic demo data: 12 companies, 8 recruiters, 38 reviews, 50 jobs; +60 skills added to the catalogue; closes chip #10).
+- **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. Homepage TrustStrip shows **50 active jobs / 12 companies / 8 hiring teams**; Cities / Skills / Companies sections all render with content. Workspace typecheck 11/11 green.
+- **Seed catalogue**: 30 flags / 10 industries / 50 cities / **160 skills** (was 100; +60 from PR #35 to cover data engineering, ML, product, ops, sales, editorial, finance, healthcare, hospitality, manufacturing, CAD domains) / 4 plans / 3 articles. Plus the demo overlay: 12 companies / 8 recruiters / 38 reviews / 50 jobs.
+- **Test counts on develop**: 235 API + 163 web + 37 feature-flags + 18 observability = 453 unit tests.
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2 / Sentry / PostHog.
 
 ---
@@ -50,6 +51,30 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #35 — `feature/demo-seed` · 2026-05-17
+
+Closes follow-up chip #10. Makes the homepage and `/jobs` / `/companies` render against believable data so we can demo to stakeholders without scraping a competitor (would break Naukri/Indeed/LinkedIn ToS, risk IP-bans, and reproduce copyrighted content — CLAUDE.md §9). User explicitly chose the synthetic route over an Adzuna API integration when offered the choice.
+
+**What shipped**:
+- 12 fictional Indian companies across all 10 seeded industries — Nimbus Cloud Systems, Veridian Analytics, Sahaj Pay, Lumen Health, Pathshala Learning, Kirana Stack, Rasta Logistics, Margdarshi Media, Anvaya Realty, Tarang Hotels, Suchak Manufacturing, Sutra Labs. Each with industry, HQ city, employee count, founded year, description.
+- 8 recruiters (User + Recruiter rows), one per top-hiring company, work-email pre-verified. Shared dev password (`demo-recruiter-pass-2026!` by default, overridable via `DEMO_SEED_PASSWORD=…` env var). Emails use `+demo@jobportal.dev` so they can be hard-deleted later via `LIKE '%+demo@%'`.
+- 38 reviews distributed across all 12 companies (3-5 each), mix of positive/neutral/critical. `Company.averageRating` + `reviewCount` recomputed from canonical `CompanyReview` rows after insert so denorm + source-of-truth stay consistent.
+- 50 ACTIVE jobs across the 12 companies, weighted toward Bangalore / Hyderabad / Mumbai / Pune / Delhi. Titles span fresher (0-1y) → Staff Engineer (15y+). Salaries in realistic INR LPA bands. Mix of ONSITE / REMOTE / HYBRID, FULL_TIME / INTERN / CONTRACTOR. Posted dates spread across the last ~30 days so the `postedWithin` filter has a believable distribution.
+
+**Catalogue expansion**: extended `seed/skills.ts` from 100 → 160 skills covering data engineering (airflow, spark, dbt, snowflake), ML (machine-learning, mlops, computer-vision), CS fundamentals (algorithms, distributed-systems), product/design (product-management, ux-design, figma), and the cross-cutting soft / domain skills the demo's non-tech roles needed (operations, sales, editorial, journalism, journalism, risk-management, compliance, hospitality-management, culinary, manufacturing, six-sigma, CAD tooling, etc.). The pre-PR catalogue was tech-skewed; the expansion brings it closer to a real Indian job market.
+
+**Safety**: distinct entry point `pnpm db:seed:demo` (separate from `pnpm db:seed`). Refuses to run when `NODE_ENV === 'production'`. Also refuses when `DATABASE_URL` doesn't match a local-host pattern (localhost / 127.0.0.1 / ::1 / `*.local` / `*.internal`), with `ALLOW_DEMO_SEED_ON_REMOTE=true` escape hatch. Idempotent — companies / recruiters / jobs upsert by canonical slug; reviews delete-and-reinsert per company.
+
+**Bug found mid-PR and fixed in the same PR**: independent review caught that 16 of 50 jobs initially ended up with `skillIds = []` because the demo referenced 61 skill slugs that weren't in the seeded catalogue, plus two typos (`tailwind-css` vs `tailwindcss`, `android` vs `android-development`). Silently breaks the homepage's "popular skills" UNNEST ranking. Fixed by (a) extending the catalogue, (b) fixing the typos, (c) changing the demo's silent-drop behaviour to a loud `console.warn` so future drift is visible. After fix: 50/50 jobs have skillIds, avg 3.2 skills/job, 89 distinct skills used.
+
+**Also from review**: tightened the prod guard (DATABASE_URL allowlist), allowed `DEMO_SEED_PASSWORD` env override for the shared password, moved `argon2` to `devDependencies` in `@jobportal/db` (seed-only — runtime consumers of `@jobportal/db` for the Prisma client don't need the native module).
+
+**Not in this PR**:
+- Candidate users / fake applications. Recruiter dashboard's applicants list will still be empty.
+- Company `logoUrl` left null (real logos are copyrighted). FeaturedCompanies has a clean Building2 fallback.
+
+Closes chip #10 in this file.
 
 ### PR #34 — `feature/homepage` · 2026-05-17
 
@@ -268,7 +293,9 @@ These were spawned during reviews or QA but deferred. Pick one up when context n
 7. **Test BullMQ worker captureException on terminal failure** — `apps/api/src/email/transactional-email.queue.ts`. The Sentry-capture path on terminal DLQ failure was added in PR #32 but has no unit test. **Source: PR #32 reviewer.**
 8. **Promote `SiteHeader` / `SiteFooter` to a shared layout** — homepage-scoped today (`apps/web/components/home/SiteHeader.tsx` + `SiteFooter.tsx`). Moving them into a real shared layout that every route opts into touches every existing page's chrome and the `app/layout.tsx` structure. **Source: PR #34.**
 9. **Auth-aware `SiteHeader`** — the header currently shows "Sign in" for everyone, including authed users. Should read the JWT cookie (existing `readUserFromCookie()` helper) and flip "Sign in" → "Profile" when authed. Trivial change, but blocked on chip #8 — best done as part of the shared-layout move. **Source: PR #34.**
-10. **Expand dev seed with sample jobs / companies / recruiters** — current seed has 50 cities, 100 skills, 3 articles, but 0 jobs / 0 companies / 0 recruiters. Homepage tiles (PopularCities, PopularSkills, FeaturedCompanies) return `null` against this seed, so the homepage looks empty in local dev. ~5 companies + ~25 jobs distributed across cities/skills would let it render fully. **Source: PR #34 QA.**
+10. ~~**Expand dev seed with sample jobs / companies / recruiters**~~ — **CLOSED by PR #35**. Now ships 12 companies + 8 recruiters + 38 reviews + 50 jobs via `pnpm db:seed:demo`.
+11. **Seed fake candidate users + applications** — PR #35 added recruiters + jobs but no candidates and no applications, so the recruiter dashboard's applicants list is still empty. A small follow-up seed (~20 candidates, ~80 applications spread across jobs) would let stakeholders see the recruiter side of the funnel too. **Source: PR #35.**
+12. **Initials-monogram SVG generator for company logos** — `Company.logoUrl` is null in the demo seed (real logos are copyrighted). FeaturedCompanies renders a clean Building2 fallback, but a dev-only "first letter on a colored square" SVG generator would look more polished in the homepage tiles without infringing on anything. **Source: PR #35.**
 
 ---
 
