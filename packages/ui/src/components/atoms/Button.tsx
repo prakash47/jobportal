@@ -65,11 +65,21 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   // span-wrap / leading-icon / trailing-icon sandwich the regular path
   // uses isn't legal here. Loading/leadingIcon/trailingIcon are ignored
   // in this mode — callers that need them shouldn't use asChild.
+  //
+  // Disabled handling: native `disabled` is meaningless on `<a>` (Slot's
+  // most common target), so we forward as aria-disabled + data-disabled.
+  // aria-disabled is the correct semantic; data-disabled lets CSS target
+  // the disabled state (used by the disabled:opacity-50 / disabled:bg-…
+  // utilities in the variant classes via @custom-variant if needed by a
+  // future selector). Callers should still add tabIndex={-1} / href="#"
+  // on the inner Link when atCap-style gating matters for click handling.
   if (asChild) {
     return (
       <Slot
         ref={ref as React.Ref<HTMLElement>}
         aria-busy={loading || undefined}
+        aria-disabled={isDisabled || undefined}
+        data-disabled={isDisabled || undefined}
         className={buttonClass}
         {...props}
       >
