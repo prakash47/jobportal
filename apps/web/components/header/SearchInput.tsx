@@ -10,7 +10,17 @@ interface SuggestResponse {
   suggestions: string[];
 }
 
-export function SearchInput({ initialValue = '' }: { initialValue?: string }) {
+export type SearchInputSize = 'sm' | 'lg';
+
+export function SearchInput({
+  initialValue = '',
+  size = 'sm',
+  autoFocus = false,
+}: {
+  initialValue?: string;
+  size?: SearchInputSize;
+  autoFocus?: boolean;
+}) {
   const router = useRouter();
   const [value, setValue] = useState(initialValue);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -56,13 +66,22 @@ export function SearchInput({ initialValue = '' }: { initialValue?: string }) {
     navigateTo(value);
   }
 
+  const isLg = size === 'lg';
+
   return (
     <form onSubmit={onSubmit} className="relative w-full" role="search">
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-fg-subtle)]" aria-hidden="true" />
+        <Search
+          className={cn(
+            'pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-fg-subtle)]',
+            isLg ? 'size-5' : 'size-4',
+          )}
+          aria-hidden="true"
+        />
         <input
           type="search"
           value={value}
+          autoFocus={autoFocus}
           onChange={(e) => {
             setValue(e.target.value);
             setOpen(true);
@@ -74,9 +93,10 @@ export function SearchInput({ initialValue = '' }: { initialValue?: string }) {
           aria-autocomplete="list"
           aria-expanded={open && suggestions.length > 0}
           className={cn(
-            'h-9 w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] pl-9 pr-3 text-sm text-[var(--color-fg)]',
+            'w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] text-[var(--color-fg)]',
             'placeholder:text-[var(--color-fg-subtle)]',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]',
+            isLg ? 'h-14 pl-11 pr-3 text-base' : 'h-9 pl-9 pr-3 text-sm',
           )}
         />
       </div>
