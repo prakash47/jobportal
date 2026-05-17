@@ -593,9 +593,14 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
       }
     }
 
-    // Deterministic canonical slug so re-running upserts cleanly.
-    // Format: <company-slug>-<title-slug>-d<index>
-    const canonicalSlug = `${j.companySlug}-${slugify(j.title)}-d${String(idx + 1).padStart(3, '0')}`;
+    // Deterministic Job.id in a high range (100001+) so demo rows don't
+    // collide with auto-increment ids from real jobs (Postgres SERIAL
+    // sequence advances past these on first real insert). canonicalSlug
+    // ends with the actual id so the SRS §6.1 `<slug>-<id>` URL pattern
+    // resolves: parseJobSlug needs pure digits at the tail, not the
+    // earlier `-d001` shape which was breaking /job/<slug>.
+    const jobId = 100001 + idx;
+    const canonicalSlug = `${j.companySlug}-${slugify(j.title)}-${jobId}`;
 
     const postedAt = new Date(Date.now() - j.daysAgo * 24 * 60 * 60 * 1000);
     const expiresAt = new Date(postedAt.getTime() + 60 * 24 * 60 * 60 * 1000);
@@ -605,8 +610,9 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
     const salaryMaxPaise = j.salaryMaxLpa !== null ? j.salaryMaxLpa * LPA_TO_PAISE : null;
 
     await prisma.job.upsert({
-      where: { canonicalSlug },
+      where: { id: jobId },
       create: {
+        id: jobId,
         canonicalSlug,
         title: j.title,
         shortDescription: j.shortDescription,

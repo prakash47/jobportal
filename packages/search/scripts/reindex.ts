@@ -1,6 +1,8 @@
-import { config } from 'dotenv';
-import { resolve } from 'node:path';
-config({ path: resolve(__dirname, '../../../.env') });
+// MUST be first import — populates process.env.DATABASE_URL before the
+// indexer chain (../src/indexers/*) drags `@jobportal/db` into the module
+// graph. @jobportal/db's client.ts instantiates Prisma eagerly at
+// module-evaluation time. See _load-env.ts for the full story.
+import './_load-env';
 
 import { prisma } from '@jobportal/db';
 import { es, INDEX_ALIAS } from '../src/client';
