@@ -2,10 +2,10 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { prisma } from '@jobportal/db';
 import { searchJobs } from '@jobportal/search';
-import { SrpShell } from '../../../components/srp';
-import { cityBreadcrumb, loadSrpUserContext, parseSrpSearchParams } from '../../../lib/srp';
-import { buildMultiCitySlug, parseMultiCitySlug } from '../../../lib/url/slug';
-import type { ItemListEntry } from '../../../lib/seo/json-ld';
+import { SrpShell } from '../../components/srp';
+import { cityBreadcrumb, loadSrpUserContext, parseSrpSearchParams } from '../../lib/srp';
+import { buildMultiCitySlug, parseMultiCitySlug } from '../../lib/url/slug';
+import type { ItemListEntry } from '../../lib/seo/json-ld';
 
 const PAGE_SIZE = 20;
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';

@@ -12,12 +12,12 @@
 
 ## Snapshot — 2026-05-17
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13).
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Real homepage now ships; Phase 1 build-order remains 18/18.
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
-- **Branch state**: `develop` is the integration tip (33 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #33 — `chore/local-dev-runtime-fixes` (first end-to-end local boot of the stack; fixed 41 files of runtime + Next 16 compat + a `/auth/me` PII leak).
-- **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. Workspace typecheck 11/11 green. Auth register/login/me + /me/notifications + /me/applications + /me/saved-jobs + /me/alerts all return 200 end-to-end.
-- **Test counts on develop**: 235 API + 162 web + 37 feature-flags + 18 observability = 452 unit tests, all green.
+- **Branch state**: `develop` is the integration tip (34 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #34 — `feature/homepage` (real homepage replacing the 7-line placeholder, plus a Button-asChild fix that unblocked it and a PR-#33 leftover cleanup).
+- **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. `/` returns 200 + JSON-LD + all expected section landmarks. Workspace typecheck 11/11 green.
+- **Test counts on develop**: 235 API + 163 web + 37 feature-flags + 18 observability = 453 unit tests (162 → 163 web from the +3 home/queries tests, minus the no-net-change from 2 chip-#6 sitemap tests being deliberately skipped).
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2 / Sentry / PostHog.
 
 ---
@@ -50,6 +50,33 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #34 — `feature/homepage` · 2026-05-17
+
+First real homepage, replacing the 7-line placeholder that had sat at `apps/web/app/page.tsx` since PR #1. Linear/Stripe/Vercel minimalism per CLAUDE.md §2 — oversized restrained type, one accent, hairline section dividers, bordered tiles with hover-border-color (no shadows), no gradients/illustrations/emoji. Structure borrowed from Naukri/Indeed/Glassdoor (which sections matter on a job-portal home page), visual idiom firmly rejected.
+
+**Sections shipped** (top→bottom): `SiteHeader` → `Hero` (headline + live "X active roles today" pill + big `SearchInput` size="lg" + 2 muted CTAs) → `TrustStrip` (3 monochrome stats) → `PopularCitiesGrid` (top 12 by ACTIVE-job count) → `PopularSkillsGrid` (top 12) → `FeaturedCompanies` (top 8 by rating + openings count) → `RecentArticles` (3 PUBLISHED, reuses `ArticleCard`) → `RecruiterCta` → `SiteFooter`. All scoped to the homepage for now; promoting `SiteHeader`/`SiteFooter` to a shared layout is its own PR (touches every existing route's chrome).
+
+**Data**: single `Promise.all` SSR fetch in `apps/web/lib/home/queries.ts`, `revalidate = 1800`. Top-skills uses raw `UNNEST(skillIds)` because Prisma's `groupBy` on array cols groups by whole-array value — re-using the PR #31 lesson. The pure `hydratePopularItems` transform is extracted and unit-tested in isolation (3 tests). **SearchInput** gained a `size: 'sm' | 'lg'` prop for the hero's larger variant; default stays `sm` so every other consumer is unaffected.
+
+**Routing**: city/skill tiles link to `/jobs?city=<slug>` and `/jobs?skill=<slug>` (the working SRP with query filters) rather than the `/jobs-in-<slug>` / `/<slug>-jobs` SEO landings, because those 404 today per follow-up chip #5 (Next 16 Turbopack catch-all bug). Same Elasticsearch result set either way; swap to canonical landings in a one-line change per component when chip #5 lands.
+
+**SEO**: `WebSite` + `SearchAction` JSON-LD on the homepage (Google sitelinks search box). Self-canonical via the root layout's `<CanonicalLink />`. Metadata title + description tuned for India-first positioning.
+
+**Bug found mid-implementation**: the shared `Button` atom's `asChild` mode was rendering a 3-element `{leadingIcon}<span>{children}</span>{trailingIcon}` sandwich into `<Slot>`, which violates Radix Slot's `Children.only` assertion as soon as the asChild target has more than a bare text node inside. Crashed Hero / RecruiterCta / SiteHeader (all of which place an `ArrowRight` icon inside the `<Link>` child). **Shipped as its own commit** (de90d9f) — asChild now hands the caller-provided element straight to Slot; `leadingIcon`/`trailingIcon`/`loading` are documented as ignored in that mode. Verified via grep that no call site mixes `asChild` with the icon props today, so the change is strictly additive.
+
+**Empty-state behaviour**: Cities/Skills/FeaturedCompanies all return `null` when their data arrays are empty, so the homepage degrades gracefully against the current dev seed (0 jobs / 0 companies / 0 recruiters — only 50 cities / 100 skills / 3 articles seeded). Components light up the moment seed expansion or real production data arrives.
+
+**Also swept in this PR — three PR-#33 leftovers** that became visible while the homepage stress-tested the route graph:
+1. Three SRP routes moved up a directory in PR #33 (out of the `(seo-jobs)` group) but kept the old 3-segment relative imports. Reduced to 2 segments in `apps/web/app/[skill]-jobs/page.tsx`, `apps/web/app/jobs-in-[city]/page.tsx`, `apps/web/app/company/[skill]-overview-[city]/page.tsx`.
+2. `sitemap-shards.test.ts` asserted the pre-PR-#33 company-overview path; updated to `/company/<slug>-overview-<id>`.
+3. Two skill×city sitemap tests `.skip()`'d with a code comment pointing at chip #6 — restore when the catch-all refactor lands.
+
+**Three new follow-up chips opened**: (a) global `SiteHeader`/`SiteFooter` adoption across all routes, (b) auth-aware `SiteHeader` so authed users don't see "Sign in", (c) dev seed expansion (~5 companies + ~25 jobs) so the homepage's three "popular" sections render content in local development. None block release.
+
+**Test counts**: +3 unit tests (home/queries). 163 total apps/web tests + 2 deliberately skipped (chip #6). Workspace typecheck 11/11 green.
+
+**Post-review fix (cbe2351)**: independent review of the asChild rewrite caught a regression — the new branch destructured `disabled` from props and never re-emitted it, neutering `<Button asChild disabled={...}>` (the `/alerts` "New alert" button at quota cap was the visible case). Native `disabled` is meaningless on `<a>` (Slot's typical asChild target) so forwarding as-is wouldn't have worked anyway; the correct semantic is `aria-disabled` + `data-disabled`. Callers that need click suppression must still gate the inner `<Link>` href themselves.
 
 ### PR #33 — `chore/local-dev-runtime-fixes` · 2026-05-17
 
@@ -239,6 +266,9 @@ These were spawned during reviews or QA but deferred. Pick one up when context n
 5. **SEO landing routes — sitemap.xml index 404, `/jobs-in-bangalore` and `/python-jobs` return 404** — Next 16 / Turbopack appears to choke on certain combinations of multi-token segments at the same directory level. Discovered during PR #33 QA. Workarounds applied: archived `[skill]-jobs-in-[city]`, moved remaining SEO routes to app root. Need a clean refactor — either consolidate all SEO landings under a single `[...slug]` catch-all that parses internally, or move them under a `/jobs/` prefix. Sitemap helper has the skill×city block commented out pending the refactor. **Source: PR #33 QA.**
 6. **Restore `[skill]-jobs-in-[city]` SEO landing** — currently archived to `_archived_routes/`. Re-introduce via the catch-all refactor in #5, or via a sub-path like `/jobs/<skill>-in-<city>/`. SRS §6 mentions this URL pattern. **Source: PR #33 QA.**
 7. **Test BullMQ worker captureException on terminal failure** — `apps/api/src/email/transactional-email.queue.ts`. The Sentry-capture path on terminal DLQ failure was added in PR #32 but has no unit test. **Source: PR #32 reviewer.**
+8. **Promote `SiteHeader` / `SiteFooter` to a shared layout** — homepage-scoped today (`apps/web/components/home/SiteHeader.tsx` + `SiteFooter.tsx`). Moving them into a real shared layout that every route opts into touches every existing page's chrome and the `app/layout.tsx` structure. **Source: PR #34.**
+9. **Auth-aware `SiteHeader`** — the header currently shows "Sign in" for everyone, including authed users. Should read the JWT cookie (existing `readUserFromCookie()` helper) and flip "Sign in" → "Profile" when authed. Trivial change, but blocked on chip #8 — best done as part of the shared-layout move. **Source: PR #34.**
+10. **Expand dev seed with sample jobs / companies / recruiters** — current seed has 50 cities, 100 skills, 3 articles, but 0 jobs / 0 companies / 0 recruiters. Homepage tiles (PopularCities, PopularSkills, FeaturedCompanies) return `null` against this seed, so the homepage looks empty in local dev. ~5 companies + ~25 jobs distributed across cities/skills would let it render fully. **Source: PR #34 QA.**
 
 ---
 

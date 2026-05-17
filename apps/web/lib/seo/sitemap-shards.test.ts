@@ -70,7 +70,11 @@ describe('getCompanyUrls', () => {
     vi.resetAllMocks();
   });
 
-  it('emits both /<slug>-overview-<id> and /working-at-<slug>-<id> for each company', async () => {
+  it('emits both /company/<slug>-overview-<id> and /working-at-<slug>-<id> for each company', async () => {
+    // PR #33 moved company overview from /<slug>-overview-<id> to
+    // /company/<slug>-overview-<id> (Next 16 per-dir slug-uniqueness rule).
+    // The helper at sitemap-shards.ts:49 emits the new path; the test was
+    // missed in the move. Working-at page kept its root-level path.
     mocked.company.findMany.mockResolvedValue([
       { id: 12, slug: 'acme-corp', updatedAt: new Date('2026-04-01') },
       { id: 33, slug: 'foo-tech', updatedAt: new Date('2026-04-02') },
@@ -78,9 +82,9 @@ describe('getCompanyUrls', () => {
     const urls = await getCompanyUrls();
     expect(urls).toHaveLength(4);
     const paths = urls.map((u) => new URL(u.url).pathname);
-    expect(paths).toContain('/acme-corp-overview-12');
+    expect(paths).toContain('/company/acme-corp-overview-12');
     expect(paths).toContain('/working-at-acme-corp-12');
-    expect(paths).toContain('/foo-tech-overview-33');
+    expect(paths).toContain('/company/foo-tech-overview-33');
     expect(paths).toContain('/working-at-foo-tech-33');
   });
 
@@ -167,7 +171,11 @@ describe('getLandingUrls', () => {
     expect(paths).not.toContain('/cobol-jobs');
   });
 
-  it('skill×city combos: only emits pairs with ≥1 ACTIVE job (from $queryRaw)', async () => {
+  // SKIPPED — PR #33 archived the /[skill]-jobs-in-[city] route (Next 16
+  // Turbopack quirk) and commented out the combo block in sitemap-shards.ts.
+  // These tests still assert the old emit-combos behaviour. Restore when
+  // PROGRESS.md follow-up chip #6 lands (route catch-all refactor).
+  it.skip('skill×city combos: only emits pairs with ≥1 ACTIVE job (from $queryRaw)', async () => {
     mocked.city.findMany.mockResolvedValue([
       { id: 1, slug: 'bangalore' },
       { id: 2, slug: 'pune' },
@@ -194,7 +202,8 @@ describe('getLandingUrls', () => {
     expect(paths).not.toContain('/react-jobs-in-bangalore');
   });
 
-  it('orphan cityId/skillId in $queryRaw result is silently dropped (defense)', async () => {
+  // SKIPPED — see comment on the preceding combo test. Restore when chip #6 lands.
+  it.skip('orphan cityId/skillId in $queryRaw result is silently dropped (defense)', async () => {
     mocked.city.findMany.mockResolvedValue([{ id: 1, slug: 'bangalore' }]);
     mocked.skill.findMany.mockResolvedValue([{ id: 10, slug: 'python' }]);
     mocked.$queryRaw

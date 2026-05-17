@@ -6,10 +6,10 @@ import {
   CompanyHero,
   CompanyOpenings,
   CompanyReviews,
-} from '../../components/companies';
-import { JsonLd } from '../../lib/seo';
-import { breadcrumbList, organization } from '../../lib/seo/json-ld';
-import { parseCompanySlug } from '../../lib/url/slug';
+} from '../../../components/companies';
+import { JsonLd } from '../../../lib/seo';
+import { breadcrumbList, organization } from '../../../lib/seo/json-ld';
+import { parseCompanySlug } from '../../../lib/url/slug';
 
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
