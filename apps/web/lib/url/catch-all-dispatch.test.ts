@@ -71,4 +71,54 @@ describe('[...path] catch-all dispatch', () => {
     expect(dispatch(['totally-unrelated-segment'])).toBeNull();
     expect(dispatch(['foo'])).toBeNull();
   });
+
+  // chip #13 — skill×city composed landings
+  it('matches /<skill>-jobs-in-<city>', () => {
+    expect(dispatch(['python-jobs-in-bangalore'])).toEqual({
+      kind: 'skillCity',
+      skill: 'python',
+      city: 'bangalore',
+    });
+  });
+
+  it('multi-word skill in skill×city: /node-js-jobs-in-pune', () => {
+    expect(dispatch(['node-js-jobs-in-pune'])).toEqual({
+      kind: 'skillCity',
+      skill: 'node-js',
+      city: 'pune',
+    });
+  });
+
+  it('multi-city in skill×city: /react-jobs-in-bangalore-and-mumbai', () => {
+    expect(dispatch(['react-jobs-in-bangalore-and-mumbai'])).toEqual({
+      kind: 'skillCity',
+      skill: 'react',
+      city: 'bangalore-and-mumbai',
+    });
+  });
+
+  it('skill×city does NOT match the plain /-jobs suffix', () => {
+    // Sanity: when the URL has -jobs-in- in the middle, the skill×city
+    // arm wins; we don't fall through to the plain skill arm.
+    const result = dispatch(['python-jobs-in-bangalore']);
+    expect(result?.kind).toBe('skillCity');
+  });
+
+  it('skill×city requires non-empty skill AND non-empty city', () => {
+    expect(dispatch(['-jobs-in-bangalore'])).toBeNull();
+    expect(dispatch(['python-jobs-in-'])).toBeNull();
+    expect(dispatch(['jobs-in-bangalore'])).not.toEqual(
+      expect.objectContaining({ kind: 'skillCity' }),
+    );
+    // (The bare jobs-in- prefix is correctly handled by the city arm.)
+  });
+
+  it('working-at- still wins over a -jobs-in- middle marker', () => {
+    // Defensive ordering test: even a URL like working-at-foo-jobs-in-bar
+    // routes to workingAt (which will then 404 internally if parse fails).
+    expect(dispatch(['working-at-foo-jobs-in-bar'])).toEqual({
+      kind: 'workingAt',
+      segment: 'foo-jobs-in-bar',
+    });
+  });
 });

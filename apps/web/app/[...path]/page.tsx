@@ -1,7 +1,8 @@
-// Catch-all dispatcher for the three root-level SEO landing patterns:
-//   /jobs-in-<city[s]>      → _handlers/city-jobs.tsx
-//   /<skill>-jobs           → _handlers/skill-jobs.tsx
-//   /working-at-<slug>-<id> → _handlers/working-at.tsx
+// Catch-all dispatcher for the four root-level SEO landing patterns:
+//   /jobs-in-<city[s]>              → _handlers/city-jobs.tsx
+//   /<skill>-jobs                   → _handlers/skill-jobs.tsx
+//   /<skill>-jobs-in-<city[s]>      → _handlers/skill-city.tsx  (chip #13)
+//   /working-at-<slug>-<id>         → _handlers/working-at.tsx
 //
 // Why this exists: Next 16 enforces a per-directory dynamic-segment
 // uniqueness rule. Having three dynamic root segments ([skill]-jobs,
@@ -24,6 +25,9 @@ import SkillJobsPage, {
 import CityJobsPage, {
   generateMetadata as cityJobsMetadata,
 } from './_handlers/city-jobs';
+import SkillCityJobsPage, {
+  generateMetadata as skillCityJobsMetadata,
+} from './_handlers/skill-city';
 import WorkingAtPage, {
   generateMetadata as workingAtMetadata,
 } from './_handlers/working-at';
@@ -58,6 +62,12 @@ export async function generateMetadata(props: MetadataProps): Promise<Metadata> 
       searchParams: Promise.resolve({}),
     });
   }
+  if (m.kind === 'skillCity') {
+    return skillCityJobsMetadata({
+      params: Promise.resolve({ skill: m.skill, city: m.city }),
+      searchParams: Promise.resolve({}),
+    });
+  }
   return workingAtMetadata({
     params: Promise.resolve({ companyPath: m.segment }),
   });
@@ -77,6 +87,12 @@ export default async function CatchAllPage(props: PageProps) {
   if (m.kind === 'city') {
     return CityJobsPage({
       params: Promise.resolve({ city: m.segment }),
+      searchParams: props.searchParams,
+    });
+  }
+  if (m.kind === 'skillCity') {
+    return SkillCityJobsPage({
+      params: Promise.resolve({ skill: m.skill, city: m.city }),
       searchParams: props.searchParams,
     });
   }

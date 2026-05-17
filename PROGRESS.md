@@ -12,10 +12,10 @@
 
 ## Snapshot — 2026-05-17
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Local stack is demo-ready: 25/25 public routes serve cleanly (no 404 / 500), homepage + SRP + SEO landings + detail pages all populated from synthetic data.
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Local stack is fully demo-ready: every documented public route serves cleanly, all four SEO landing patterns (incl. skill×city) work.
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
-- **Branch state**: `develop` is the integration tip (37 PRs after this docs-update lands); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #36 — `feature/demo-readiness` (full QA sweep + fixes: sitemap split into route handlers, three SEO-landing folders consolidated under a `[...path]` catch-all, company route renamed to `[handle]`, Button asChild hydration fix, demo seed → ES indexing flow, Job_id_seq advance). Closes chip #5; partially closes chip #6.
+- **Branch state**: `develop` is the integration tip (38 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #38 — `feature/skill-city-landings` (closes chip #13 — restored `/<skill>-jobs-in-<city>` SEO landings via the 4th catch-all dispatch arm + new `_handlers/skill-city.tsx` + re-enabled sitemap combo block + un-skipped the 2 deferred tests).
 - **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. **All 25 probed public routes return expected status codes** (200/307/404). ES indices populated (50 jobs, 12 companies, 3 articles in `jobs-v4`, `companies-v4`, `articles-v4`).
 - **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (now with stable Job IDs 100001-100050 and Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs.
 - **Test counts on develop**: 235 API + **173 web** (was 163; +10 catch-all dispatch tests) + 37 feature-flags + 18 observability = 463 unit tests.
@@ -51,6 +51,21 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #38 — `feature/skill-city-landings` · 2026-05-17
+
+Closes **chip #13** — restored the `/<skill>-jobs-in-<city>` SEO landings that PR #33 originally archived. Unblocked by PR #36's `[...path]` catch-all (the route was archived because Next 16's per-directory dynamic-segment uniqueness wouldn't resolve `[skill]-jobs-in-[city]` as a folder name; the catch-all absorbs the multi-token shape).
+
+**Changes**:
+- New 4th `dispatch` branch in `apps/web/lib/url/catch-all-dispatch.ts` matching `^([a-z0-9-]+)-jobs-in-([a-z0-9-]+)$` (with proper start/end anchors so `-jobs-in-` in the middle is unambiguous). 6 new unit tests covering the multi-word skill, multi-city, empty-skill / empty-city, and prefix-vs-marker matching order.
+- New `apps/web/app/[...path]/_handlers/skill-city.tsx` — combined skill + city handler. Resolves skill via `prisma.skill.findUnique` + cities via the same multi-city `-and-` parser the city handler uses, then calls `searchJobs` with both `skillSlugs` and `citySlugs`. Breadcrumb via the pre-existing `skillCityBreadcrumb` helper. Canonical-sort guard for multi-city segments (404s if URL slugs aren't alphabetically sorted).
+- Wired the new handler into `apps/web/app/[...path]/page.tsx` (both default export and `generateMetadata`).
+- Restored the sitemap combo block in `apps/web/lib/seo/sitemap-shards.ts:144` — one extra `$queryRaw` for distinct `(primaryCityId, skillId)` pairs across ACTIVE jobs, then emits `/<skill>-jobs-in-<city>` for each valid pair. Re-checks `activeSkillIds` to drop orphan skill ids (defense; same approach as the existing `/<skill>-jobs` block).
+- Un-skipped the 2 `.skip()`'d combo tests at `sitemap-shards.test.ts:178,206`.
+
+**Verified live**: `/python-jobs-in-bangalore` 200, `/react-jobs-in-mumbai` 200, `/typescript-jobs-in-bangalore-and-pune` 200 (multi-city), `/nodejs-jobs-in-pune` 200 (matches seeded skill slug), `/figma-jobs-in-noida` 200, `/python-jobs-in-totally-bogus-city` 404 (city not in catalogue → notFound from handler — correct). `/sitemap/3.xml` (landings shard) now emits ~85 skill×city URLs for actual seeded combos.
+
+**Test counts**: 16 files, **181 passed (0 skipped)** — was 173 passed + 2 skipped before. +8 new dispatch tests, +0 net change on sitemap tests (the 2 un-skipped tests replaced their `.skip()` status).
 
 ### PR #36 — `feature/demo-readiness` · 2026-05-17
 
@@ -324,7 +339,7 @@ These were spawned during reviews or QA but deferred. Pick one up when context n
 10. ~~**Expand dev seed with sample jobs / companies / recruiters**~~ — **CLOSED by PR #35**. Now ships 12 companies + 8 recruiters + 38 reviews + 50 jobs via `pnpm db:seed:demo`.
 11. **Seed fake candidate users + applications** — PR #35 added recruiters + jobs but no candidates and no applications, so the recruiter dashboard's applicants list is still empty. A small follow-up seed (~20 candidates, ~80 applications spread across jobs) would let stakeholders see the recruiter side of the funnel too. **Source: PR #35.**
 12. **Initials-monogram SVG generator for company logos** — `Company.logoUrl` is null in the demo seed (real logos are copyrighted). FeaturedCompanies renders a clean Building2 fallback, but a dev-only "first letter on a colored square" SVG generator would look more polished in the homepage tiles without infringing on anything. **Source: PR #35.**
-13. **Restore `/[skill]-jobs-in-[city]` skill×city SEO landings** — chip #5 unblocked this by introducing the `app/[...path]/page.tsx` catch-all dispatcher. To complete: (a) add a 4th branch to `dispatch()` in `apps/web/lib/url/catch-all-dispatch.ts` that matches `^(?<skill>...)-jobs-in-(?<city>...)$`, (b) create `_handlers/skill-city.tsx` taking both, (c) restore the commented-out combo block in `apps/web/lib/seo/sitemap-shards.ts:144`, (d) un-skip the 2 `.skip()`'d tests at `sitemap-shards.test.ts:178,206`. Old chip #6 ("Restore `[skill]-jobs-in-[city]`") subsumed under this. **Source: PR #36.**
+13. ~~**Restore `/[skill]-jobs-in-[city]` skill×city SEO landings**~~ — **CLOSED by PR #38**. 4th dispatch arm + handler + sitemap combo restored, 2 deferred tests un-skipped.
 
 ---
 
