@@ -101,11 +101,9 @@ export async function GET(
   const id = Number(raw);
   const entries: UrlEntry[] = Number.isFinite(id) ? await urlsFor(id) : [];
 
+  // Cache-Control owned by next.config.ts (/sitemap/:path* source rule).
   return new Response(renderUrlset(entries), {
     status: 200,
-    headers: {
-      'content-type': 'application/xml; charset=utf-8',
-      'cache-control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=21600',
-    },
+    headers: { 'content-type': 'application/xml; charset=utf-8' },
   });
 }

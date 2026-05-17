@@ -27,31 +27,7 @@ import CityJobsPage, {
 import WorkingAtPage, {
   generateMetadata as workingAtMetadata,
 } from './_handlers/working-at';
-
-type Dispatch =
-  | { kind: 'city'; segment: string }
-  | { kind: 'skill'; segment: string }
-  | { kind: 'workingAt'; segment: string };
-
-// Pattern-match the single-segment path against the three landings.
-// Order matters: `working-at-` and `jobs-in-` are prefix-matched first;
-// the `-jobs` suffix is checked last because a skill slug must not be
-// empty (length > '-jobs'.length).
-function dispatch(path: string[] | undefined): Dispatch | null {
-  if (!path || path.length !== 1) return null;
-  const segment = path[0]!;
-
-  if (segment.startsWith('working-at-') && segment.length > 'working-at-'.length) {
-    return { kind: 'workingAt', segment: segment.slice('working-at-'.length) };
-  }
-  if (segment.startsWith('jobs-in-') && segment.length > 'jobs-in-'.length) {
-    return { kind: 'city', segment: segment.slice('jobs-in-'.length) };
-  }
-  if (segment.endsWith('-jobs') && segment.length > '-jobs'.length) {
-    return { kind: 'skill', segment: segment.slice(0, segment.length - '-jobs'.length) };
-  }
-  return null;
-}
+import { dispatch } from '../../lib/url/catch-all-dispatch';
 
 interface RawSearchParams {
   [k: string]: string | string[] | undefined;

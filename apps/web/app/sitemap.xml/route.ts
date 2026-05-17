@@ -46,11 +46,12 @@ ${entries}
 </sitemapindex>
 `;
 
+  // Cache-Control deliberately NOT set here — next.config.ts owns the
+  // edge cache policy for /sitemap.xml (24h s-maxage + 48h SWR). Setting
+  // it in both places creates a quiet conflict and the source-rule wins
+  // at the edge anyway.
   return new Response(body, {
     status: 200,
-    headers: {
-      'content-type': 'application/xml; charset=utf-8',
-      'cache-control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=21600',
-    },
+    headers: { 'content-type': 'application/xml; charset=utf-8' },
   });
 }

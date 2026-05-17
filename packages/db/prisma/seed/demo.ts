@@ -655,7 +655,20 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
     });
   }
 
+  // Advance the SERIAL sequence past our explicit demo IDs. Postgres
+  // does NOT auto-advance Job_id_seq when an explicit id is inserted via
+  // create({ data: { id: 100001 } }) — so the next real `prisma.job.create()`
+  // without an id would allocate id=1 and collide with the very first demo
+  // row, repeating up to id=100050. setval ensures the next allocation is
+  // 100051. `true` = the next nextval() returns last_value+1; safe to call
+  // multiple times (idempotent).
+  const maxDemoJobId = 100000 + JOBS.length;
+  await prisma.$executeRawUnsafe(
+    `SELECT setval(pg_get_serial_sequence('"Job"', 'id'), $1, true)`,
+    maxDemoJobId,
+  );
+
   console.log(
-    `[seed:demo] complete — ${COMPANIES.length} companies, ${RECRUITERS.length} recruiters, ${REVIEWS.length} reviews, ${JOBS.length} jobs.`,
+    `[seed:demo] complete — ${COMPANIES.length} companies, ${RECRUITERS.length} recruiters, ${REVIEWS.length} reviews, ${JOBS.length} jobs. Job_id_seq advanced to ${maxDemoJobId}.`,
   );
 }
