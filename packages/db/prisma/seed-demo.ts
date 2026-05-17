@@ -21,9 +21,27 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main(): Promise<void> {
+  // Defense in depth — the demo seed creates 8 recruiter logins with a
+  // shared known password, so we want multiple guards before it runs.
+  //
+  // Guard 1: NODE_ENV must not be 'production'.
+  // Guard 2: DATABASE_URL must point at localhost / 127.0.0.1 / *.local /
+  //          *.internal — i.e. clearly a dev / preview database. Override
+  //          this with ALLOW_DEMO_SEED_ON_REMOTE=true (escape hatch for
+  //          when a dev DB lives on a remote dev server).
   if (process.env.NODE_ENV === 'production') {
     throw new Error(
-      'Refusing to run demo seed in production. Set NODE_ENV != production to override.',
+      'Refusing to run demo seed: NODE_ENV is "production".',
+    );
+  }
+  const dbUrl = process.env.DATABASE_URL ?? '';
+  const looksLocal = /(?:localhost|127\.0\.0\.1|::1|\.local(?::|\/|$)|\.internal(?::|\/|$))/i.test(
+    dbUrl,
+  );
+  if (!looksLocal && process.env.ALLOW_DEMO_SEED_ON_REMOTE !== 'true') {
+    throw new Error(
+      `Refusing to run demo seed: DATABASE_URL doesn't look local ("${dbUrl.replace(/:[^@]*@/, ':***@')}"). ` +
+        'Set ALLOW_DEMO_SEED_ON_REMOTE=true to override.',
     );
   }
   console.log('[seed:demo] starting...');

@@ -361,9 +361,6 @@ importers:
       '@prisma/client':
         specifier: ^7.4.0
         version: 7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@5.9.3))(typescript@5.9.3)
-      argon2:
-        specifier: ^0.41.0
-        version: 0.41.1
       pg:
         specifier: ^8.20.0
         version: 8.20.0
@@ -371,6 +368,9 @@ importers:
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
+      argon2:
+        specifier: ^0.41.0
+        version: 0.41.1
       dotenv:
         specifier: ^16.4.0
         version: 16.6.1

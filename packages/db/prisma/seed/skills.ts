@@ -128,6 +128,98 @@ const skills: { slug: string; name: string; category: string }[] = [
   { slug: 'team-management', name: 'Team Management', category: 'soft' },
   { slug: 'agile', name: 'Agile', category: 'soft' },
   { slug: 'scrum', name: 'Scrum', category: 'soft' },
+
+  // Data engineering / analytics
+  { slug: 'airflow', name: 'Airflow', category: 'tool' },
+  { slug: 'spark', name: 'Apache Spark', category: 'tool' },
+  { slug: 'dbt', name: 'dbt', category: 'tool' },
+  { slug: 'snowflake', name: 'Snowflake', category: 'database' },
+  { slug: 'data-modeling', name: 'Data Modeling', category: 'architecture' },
+  { slug: 'data-analysis', name: 'Data Analysis', category: 'tool' },
+
+  // CS fundamentals
+  { slug: 'algorithms', name: 'Algorithms', category: 'architecture' },
+  { slug: 'data-structures', name: 'Data Structures', category: 'architecture' },
+  { slug: 'graph-algorithms', name: 'Graph Algorithms', category: 'architecture' },
+  { slug: 'distributed-systems', name: 'Distributed Systems', category: 'architecture' },
+  { slug: 'cloud-architecture', name: 'Cloud Architecture', category: 'architecture' },
+  { slug: 'solution-architecture', name: 'Solution Architecture', category: 'architecture' },
+
+  // ML extras
+  { slug: 'machine-learning', name: 'Machine Learning', category: 'ml' },
+  { slug: 'mlops', name: 'MLOps', category: 'ml' },
+  { slug: 'computer-vision', name: 'Computer Vision', category: 'ml' },
+
+  // Observability
+  { slug: 'prometheus', name: 'Prometheus', category: 'tool' },
+  { slug: 'datadog', name: 'Datadog', category: 'tool' },
+
+  // Real-time / networking
+  { slug: 'webrtc', name: 'WebRTC', category: 'architecture' },
+
+  // QA (generic terms — selenium, jest, vitest already above)
+  { slug: 'quality-assurance', name: 'Quality Assurance', category: 'tool' },
+  { slug: 'test-automation', name: 'Test Automation', category: 'tool' },
+
+  // Product / design
+  { slug: 'product-management', name: 'Product Management', category: 'soft' },
+  { slug: 'ux-design', name: 'UX Design', category: 'soft' },
+  { slug: 'figma', name: 'Figma', category: 'tool' },
+  { slug: 'user-research', name: 'User Research', category: 'soft' },
+
+  // Operations / project / content
+  { slug: 'operations', name: 'Operations', category: 'soft' },
+  { slug: 'business-development', name: 'Business Development', category: 'soft' },
+  { slug: 'project-management', name: 'Project Management', category: 'soft' },
+  { slug: 'content-management', name: 'Content Management', category: 'soft' },
+  { slug: 'analytics', name: 'Analytics', category: 'tool' },
+  { slug: 'presales', name: 'Presales', category: 'soft' },
+
+  // Sales
+  { slug: 'sales', name: 'Sales', category: 'soft' },
+  { slug: 'b2b-sales', name: 'B2B Sales', category: 'soft' },
+  { slug: 'customer-service', name: 'Customer Service', category: 'soft' },
+
+  // Media / editorial / video
+  { slug: 'editorial', name: 'Editorial', category: 'soft' },
+  { slug: 'journalism', name: 'Journalism', category: 'soft' },
+  { slug: 'video-production', name: 'Video Production', category: 'tool' },
+  { slug: 'editing', name: 'Editing', category: 'tool' },
+
+  // Finance / risk / compliance
+  { slug: 'risk-management', name: 'Risk Management', category: 'soft' },
+  { slug: 'fraud-detection', name: 'Fraud Detection', category: 'tool' },
+  { slug: 'compliance', name: 'Compliance', category: 'soft' },
+
+  // Healthcare ops
+  { slug: 'clinical-operations', name: 'Clinical Operations', category: 'soft' },
+
+  // Hospitality
+  { slug: 'hospitality-management', name: 'Hospitality Management', category: 'soft' },
+  { slug: 'culinary', name: 'Culinary', category: 'soft' },
+  { slug: 'kitchen-management', name: 'Kitchen Management', category: 'soft' },
+  { slug: 'p-and-l', name: 'P&L Management', category: 'soft' },
+
+  // Real estate / construction / logistics
+  { slug: 'real-estate', name: 'Real Estate', category: 'soft' },
+  { slug: 'construction-management', name: 'Construction Management', category: 'soft' },
+  { slug: 'logistics', name: 'Logistics', category: 'soft' },
+
+  // CAD / engineering design
+  { slug: 'cad', name: 'CAD', category: 'tool' },
+  { slug: 'catia', name: 'CATIA', category: 'tool' },
+  { slug: 'autocad', name: 'AutoCAD', category: 'tool' },
+  { slug: 'revit', name: 'Revit', category: 'tool' },
+  { slug: 'architecture', name: 'Architecture', category: 'soft' },
+
+  // Manufacturing / quality
+  { slug: 'manufacturing', name: 'Manufacturing', category: 'soft' },
+  { slug: 'quality-engineering', name: 'Quality Engineering', category: 'soft' },
+  { slug: 'six-sigma', name: 'Six Sigma', category: 'soft' },
+  { slug: 'iatf-16949', name: 'IATF 16949', category: 'soft' },
+  { slug: 'mechanical-engineering', name: 'Mechanical Engineering', category: 'soft' },
+  { slug: 'industrial-engineering', name: 'Industrial Engineering', category: 'soft' },
+  { slug: 'process-improvement', name: 'Process Improvement', category: 'soft' },
 ];
 
 export async function seedSkills(prisma: PrismaClient): Promise<void> {

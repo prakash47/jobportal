@@ -230,7 +230,12 @@ const RECRUITERS: RecruiterTemplate[] = [
 // All demo recruiters share one password so they're easy to log into for
 // demo purposes. Production seed wouldn't do this. The hash is computed
 // once per run.
-const DEMO_RECRUITER_PASSWORD = 'demo-recruiter-pass-2026!';
+//
+// Override via `DEMO_SEED_PASSWORD=…` env var when running the seed; the
+// hardcoded value is a dev-only fallback. The hash itself never changes
+// across re-runs (idempotent path doesn't touch passwordHash on update).
+const DEMO_RECRUITER_PASSWORD =
+  process.env.DEMO_SEED_PASSWORD ?? 'demo-recruiter-pass-2026!';
 
 // ============================================================
 // Reviews — 3-5 per company, mix of positive/neutral/critical
@@ -335,7 +340,7 @@ const JOBS: JobTemplate[] = [
   // === Nimbus Cloud Systems (7 jobs, IT/Software, Bangalore-heavy) ===
   { companySlug: 'nimbus-cloud-systems', title: 'Senior Backend Engineer (Go)', shortDescription: 'Build the core API platform that powers our managed Postgres and Kafka services.', description: 'Join the platform team that builds and operates Nimbus\'s managed Postgres and Kafka. You\'ll own one of the control-plane services end-to-end — design, code, on-call. We use Go, gRPC, Postgres, and Kubernetes. Expecting 5+ years of backend experience and at least 2 years writing production Go.', citySlug: 'bangalore', skillSlugs: ['go', 'postgresql', 'kubernetes', 'grpc', 'docker'], employmentType: 'FULL_TIME', workMode: 'HYBRID', experienceMinYears: 5, experienceMaxYears: 9, salaryMinLpa: 38, salaryMaxLpa: 62, daysAgo: 2 },
   { companySlug: 'nimbus-cloud-systems', title: 'Staff Engineer — Distributed Systems', shortDescription: 'Lead the architecture of our multi-region replication and consistency layer.', description: 'You\'ll be the technical owner of how data flows across regions in our managed-database product. Define replication protocols, drive consistency trade-offs, mentor a team of 6 senior engineers. We\'re looking for someone with deep distributed-systems experience — Raft / Paxos / CRDT internals.', citySlug: 'bangalore', skillSlugs: ['go', 'distributed-systems', 'postgresql'], employmentType: 'FULL_TIME', workMode: 'HYBRID', experienceMinYears: 9, experienceMaxYears: 15, salaryMinLpa: 60, salaryMaxLpa: 95, daysAgo: 8 },
-  { companySlug: 'nimbus-cloud-systems', title: 'Senior Frontend Engineer — Console', shortDescription: 'Build the operator experience for managing fleets of databases.', description: 'The Nimbus console is what 40,000+ developers see every day. Build polished, fast, accessible UI on React + Next.js. You\'ll work alongside designers and product on the customer-facing dashboard.', citySlug: 'bangalore', skillSlugs: ['typescript', 'react', 'nextjs', 'tailwind-css'], employmentType: 'FULL_TIME', workMode: 'HYBRID', experienceMinYears: 4, experienceMaxYears: 8, salaryMinLpa: 32, salaryMaxLpa: 52, daysAgo: 5 },
+  { companySlug: 'nimbus-cloud-systems', title: 'Senior Frontend Engineer — Console', shortDescription: 'Build the operator experience for managing fleets of databases.', description: 'The Nimbus console is what 40,000+ developers see every day. Build polished, fast, accessible UI on React + Next.js. You\'ll work alongside designers and product on the customer-facing dashboard.', citySlug: 'bangalore', skillSlugs: ['typescript', 'react', 'nextjs', 'tailwindcss'], employmentType: 'FULL_TIME', workMode: 'HYBRID', experienceMinYears: 4, experienceMaxYears: 8, salaryMinLpa: 32, salaryMaxLpa: 52, daysAgo: 5 },
   { companySlug: 'nimbus-cloud-systems', title: 'SRE — Storage', shortDescription: 'Keep the storage layer running. 100s of TB across 8 regions.', description: 'Our SRE team owns availability and latency SLOs across the entire storage layer. You\'ll be on a rotating on-call (1 week in 6), participate in incident reviews, and drive long-term reliability projects. Linux, Postgres internals, observability tooling.', citySlug: 'bangalore', skillSlugs: ['linux', 'postgresql', 'prometheus', 'kubernetes'], employmentType: 'FULL_TIME', workMode: 'ONSITE', experienceMinYears: 4, experienceMaxYears: 8, salaryMinLpa: 35, salaryMaxLpa: 55, daysAgo: 11 },
   { companySlug: 'nimbus-cloud-systems', title: 'Engineering Manager — Data Plane', shortDescription: 'Lead a team of 8 engineers building the data-plane proxy.', description: 'You\'ll own delivery for the data-plane team — 8 engineers, 2 SREs, working on the proxy that sits in front of every Nimbus database. Looking for someone who has been a senior IC and has 2+ years of EM experience.', citySlug: 'hyderabad', skillSlugs: ['leadership', 'distributed-systems', 'go'], employmentType: 'FULL_TIME', workMode: 'HYBRID', experienceMinYears: 8, experienceMaxYears: 14, salaryMinLpa: 55, salaryMaxLpa: 85, daysAgo: 3 },
   { companySlug: 'nimbus-cloud-systems', title: 'Software Engineer (Fresh Grad)', shortDescription: 'Entry-level role on the platform team.', description: 'Open to 2024-26 graduates from CS / IT / ECE. Strong fundamentals in DSA, one or more of Go/Python/Java to a working level. You\'ll be paired with a senior engineer for the first 6 months.', citySlug: 'bangalore', skillSlugs: ['data-structures', 'algorithms', 'go'], employmentType: 'FULL_TIME', workMode: 'ONSITE', experienceMinYears: 0, experienceMaxYears: 1, salaryMinLpa: 14, salaryMaxLpa: 22, daysAgo: 1 },
@@ -368,7 +373,7 @@ const JOBS: JobTemplate[] = [
   { companySlug: 'pathshala-learning', title: 'Frontend Engineer — Student App', shortDescription: 'Web + responsive surfaces for the student learning app.', description: 'You\'ll work on the student-facing app used by 1.2M students. React, Next.js, performance-conscious work.', citySlug: 'pune', skillSlugs: ['typescript', 'react', 'nextjs'], employmentType: 'FULL_TIME', workMode: 'REMOTE', experienceMinYears: 2, experienceMaxYears: 5, salaryMinLpa: 14, salaryMaxLpa: 24, daysAgo: 5 },
 
   // === Kirana Stack (4 jobs, retail, Delhi) ===
-  { companySlug: 'kirana-stack', title: 'Lead Engineer — Merchant App', shortDescription: 'Founding engineer on the merchant-facing Android app.', description: 'Lead engineering for the kirana-merchant Android app — POS, billing, inventory, settlement. Strong Android background (5+ years), comfort with offline-first design.', citySlug: 'delhi', skillSlugs: ['android', 'kotlin', 'sqlite'], employmentType: 'FULL_TIME', workMode: 'ONSITE', experienceMinYears: 5, experienceMaxYears: 10, salaryMinLpa: 32, salaryMaxLpa: 55, daysAgo: 4 },
+  { companySlug: 'kirana-stack', title: 'Lead Engineer — Merchant App', shortDescription: 'Founding engineer on the merchant-facing Android app.', description: 'Lead engineering for the kirana-merchant Android app — POS, billing, inventory, settlement. Strong Android background (5+ years), comfort with offline-first design.', citySlug: 'delhi', skillSlugs: ['android-development', 'kotlin', 'sqlite'], employmentType: 'FULL_TIME', workMode: 'ONSITE', experienceMinYears: 5, experienceMaxYears: 10, salaryMinLpa: 32, salaryMaxLpa: 55, daysAgo: 4 },
   { companySlug: 'kirana-stack', title: 'Senior Backend Engineer', shortDescription: 'Build the credit-decisioning service.', description: 'Backend for merchant credit — risk scoring, disbursement, collections. Java / Kotlin, Postgres, Kafka.', citySlug: 'delhi', skillSlugs: ['java', 'postgresql', 'kafka'], employmentType: 'FULL_TIME', workMode: 'HYBRID', experienceMinYears: 4, experienceMaxYears: 8, salaryMinLpa: 26, salaryMaxLpa: 44, daysAgo: 8 },
   { companySlug: 'kirana-stack', title: 'Operations Manager — Tier 2/3 Expansion', shortDescription: 'Drive merchant onboarding in 40+ tier 2/3 cities.', description: 'You\'ll own the city-launch playbook — local team hiring, onboarding flows, partnership closures. Heavy travel.', citySlug: 'delhi', skillSlugs: ['operations', 'business-development', 'team-management'], employmentType: 'FULL_TIME', workMode: 'ONSITE', experienceMinYears: 4, experienceMaxYears: 8, salaryMinLpa: 14, salaryMaxLpa: 24, daysAgo: 17 },
   { companySlug: 'kirana-stack', title: 'Product Designer', shortDescription: 'Design for merchants who are first-time smartphone users.', description: 'Many of our merchants are using a smartphone seriously for the first time. Design with that constraint in mind. We do real field research — be ready to travel.', citySlug: 'noida', skillSlugs: ['ux-design', 'figma', 'user-research'], employmentType: 'FULL_TIME', workMode: 'HYBRID', experienceMinYears: 3, experienceMaxYears: 7, salaryMinLpa: 18, salaryMaxLpa: 32, daysAgo: 11 },
@@ -573,9 +578,19 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
     const skillIds: number[] = [];
     for (const slug of j.skillSlugs) {
       const id = skillBySlug.get(slug);
-      if (id !== undefined) skillIds.push(id);
-      // Unknown skills are silently dropped — the seed catalogue and
-      // referenced skills don't have to match 1:1.
+      if (id !== undefined) {
+        skillIds.push(id);
+      } else {
+        // Unknown skills used to be dropped silently. PR #35 review caught
+        // that this hid a real bug — 16 of 50 jobs ended up with empty
+        // skillIds because of a slug-catalogue mismatch, which silently
+        // broke the homepage's "popular skills" ranking. Now we warn so
+        // drift is visible. Doesn't throw — drift is not fatal, the job
+        // just won't contribute to that skill's popularity count.
+        console.warn(
+          `[seed:demo] unknown skill slug "${slug}" referenced by job "${j.title}" — dropped. Add it to seed/skills.ts.`,
+        );
+      }
     }
 
     // Deterministic canonical slug so re-running upserts cleanly.
