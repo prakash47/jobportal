@@ -171,11 +171,10 @@ describe('getLandingUrls', () => {
     expect(paths).not.toContain('/cobol-jobs');
   });
 
-  // SKIPPED — PR #33 archived the /[skill]-jobs-in-[city] route (Next 16
-  // Turbopack quirk) and commented out the combo block in sitemap-shards.ts.
-  // These tests still assert the old emit-combos behaviour. Restore when
-  // PROGRESS.md follow-up chip #6 lands (route catch-all refactor).
-  it.skip('skill×city combos: only emits pairs with ≥1 ACTIVE job (from $queryRaw)', async () => {
+  // chip #13 restored. The combo block in sitemap-shards.ts now emits
+  // /<skill>-jobs-in-<city> for every (cityId, skillId) pair that has
+  // ≥1 ACTIVE job, via the [...path] catch-all dispatcher.
+  it('skill×city combos: only emits pairs with ≥1 ACTIVE job (from $queryRaw)', async () => {
     mocked.city.findMany.mockResolvedValue([
       { id: 1, slug: 'bangalore' },
       { id: 2, slug: 'pune' },
@@ -202,8 +201,8 @@ describe('getLandingUrls', () => {
     expect(paths).not.toContain('/react-jobs-in-bangalore');
   });
 
-  // SKIPPED — see comment on the preceding combo test. Restore when chip #6 lands.
-  it.skip('orphan cityId/skillId in $queryRaw result is silently dropped (defense)', async () => {
+  // chip #13 restored.
+  it('orphan cityId/skillId in $queryRaw result is silently dropped (defense)', async () => {
     mocked.city.findMany.mockResolvedValue([{ id: 1, slug: 'bangalore' }]);
     mocked.skill.findMany.mockResolvedValue([{ id: 10, slug: 'python' }]);
     mocked.$queryRaw

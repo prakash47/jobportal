@@ -141,13 +141,33 @@ export async function getLandingUrls(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  // /<skill>-jobs-in-<city> Cartesian DEFERRED — the multi-token
-  // dynamic segment `[skill]-jobs-in-[city]` triggers a Next 16
-  // Invariant ("Could not resolve param value for segment"). Tracked in
-  // PROGRESS.md follow-ups; the route + this sitemap entry will be
-  // restored once the SEO landings are refactored into a catch-all or
-  // sub-path structure that Next 16 can resolve.
-  // const activePairs = await prisma.$queryRaw<...>...;
+  // /<skill>-jobs-in-<city> — chip #13 restored these now that the
+  // [...path] catch-all (chip #5 part 2) absorbs the multi-token
+  // dynamic segment that Next 16 wouldn't resolve as a folder pattern.
+  //
+  // Only emit pairs that actually have ≥1 ACTIVE job (filters out the
+  // O(skills × cities) explosion of thin-content URLs). Distinct
+  // (cityId, skillId) pairs come from one UNNEST + DISTINCT round-trip;
+  // skill ids missing from the SELECT-DISTINCT-skill result above are
+  // also dropped here (defense — orphan ids in skillIds would otherwise
+  // leak into the sitemap).
+  const activePairs = await prisma.$queryRaw<Array<{ cityId: number; skillId: number }>>`
+    SELECT DISTINCT "primaryCityId" AS "cityId", UNNEST("skillIds") AS "skillId"
+    FROM "Job"
+    WHERE status = 'ACTIVE' AND "primaryCityId" IS NOT NULL
+  `;
+
+  for (const p of activePairs) {
+    const citySlug = cityById.get(Number(p.cityId));
+    const skillSlug = skillSlugById.get(Number(p.skillId));
+    if (!citySlug || !skillSlug) continue;
+    if (!activeSkillIds.has(Number(p.skillId))) continue;
+    out.push({
+      url: `${SITE}/${skillSlug}-jobs-in-${citySlug}`,
+      changeFrequency: 'daily',
+      priority: 0.6,
+    });
+  }
 
   return out;
 }
