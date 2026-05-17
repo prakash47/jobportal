@@ -338,46 +338,82 @@ describe('getJobShard', () => {
   });
 });
 
-// Integration test for app/sitemap.ts default export. Catches the Next 16
-// signature regression (id is Promise<string>, not number): if anyone
-// forgets to await it, the switch statement falls through to default
-// silently and every shard payload becomes wrong.
-describe('app/sitemap default export', () => {
+// Integration tests for the sitemap-index + shard route handlers
+// (app/sitemap.xml/route.ts + app/sitemap/[shard]/route.ts). The old
+// metadata-file (app/sitemap.ts) was removed in the chip-#5 fix
+// because Next 16 won't auto-emit a sitemap-index when generateSitemaps
+// is set — the index was 404'ing every crawler. Tests below assert
+// against the new route handlers.
+
+describe('app/sitemap.xml route handler (index)', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
-  it('dispatches shard 0 (static) when called with Promise<"0">', async () => {
-    const mod = await import('../../app/sitemap');
-    const urls = await mod.default({ id: Promise.resolve('0') });
-    // Static shard returns exactly 4 URLs (home, /jobs, /companies, /career-advice).
-    expect(urls).toHaveLength(4);
-    expect(new URL(urls[0]!.url).pathname).toBe('/');
+  it('emits a <sitemapindex> with the 4 fixed shards plus job shards', async () => {
+    // 1 job in the table → 1 job shard. So 5 shards total (4 fixed + 1 job).
+    mocked.job.aggregate.mockResolvedValue({ _max: { id: 1 } });
+    const mod = await import('../../app/sitemap.xml/route');
+    const res = await mod.GET();
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/^application\/xml/);
+    const body = await res.text();
+    expect(body).toContain('<sitemapindex');
+    // 4 fixed shards + 1 job shard (SHARD_JOBS_BASE = 4).
+    expect((body.match(/<sitemap>/g) ?? []).length).toBe(5);
+    expect(body).toContain('/sitemap/0.xml');
+    expect(body).toContain('/sitemap/4.xml');
+  });
+
+  it('still emits the 4 fixed shards when there are no jobs', async () => {
+    mocked.job.aggregate.mockResolvedValue({ _max: { id: null } });
+    const mod = await import('../../app/sitemap.xml/route');
+    const res = await mod.GET();
+    const body = await res.text();
+    expect((body.match(/<sitemap>/g) ?? []).length).toBe(4);
+    expect(body).not.toContain('/sitemap/4.xml');
+  });
+});
+
+describe('app/sitemap/[shard] route handler', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  // The `.xml` suffix in /sitemap/0.xml is part of the URL segment; the
+  // handler strips it before parsing. /sitemap/0 (no extension) is also
+  // accepted as a forgiving fallback.
+  it('dispatches shard 0 (static) for /sitemap/0.xml', async () => {
+    const mod = await import('../../app/sitemap/[shard]/route');
+    const res = await mod.GET(new Request('http://localhost/sitemap/0.xml'), {
+      params: Promise.resolve({ shard: '0.xml' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('<urlset');
+    // Static shard always emits 4 URLs (home, /jobs, /companies, /career-advice).
+    expect((body.match(/<url>/g) ?? []).length).toBe(4);
   });
 
   it('dispatches shard 1 (companies)', async () => {
     mocked.company.findMany.mockResolvedValue([
       { id: 1, slug: 'acme', updatedAt: new Date() },
     ]);
-    const mod = await import('../../app/sitemap');
-    const urls = await mod.default({ id: Promise.resolve('1') });
-    // 1 company → 2 URLs (overview + working-at)
-    expect(urls).toHaveLength(2);
+    const mod = await import('../../app/sitemap/[shard]/route');
+    const res = await mod.GET(new Request('http://localhost/sitemap/1.xml'), {
+      params: Promise.resolve({ shard: '1.xml' }),
+    });
+    const body = await res.text();
+    // 1 company → 2 URLs (overview + working-at).
+    expect((body.match(/<url>/g) ?? []).length).toBe(2);
   });
 
-  it('dispatches shard 2 (articles)', async () => {
-    mocked.article.findMany.mockResolvedValue([]);
-    const mod = await import('../../app/sitemap');
-    const urls = await mod.default({ id: Promise.resolve('2') });
-    expect(urls).toEqual([]);
-    // Confirms we routed to the articles helper (which queries article.findMany).
-    expect(mocked.article.findMany).toHaveBeenCalled();
-  });
-
-  it('dispatches shard 4+ as job shards', async () => {
+  it('dispatches shard 4+ as job shards with the right id range', async () => {
     mocked.job.findMany.mockResolvedValue([]);
-    const mod = await import('../../app/sitemap');
-    await mod.default({ id: Promise.resolve('4') });
+    const mod = await import('../../app/sitemap/[shard]/route');
+    await mod.GET(new Request('http://localhost/sitemap/4.xml'), {
+      params: Promise.resolve({ shard: '4.xml' }),
+    });
     const args = mocked.job.findMany.mock.calls[0]?.[0] as {
       where: { id: { gt: number; lte: number } };
     };
@@ -385,39 +421,24 @@ describe('app/sitemap default export', () => {
     expect(args.where.id).toEqual({ gt: 0, lte: JOBS_PER_SHARD });
   });
 
-  it('rejects non-numeric ids gracefully', async () => {
-    const mod = await import('../../app/sitemap');
-    const urls = await mod.default({ id: Promise.resolve('not-a-number') });
-    expect(urls).toEqual([]);
-  });
-});
-
-// generateSitemaps declares the right shard layout based on max job id.
-describe('app/sitemap generateSitemaps', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
+  it('returns an empty <urlset/> for non-numeric ids (not 404)', async () => {
+    const mod = await import('../../app/sitemap/[shard]/route');
+    const res = await mod.GET(new Request('http://localhost/sitemap/garbage.xml'), {
+      params: Promise.resolve({ shard: 'garbage.xml' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('<urlset');
+    expect(body).not.toContain('<url>');
   });
 
-  it('always declares the 4 non-job shards even with zero jobs', async () => {
-    mocked.job.aggregate.mockResolvedValue({ _max: { id: null } });
-    const mod = await import('../../app/sitemap');
-    const shards = await mod.generateSitemaps();
-    expect(shards).toEqual([
-      { id: 0 }, // static
-      { id: 1 }, // companies
-      { id: 2 }, // articles
-      { id: 3 }, // landings
-    ]);
-  });
-
-  it('appends job shards starting at id 4 when jobs exist', async () => {
-    mocked.job.aggregate.mockResolvedValue({ _max: { id: JOBS_PER_SHARD * 2 + 1 } });
-    const mod = await import('../../app/sitemap');
-    const shards = await mod.generateSitemaps();
-    // 4 non-job + 3 job shards (ceil((2*40k+1)/40k) = 3)
-    expect(shards).toHaveLength(7);
-    expect(shards[4]).toEqual({ id: 4 });
-    expect(shards[5]).toEqual({ id: 5 });
-    expect(shards[6]).toEqual({ id: 6 });
+  it('accepts the shard id without the .xml suffix as a fallback', async () => {
+    const mod = await import('../../app/sitemap/[shard]/route');
+    const res = await mod.GET(new Request('http://localhost/sitemap/0'), {
+      params: Promise.resolve({ shard: '0' }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect((body.match(/<url>/g) ?? []).length).toBe(4);
   });
 });
