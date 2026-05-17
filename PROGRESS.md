@@ -12,10 +12,10 @@
 
 ## Snapshot — 2026-05-17
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Local stack is fully demo-ready end-to-end: every public route serves, all four SEO landing patterns work, AND the recruiter applicants funnel is populated.
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Local stack fully demo-ready end-to-end: every route serves, all 4 SEO landing patterns work, recruiter funnel populated, homepage company tiles show initials-on-color monogram fallbacks (no more empty Building2 icons).
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
-- **Branch state**: `develop` is the integration tip (39 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #39 — `feature/demo-applications` (closes chip #11 — 20 fake candidates + 371 applications across 50 jobs with realistic status histogram, so the recruiter dashboard demonstrates the full funnel).
+- **Branch state**: `develop` is the integration tip (40 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #40 — `feature/logo-monograms` (closes chip #12 — homepage FeaturedCompanies tiles now reuse the shared `CompanyLogo` initials-monogram fallback instead of a generic Building2 icon).
 - **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. **All 25 probed public routes return expected status codes** (200/307/404). ES indices populated (50 jobs, 12 companies, 3 articles in `jobs-v4`, `companies-v4`, `articles-v4`).
 - **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (now with stable Job IDs 100001-100050 and Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs.
 - **Test counts on develop**: 235 API + **173 web** (was 163; +10 catch-all dispatch tests) + 37 feature-flags + 18 observability = 463 unit tests.
@@ -51,6 +51,14 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #40 — `feature/logo-monograms` · 2026-05-17
+
+Closes **chip #12**. Tiny polish PR — homepage FeaturedCompanies tiles were rendering a generic Building2 icon as the logo-fallback. The existing `<CompanyLogo>` component (used by `/companies` directory + `/company/[handle]` profile) already implements the "initials on a colored square" monogram with a 5-color palette deterministically picked from `companyId`. This PR replaces the homepage's bespoke fallback with that shared component.
+
+**Result**: every demo company now shows a 2-letter initial monogram on the homepage (NC for Nimbus Cloud, SP for Sahaj Pay, VA for Veridian Analytics, etc.) in one of 5 calm pastel backgrounds. Visual consistency across `/`, `/companies`, and `/company/[handle]`.
+
+No tests added — `initials()` and `pickColor()` are 4-line pure helpers inside `CompanyLogo.tsx`; the visual replacement is the test. Workspace typecheck 11/11, 181 web tests still green.
 
 ### PR #39 — `feature/demo-applications` · 2026-05-17
 
@@ -360,7 +368,7 @@ These were spawned during reviews or QA but deferred. Pick one up when context n
 9. **Auth-aware `SiteHeader`** — the header currently shows "Sign in" for everyone, including authed users. Should read the JWT cookie (existing `readUserFromCookie()` helper) and flip "Sign in" → "Profile" when authed. Trivial change, but blocked on chip #8 — best done as part of the shared-layout move. **Source: PR #34.**
 10. ~~**Expand dev seed with sample jobs / companies / recruiters**~~ — **CLOSED by PR #35**. Now ships 12 companies + 8 recruiters + 38 reviews + 50 jobs via `pnpm db:seed:demo`.
 11. ~~**Seed fake candidate users + applications**~~ — **CLOSED by PR #39**. 20 candidates, 371 applications across 50 jobs with realistic status histogram.
-12. **Initials-monogram SVG generator for company logos** — `Company.logoUrl` is null in the demo seed (real logos are copyrighted). FeaturedCompanies renders a clean Building2 fallback, but a dev-only "first letter on a colored square" SVG generator would look more polished in the homepage tiles without infringing on anything. **Source: PR #35.**
+12. ~~**Initials-monogram SVG generator for company logos**~~ — **CLOSED by PR #40**. The pre-existing `<CompanyLogo>` component already had this exact behavior; the homepage tiles just needed to use it instead of their bespoke Building2 fallback.
 13. ~~**Restore `/[skill]-jobs-in-[city]` skill×city SEO landings**~~ — **CLOSED by PR #38**. 4th dispatch arm + handler + sitemap combo restored, 2 deferred tests un-skipped.
 
 ---

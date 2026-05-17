@@ -1,7 +1,6 @@
 import Link from 'next/link';
-import Image from 'next/image';
-import { Building2 } from '@jobportal/ui/icons';
 import type { FeaturedCompany } from '../../lib/home/queries';
+import { CompanyLogo } from '../companies/CompanyLogo';
 import { SectionHeading } from './SectionHeading';
 
 interface Props {
@@ -33,22 +32,16 @@ export function FeaturedCompanies({ companies }: Props) {
                 href={`/${c.slug}-overview-${c.id}`}
                 className="group flex h-full items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-4 transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-muted)]"
               >
-                <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
-                  {c.logoUrl ? (
-                    <Image
-                      src={c.logoUrl}
-                      alt=""
-                      width={48}
-                      height={48}
-                      className="size-full object-cover"
-                    />
-                  ) : (
-                    <Building2
-                      className="size-5 text-[var(--color-fg-subtle)]"
-                      aria-hidden="true"
-                    />
-                  )}
-                </div>
+                <CompanyLogo
+                  companyId={c.id}
+                  name={c.name}
+                  logoUrl={c.logoUrl}
+                  size={48}
+                />
+                {/* chip #12 — uses the shared CompanyLogo so the homepage
+                   tiles get the same initials-on-color monogram fallback
+                   as the /companies grid and the /company/* profile pages
+                   instead of an empty Building2 icon block. */}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-[var(--color-fg)]">
                     {c.name}
