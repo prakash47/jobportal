@@ -12,13 +12,13 @@
 
 ## Snapshot — 2026-05-17
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Demo-ready local state: homepage renders against synthetic data.
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Local stack is demo-ready: 25/25 public routes serve cleanly (no 404 / 500), homepage + SRP + SEO landings + detail pages all populated from synthetic data.
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
-- **Branch state**: `develop` is the integration tip (35 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #35 — `feature/demo-seed` (synthetic demo data: 12 companies, 8 recruiters, 38 reviews, 50 jobs; +60 skills added to the catalogue; closes chip #10).
-- **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. Homepage TrustStrip shows **50 active jobs / 12 companies / 8 hiring teams**; Cities / Skills / Companies sections all render with content. Workspace typecheck 11/11 green.
-- **Seed catalogue**: 30 flags / 10 industries / 50 cities / **160 skills** (was 100; +60 from PR #35 to cover data engineering, ML, product, ops, sales, editorial, finance, healthcare, hospitality, manufacturing, CAD domains) / 4 plans / 3 articles. Plus the demo overlay: 12 companies / 8 recruiters / 38 reviews / 50 jobs.
-- **Test counts on develop**: 235 API + 163 web + 37 feature-flags + 18 observability = 453 unit tests.
+- **Branch state**: `develop` is the integration tip (37 PRs after this docs-update lands); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #36 — `feature/demo-readiness` (full QA sweep + fixes: sitemap split into route handlers, three SEO-landing folders consolidated under a `[...path]` catch-all, company route renamed to `[handle]`, Button asChild hydration fix, demo seed → ES indexing flow, Job_id_seq advance). Closes chip #5; partially closes chip #6.
+- **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. **All 25 probed public routes return expected status codes** (200/307/404). ES indices populated (50 jobs, 12 companies, 3 articles in `jobs-v4`, `companies-v4`, `articles-v4`).
+- **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (now with stable Job IDs 100001-100050 and Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs.
+- **Test counts on develop**: 235 API + **173 web** (was 163; +10 catch-all dispatch tests) + 37 feature-flags + 18 observability = 463 unit tests.
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2 / Sentry / PostHog.
 
 ---
@@ -51,6 +51,34 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #36 — `feature/demo-readiness` · 2026-05-17
+
+Full QA sweep + fixes for the stakeholder demo. Pre-PR route audit found 8 broken URLs (404 / 500 / empty-results); post-PR all 25 probed routes serve cleanly. Closes **chip #5** (sitemap + SEO-landing 404s) and **chip #4 / part of #6** (route consolidation that unblocks restoring skill×city in a follow-up).
+
+**4 commits** (plus the post-review fix commit):
+
+1. **`fix(ui): Button asChild — conditional aria-* spread to fix React 19 hydration`** (a146620) — PR #34's review caught a hydration mismatch on every homepage load. Radix Slot 1.1.0 + React 19 render `aria-x={loading || undefined}` differently between server and client. Fix builds the slot props object conditionally and spreads — the attribute never enters the JSX tree unless truly true. Same output server + client.
+
+2. **`fix(search,db): demo seed → ES indexing flow end-to-end`** (9158d6b) — three coupled fixes so `/jobs` and homepage actually serve seeded data:
+   - **search:reindex env-loading race** — extracted `_load-env.ts` side-effect entry so `dotenv.config()` runs before the indexer chain pulls `@jobportal/db` (whose `client.ts` instantiates Prisma at module-eval time). Same shape as the apps/api/instrument.ts fix from PR #33.
+   - **Demo seed Job IDs** — switched from `canonicalSlug = '<co>-<title>-d001'` (alphanumeric suffix) to explicit `Job.id` in the 100001-100050 range. `parseJobSlug` requires `-(\d+)$` at the tail; without this every `/job/<slug>` 404'd.
+   - **`db:seed:demo:full` script** — chains seed + reindex so demo-day prep is one command.
+
+3. **`fix(web): /sitemap.xml index handler + shard route handlers`** (ca4662c) — closes **chip #5 part 1**. Deleted the Next-metadata `app/sitemap.ts` (which only mounted shards, never an index) and replaced with two route handlers: `app/sitemap.xml/route.ts` for the `<sitemapindex>` and `app/sitemap/[shard]/route.ts` for the per-shard XML. Existing `getXxxUrls()` helpers in `lib/seo/sitemap-shards.ts` are unchanged. Test file lost 12 dead metadata-file tests, gained 7 new route-handler tests.
+
+4. **`fix(web): catch-all dispatcher for SEO landings + company route consolidation`** (e03eb3c) — closes **chip #5 part 2**. Three coexisting root-level dynamic folders (`[skill]-jobs`, `jobs-in-[city]`, `working-at-[companyPath]`) consolidated under one `app/[...path]/page.tsx` that pattern-matches the URL shape and dispatches to handlers in `_handlers/`. Plus `app/company/[skill]-overview-[city]/page.tsx` → `app/company/[handle]/page.tsx` (same Next 16 multi-dynamic-segment-in-folder bug). Static routes still resolve first (Next 16 precedence: static > dynamic > catch-all), so `/jobs`, `/companies`, `/login` are unaffected.
+
+**Post-review fixes (independent review caught 3 blockers)** (64cf3bc):
+- **Postgres SERIAL sequence advance** — `prisma.job.create({ data: { id: 100001 } })` does NOT auto-advance `Job_id_seq`. The reviewer correctly flagged that the next real recruiter-portal job post on a demo-seeded DB would have collided on id=1 and kept colliding through id=100050. Added a `setval(pg_get_serial_sequence('"Job"', 'id'), 100050, true)` after the seed loop. Verified: `Job_id_seq.last_value = 100050` post-seed.
+- **next.config.ts cache-control conflict** — the route handlers were setting `Cache-Control: ... s-maxage=3600`, but `next.config.ts` source rules for `/sitemap.xml` and `/sitemap/:path*` already set `s-maxage=86400`. Dropped the conflicting header from both handlers; config-side rule now owns the policy unambiguously.
+- **Catch-all dispatcher had zero unit tests** — extracted the pure `dispatch()` function into `apps/web/lib/url/catch-all-dispatch.ts` and added 10 unit tests covering single-segment landings, multi-city `-and-` slugs, multi-word skill names, the prefix-vs-suffix matching order, deep-path null fallback, bare-prefix null fallback, and the unrelated-bogus null fallback.
+
+**Verified live**: 25/25 routes (`/`, `/jobs`, all SEO landings, `/sitemap.xml` + shards, detail pages, auth pages, 404 fallback) return expected status codes against a cold dev server.
+
+**Workspace state**: typecheck 11/11 green, 173 web tests (+10 from this PR), 2 still-skipped sitemap×city combo tests deferred to chip #13.
+
+**Bookkeeping miss + recovery**: the PR-#36 commit author (me) forgot to include `PROGRESS.md` in the squash-merge — this entry ships in a separate `chore/update-progress-pr-36` follow-up branch per the CLAUDE.md §12 fallback protocol. (Per §12: "Best: bundle the update into the same PR." Next time, double-check `git status` before pushing the work PR.)
 
 ### PR #35 — `feature/demo-seed` · 2026-05-17
 
@@ -296,6 +324,7 @@ These were spawned during reviews or QA but deferred. Pick one up when context n
 10. ~~**Expand dev seed with sample jobs / companies / recruiters**~~ — **CLOSED by PR #35**. Now ships 12 companies + 8 recruiters + 38 reviews + 50 jobs via `pnpm db:seed:demo`.
 11. **Seed fake candidate users + applications** — PR #35 added recruiters + jobs but no candidates and no applications, so the recruiter dashboard's applicants list is still empty. A small follow-up seed (~20 candidates, ~80 applications spread across jobs) would let stakeholders see the recruiter side of the funnel too. **Source: PR #35.**
 12. **Initials-monogram SVG generator for company logos** — `Company.logoUrl` is null in the demo seed (real logos are copyrighted). FeaturedCompanies renders a clean Building2 fallback, but a dev-only "first letter on a colored square" SVG generator would look more polished in the homepage tiles without infringing on anything. **Source: PR #35.**
+13. **Restore `/[skill]-jobs-in-[city]` skill×city SEO landings** — chip #5 unblocked this by introducing the `app/[...path]/page.tsx` catch-all dispatcher. To complete: (a) add a 4th branch to `dispatch()` in `apps/web/lib/url/catch-all-dispatch.ts` that matches `^(?<skill>...)-jobs-in-(?<city>...)$`, (b) create `_handlers/skill-city.tsx` taking both, (c) restore the commented-out combo block in `apps/web/lib/seo/sitemap-shards.ts:144`, (d) un-skip the 2 `.skip()`'d tests at `sitemap-shards.test.ts:178,206`. Old chip #6 ("Restore `[skill]-jobs-in-[city]`") subsumed under this. **Source: PR #36.**
 
 ---
 
