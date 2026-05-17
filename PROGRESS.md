@@ -12,10 +12,10 @@
 
 ## Snapshot — 2026-05-17
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Local stack is fully demo-ready: every documented public route serves cleanly, all four SEO landing patterns (incl. skill×city) work.
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Local stack is fully demo-ready end-to-end: every public route serves, all four SEO landing patterns work, AND the recruiter applicants funnel is populated.
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
-- **Branch state**: `develop` is the integration tip (38 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #38 — `feature/skill-city-landings` (closes chip #13 — restored `/<skill>-jobs-in-<city>` SEO landings via the 4th catch-all dispatch arm + new `_handlers/skill-city.tsx` + re-enabled sitemap combo block + un-skipped the 2 deferred tests).
+- **Branch state**: `develop` is the integration tip (39 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: PR #39 — `feature/demo-applications` (closes chip #11 — 20 fake candidates + 371 applications across 50 jobs with realistic status histogram, so the recruiter dashboard demonstrates the full funnel).
 - **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. **All 25 probed public routes return expected status codes** (200/307/404). ES indices populated (50 jobs, 12 companies, 3 articles in `jobs-v4`, `companies-v4`, `articles-v4`).
 - **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (now with stable Job IDs 100001-100050 and Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs.
 - **Test counts on develop**: 235 API + **173 web** (was 163; +10 catch-all dispatch tests) + 37 feature-flags + 18 observability = 463 unit tests.
@@ -51,6 +51,28 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### PR #39 — `feature/demo-applications` · 2026-05-17
+
+Closes **chip #11**. Recruiter dashboard's applicants list was empty post-PR-#35 (companies + jobs + recruiters seeded but no candidates / applications), so the recruiter side of the demo flow had nothing to show. This PR seeds the candidate funnel.
+
+**What landed**:
+- `packages/db/prisma/seed/demo-applications.ts` — 20 fictional Indian candidates spanning senior staff engineers down to fresh graduates + 2 non-tech roles (sales, editorial). Each candidate has a realistic headline, experience-in-months, current title, expected salary band (INR LPA), preferred cities, skill list, notice period.
+- `packages/db/prisma/seed-demo-applications.ts` — entry point with the same prod-guard pattern as `seed-demo.ts` (refuses on `NODE_ENV=production` AND requires a local-looking `DATABASE_URL`, override via `ALLOW_DEMO_SEED_ON_REMOTE=true`).
+- `pnpm db:seed:demo:apps` script + `db:seed:demo:full` extended to chain it.
+- Stable User IDs 200001-200020 + `setval(pg_get_serial_sequence('"User"', 'id'), 200020)` so future real-user inserts don't collide (same lesson from PR #36's Job_id_seq fix).
+- Idempotent: candidates upsert by email, candidate-profile upsert by userId. Applications wipe-and-reinsert per re-run so the distribution is deterministic and the recruiter dashboard doesn't bloat across reseeds.
+
+**Application distribution** (deterministic per `(jobIndex, candidateIndex)` pair so re-runs are stable):
+- 371 applications across 50 jobs (avg 7.4 apps/job)
+- Status histogram: 211 APPLIED · 69 IN_REVIEW · 53 SHORTLISTED · 26 INTERVIEWED · 5 OFFERED · 2 HIRED · 3 REJECTED · 2 WITHDRAWN — matches a real recruiter's funnel shape
+- Popular jobs (first 8 by id) get ~75% candidate-apply rate, tail jobs ~30%
+- Intern jobs only get candidates with ≤2y experience
+- ~25% of applications carry a one-line cover letter; the rest are bare
+
+**Verified**: typecheck 11/11, `Application` table has 371 rows across all 50 demo jobs, `User` table has 20 demo candidates.
+
+**Login credentials for demo** (same shared password): all candidates use `<firstname>.<lastname>+demo@jobportal.dev` with `DEMO_SEED_PASSWORD` (default `demo-recruiter-pass-2026!`). Combine with the 8 recruiter logins from PR #35 for full two-sided demo coverage.
 
 ### PR #38 — `feature/skill-city-landings` · 2026-05-17
 
@@ -337,7 +359,7 @@ These were spawned during reviews or QA but deferred. Pick one up when context n
 8. **Promote `SiteHeader` / `SiteFooter` to a shared layout** — homepage-scoped today (`apps/web/components/home/SiteHeader.tsx` + `SiteFooter.tsx`). Moving them into a real shared layout that every route opts into touches every existing page's chrome and the `app/layout.tsx` structure. **Source: PR #34.**
 9. **Auth-aware `SiteHeader`** — the header currently shows "Sign in" for everyone, including authed users. Should read the JWT cookie (existing `readUserFromCookie()` helper) and flip "Sign in" → "Profile" when authed. Trivial change, but blocked on chip #8 — best done as part of the shared-layout move. **Source: PR #34.**
 10. ~~**Expand dev seed with sample jobs / companies / recruiters**~~ — **CLOSED by PR #35**. Now ships 12 companies + 8 recruiters + 38 reviews + 50 jobs via `pnpm db:seed:demo`.
-11. **Seed fake candidate users + applications** — PR #35 added recruiters + jobs but no candidates and no applications, so the recruiter dashboard's applicants list is still empty. A small follow-up seed (~20 candidates, ~80 applications spread across jobs) would let stakeholders see the recruiter side of the funnel too. **Source: PR #35.**
+11. ~~**Seed fake candidate users + applications**~~ — **CLOSED by PR #39**. 20 candidates, 371 applications across 50 jobs with realistic status histogram.
 12. **Initials-monogram SVG generator for company logos** — `Company.logoUrl` is null in the demo seed (real logos are copyrighted). FeaturedCompanies renders a clean Building2 fallback, but a dev-only "first letter on a colored square" SVG generator would look more polished in the homepage tiles without infringing on anything. **Source: PR #35.**
 13. ~~**Restore `/[skill]-jobs-in-[city]` skill×city SEO landings**~~ — **CLOSED by PR #38**. 4th dispatch arm + handler + sitemap combo restored, 2 deferred tests un-skipped.
 
