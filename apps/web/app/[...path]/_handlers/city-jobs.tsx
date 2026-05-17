@@ -1,11 +1,17 @@
+// /jobs-in-[city] SEO landing — dispatched from the [...path] catch-all.
+//
+// Original location: apps/web/app/jobs-in-[city]/page.tsx (deleted).
+// Supports multi-city slugs via `-and-` separator (sorted alphabetically
+// per SRS §6.3 rule 3).
+
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { prisma } from '@jobportal/db';
 import { searchJobs } from '@jobportal/search';
-import { SrpShell } from '../../components/srp';
-import { cityBreadcrumb, loadSrpUserContext, parseSrpSearchParams } from '../../lib/srp';
-import { buildMultiCitySlug, parseMultiCitySlug } from '../../lib/url/slug';
-import type { ItemListEntry } from '../../lib/seo/json-ld';
+import { SrpShell } from '../../../components/srp';
+import { cityBreadcrumb, loadSrpUserContext, parseSrpSearchParams } from '../../../lib/srp';
+import { buildMultiCitySlug, parseMultiCitySlug } from '../../../lib/url/slug';
+import type { ItemListEntry } from '../../../lib/seo/json-ld';
 
 const PAGE_SIZE = 20;
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
@@ -16,7 +22,7 @@ interface PageProps {
 }
 
 async function resolveCities(citySegment: string): Promise<{ slug: string; name: string }[] | null> {
-  // The path is `jobs-in-<rest>` — Next gives us [city] which is the <rest>.
+  // The path is `jobs-in-<rest>` — the dispatcher passes <rest> as `city`.
   // <rest> may be a single slug or multiple joined by `-and-`.
   const slugs = citySegment.includes('-and-') ? citySegment.split('-and-') : [citySegment];
   if (slugs.some((s) => !s || !/^[a-z0-9-]+$/.test(s))) return null;
@@ -25,8 +31,7 @@ async function resolveCities(citySegment: string): Promise<{ slug: string; name:
     select: { slug: true, name: true },
   });
   if (cities.length !== slugs.length) return null;
-  // Preserve URL order so the breadcrumb reflects the canonical sort
-  // (middleware already sorts URLs alphabetically; URL slug order = canonical).
+  // Preserve URL order so the breadcrumb reflects the canonical sort.
   const bySlug = new Map(cities.map((c) => [c.slug, c]));
   return slugs.map((s) => bySlug.get(s)!).filter(Boolean);
 }
@@ -50,14 +55,13 @@ export default async function CityJobsPage({ params, searchParams }: PageProps) 
   const cityRows = await resolveCities(citySegment);
   if (!cityRows) notFound();
 
-  // Verify the segment is canonically sorted; if not, parseMultiCitySlug
-  // would reject in middleware. Belt+braces: if slugs differ from sorted, 404.
+  // Verify the segment is canonically sorted; if not, middleware would
+  // reject in production. Belt+braces: 404 here too.
   const slugs = cityRows.map((c) => c.slug);
   if (slugs.length > 1) {
     const sortedSlugs = [...slugs].sort();
     if (slugs.some((s, i) => s !== sortedSlugs[i])) notFound();
   }
-  // sanity: parseMultiCitySlug parses the literal segment back to an array
   void parseMultiCitySlug;
 
   const queryParams = parseSrpSearchParams(sp);
