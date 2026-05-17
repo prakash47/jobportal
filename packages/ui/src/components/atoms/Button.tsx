@@ -49,27 +49,46 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   },
   ref,
 ) {
-  const Comp = asChild ? Slot : 'button';
   const isDisabled = disabled || loading;
+  const buttonClass = cn(
+    'inline-flex items-center justify-center rounded-md font-medium transition-colors',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]',
+    'disabled:cursor-not-allowed',
+    VARIANT_CLASSES[variant],
+    SIZE_CLASSES[size],
+    className,
+  );
+
+  // asChild path: hand the merged props to whatever element the caller
+  // provided (typically <Link>) and let it own its own children. Radix
+  // Slot's Children.only assertion only tolerates a single child, so the
+  // span-wrap / leading-icon / trailing-icon sandwich the regular path
+  // uses isn't legal here. Loading/leadingIcon/trailingIcon are ignored
+  // in this mode — callers that need them shouldn't use asChild.
+  if (asChild) {
+    return (
+      <Slot
+        ref={ref as React.Ref<HTMLElement>}
+        aria-busy={loading || undefined}
+        className={buttonClass}
+        {...props}
+      >
+        {children}
+      </Slot>
+    );
+  }
 
   return (
-    <Comp
+    <button
       ref={ref}
       disabled={isDisabled}
       aria-busy={loading || undefined}
-      className={cn(
-        'inline-flex items-center justify-center rounded-md font-medium transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]',
-        'disabled:cursor-not-allowed',
-        VARIANT_CLASSES[variant],
-        SIZE_CLASSES[size],
-        className,
-      )}
+      className={buttonClass}
       {...props}
     >
       {loading ? <Loader2 className="size-4 animate-spin" /> : leadingIcon}
       <span>{children}</span>
       {!loading && trailingIcon}
-    </Comp>
+    </button>
   );
 });
