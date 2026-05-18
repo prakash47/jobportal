@@ -2,6 +2,8 @@
 
 > India-focused job-search and recruitment platform. Modeled functionally on Naukri.com; designed with the visual restraint of Linear, Stripe, and Vercel.
 
+> **Setting up on a new machine?** Read [`MIGRATION.md`](./MIGRATION.md) for clone-and-run steps + the Claude Code handoff prompt. [`CLAUDE.md`](./CLAUDE.md) is the project's locked stack + design rules; [`PROGRESS.md`](./PROGRESS.md) is the running record of every PR shipped.
+
 [![CI](https://github.com/prakash47/jobportal/actions/workflows/ci.yml/badge.svg)](https://github.com/prakash47/jobportal/actions)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-red.svg)](#license)
 
