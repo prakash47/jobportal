@@ -7,10 +7,6 @@ interface Props {
   companies: FeaturedCompany[];
 }
 
-// Company tiles. Logo block uses a bordered placeholder when logoUrl is null
-// (no decorative gradient — just a calm Building2 mark). The href hits the
-// canonical company-overview route already shipped in PR #20.
-
 const fmt = (n: number) => n.toLocaleString('en-IN');
 
 export function FeaturedCompanies({ companies }: Props) {
@@ -29,7 +25,7 @@ export function FeaturedCompanies({ companies }: Props) {
           {companies.map((c) => (
             <li key={c.id}>
               <Link
-                href={`/${c.slug}-overview-${c.id}`}
+                href={`/company/${c.slug}-overview-${c.id}`}
                 className="group flex h-full items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-4 transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-muted)]"
               >
                 <CompanyLogo
@@ -38,10 +34,6 @@ export function FeaturedCompanies({ companies }: Props) {
                   logoUrl={c.logoUrl}
                   size={48}
                 />
-                {/* chip #12 — uses the shared CompanyLogo so the homepage
-                   tiles get the same initials-on-color monogram fallback
-                   as the /companies grid and the /company/* profile pages
-                   instead of an empty Building2 icon block. */}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-[var(--color-fg)]">
                     {c.name}

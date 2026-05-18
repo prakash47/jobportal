@@ -24,7 +24,7 @@ const COLUMNS: Array<{ title: string; links: FooterLink[] }> = [
       { label: 'Sign in', href: '/login' },
       { label: 'Create account', href: '/register' },
       { label: 'Profile', href: '/profile' },
-      { label: 'My applications', href: '/me/applications' },
+      { label: 'My applications', href: '/applications' },
     ],
   },
   {

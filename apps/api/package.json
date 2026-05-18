@@ -6,7 +6,7 @@
   "scripts": {
     "build": "nest build",
     "dev": "node -r @swc-node/register src/main.ts",
-    "start": "node dist/apps/api/src/main.js",
+    "start": "node -r @swc-node/register dist/apps/api/src/main.js",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "vitest run",
     "test:watch": "vitest",
