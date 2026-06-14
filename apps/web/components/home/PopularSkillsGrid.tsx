@@ -29,7 +29,7 @@ export function PopularSkillsGrid({ skills }: Props) {
           <li key={s.slug}>
             <Link
               href={`/jobs?skill=${encodeURIComponent(s.slug)}`}
-              className="group flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-3 transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-muted)]"
+              className="group flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-3 transition-colors hover:border-[var(--color-primary-300)] hover:bg-[var(--color-primary-50)]"
             >
               <span className="truncate text-sm font-medium text-[var(--color-fg)]">
                 {s.name}

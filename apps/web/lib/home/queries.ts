@@ -11,13 +11,45 @@
 //      canonicalises against). Same shape as the existing
 //      /jobs-in-{city} route's filter.
 
-import { prisma } from '@jobportal/db';
+import { prisma, Prisma } from '@jobportal/db';
 
 export interface PopularItem {
   slug: string;
   name: string;
   jobCount: number;
 }
+
+export interface IndustryItem {
+  slug: string;
+  name: string;
+  jobCount: number;
+}
+
+export interface RoleItem {
+  label: string;
+  query: string; // SRP ?q= value
+  jobCount: number;
+}
+
+// Curated role taxonomy. Job titles are freeform, so instead of a Role table
+// (Phase 2) we bucket active jobs by title keyword. Each role links to the SRP
+// full-text search (?q=). Roles with a zero count are dropped before render so
+// the grid never shows an empty bucket — works against the 50-job demo seed
+// and scales to production unchanged.
+const ROLE_DEFS: ReadonlyArray<{ label: string; query: string; patterns: string[] }> = [
+  { label: 'Full Stack Developer', query: 'full stack', patterns: ['%full stack%', '%fullstack%'] },
+  { label: 'Backend Engineer', query: 'backend', patterns: ['%backend%', '%back end%', '%back-end%'] },
+  { label: 'Frontend Engineer', query: 'frontend', patterns: ['%frontend%', '%front end%', '%front-end%'] },
+  { label: 'Data Engineer', query: 'data engineer', patterns: ['%data engineer%'] },
+  { label: 'Data Scientist', query: 'data scientist', patterns: ['%data scien%', '%machine learning%', '%ml engineer%'] },
+  { label: 'DevOps Engineer', query: 'devops', patterns: ['%devops%', '%site relia%', '%platform engineer%'] },
+  { label: 'Mobile Developer', query: 'mobile', patterns: ['%android%', '%ios%', '%mobile%', '%react native%'] },
+  { label: 'Product Manager', query: 'product manager', patterns: ['%product manager%', '%product management%'] },
+  { label: 'Designer', query: 'designer', patterns: ['%design%', '%ux%', '%ui %'] },
+  { label: 'QA Engineer', query: 'qa', patterns: ['%qa %', '%quality%', '% test%', '%sdet%'] },
+  { label: 'Engineering Manager', query: 'engineering manager', patterns: ['%engineering manager%', '%staff engineer%', '%principal engineer%'] },
+  { label: 'Sales', query: 'sales', patterns: ['%sales%', '%business development%', '%account manager%'] },
+];
 
 export interface FeaturedCompany {
   id: number;
@@ -44,6 +76,8 @@ export interface RecentArticle {
 
 export interface HomePageData {
   counts: { activeJobs: number; companies: number; recruiters: number };
+  topIndustries: IndustryItem[];
+  topRoles: RoleItem[];
   popularCities: PopularItem[];
   popularSkills: PopularItem[];
   featuredCompanies: FeaturedCompany[];
@@ -67,12 +101,45 @@ export function hydratePopularItems(
   return out;
 }
 
+// Builds the UNION-ALL role-count query from ROLE_DEFS. One round trip, one
+// row per role: `{ idx, jobCount }`. idx maps back to ROLE_DEFS so labels and
+// query strings stay in TS, not SQL.
+function roleCountsQuery(): Prisma.Sql {
+  const parts = ROLE_DEFS.map((role, idx) => {
+    const likeClauses = Prisma.join(
+      role.patterns.map((p) => Prisma.sql`"title" ILIKE ${p}`),
+      ' OR ',
+    );
+    return Prisma.sql`SELECT ${idx}::int AS "idx", COUNT(*)::bigint AS "jobCount" FROM "Job" WHERE "status" = 'ACTIVE' AND (${likeClauses})`;
+  });
+  return Prisma.join(parts, ' UNION ALL ');
+}
+
 export async function loadHomePageData(): Promise<HomePageData> {
-  const [activeJobs, companies, recruiters, cityGroups, skillRows, featured, recentArticles] =
-    await Promise.all([
+  const [
+    activeJobs,
+    companies,
+    recruiters,
+    industryGroups,
+    roleRows,
+    cityGroups,
+    skillRows,
+    featured,
+    recentArticles,
+  ] = await Promise.all([
       prisma.job.count({ where: { status: 'ACTIVE' } }),
       prisma.company.count(),
       prisma.user.count({ where: { role: 'RECRUITER' } }),
+
+      prisma.job.groupBy({
+        by: ['industryId'],
+        where: { status: 'ACTIVE', industryId: { not: null } },
+        _count: { _all: true },
+        orderBy: { _count: { industryId: 'desc' } },
+        take: 12,
+      }),
+
+      prisma.$queryRaw<Array<{ idx: number; jobCount: bigint }>>(roleCountsQuery()),
 
       prisma.job.groupBy({
         by: ['primaryCityId'],
@@ -131,11 +198,25 @@ export async function loadHomePageData(): Promise<HomePageData> {
 
   const skillPairs = skillRows.map((r) => ({ id: r.skillId, jobCount: Number(r.jobCount) }));
 
+  const industryPairs = industryGroups
+    .filter((g): g is typeof g & { industryId: number } => g.industryId !== null)
+    .map((g) => ({ id: g.industryId, jobCount: g._count._all }));
+
+  // Roles: map idx → ROLE_DEFS, drop zero-count buckets, keep desc order.
+  const topRoles: RoleItem[] = roleRows
+    .map((r) => ({ def: ROLE_DEFS[r.idx], jobCount: Number(r.jobCount) }))
+    .filter((r): r is { def: (typeof ROLE_DEFS)[number]; jobCount: number } =>
+      r.def !== undefined && r.jobCount > 0,
+    )
+    .sort((a, b) => b.jobCount - a.jobCount)
+    .slice(0, 10)
+    .map((r) => ({ label: r.def.label, query: r.def.query, jobCount: r.jobCount }));
+
   // Featured companies need an openings count; one extra groupBy keyed on
   // the 8 ids keeps this O(1) round-trips.
   const featuredIds = featured.map((c) => c.id);
 
-  const [cities, skills, openings] = await Promise.all([
+  const [cities, skills, industries, openings] = await Promise.all([
     cityPairs.length
       ? prisma.city.findMany({
           where: { id: { in: cityPairs.map((p) => p.id) } },
@@ -145,6 +226,12 @@ export async function loadHomePageData(): Promise<HomePageData> {
     skillPairs.length
       ? prisma.skill.findMany({
           where: { id: { in: skillPairs.map((p) => p.id) } },
+          select: { id: true, slug: true, name: true },
+        })
+      : Promise.resolve([] as Array<{ id: number; slug: string; name: string }>),
+    industryPairs.length
+      ? prisma.industry.findMany({
+          where: { id: { in: industryPairs.map((p) => p.id) } },
           select: { id: true, slug: true, name: true },
         })
       : Promise.resolve([] as Array<{ id: number; slug: string; name: string }>),
@@ -176,6 +263,12 @@ export async function loadHomePageData(): Promise<HomePageData> {
 
   return {
     counts: { activeJobs, companies, recruiters },
+    topIndustries: hydratePopularItems(industryPairs, industries).map((i) => ({
+      slug: i.slug,
+      name: i.name,
+      jobCount: i.jobCount,
+    })),
+    topRoles,
     popularCities: hydratePopularItems(cityPairs, cities),
     popularSkills: hydratePopularItems(skillPairs, skills),
     featuredCompanies,

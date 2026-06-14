@@ -11,10 +11,10 @@ const RECRUITER_URL = process.env.NEXT_PUBLIC_RECRUITER_URL ?? 'http://localhost
 export function RecruiterCta() {
   return (
     <section className="mx-auto w-full max-w-[var(--container-max)] px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-8 sm:p-12">
+      <div className="rounded-lg border border-[var(--color-primary-200)] bg-[var(--color-primary-50)] p-8 sm:p-12">
         <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="max-w-2xl space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
+            <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-primary-600)]">
               For recruiters
             </div>
             <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)] sm:text-3xl">

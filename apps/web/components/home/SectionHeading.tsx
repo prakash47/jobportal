@@ -16,7 +16,7 @@ export function SectionHeading({ eyebrow, title, description, cta }: SectionHead
   return (
     <div className="mb-8 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:items-end sm:justify-between">
       <div className="max-w-2xl space-y-2">
-        <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
+        <div className="text-xs font-semibold uppercase tracking-wider text-[var(--color-primary-600)]">
           {eyebrow}
         </div>
         <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)] sm:text-3xl">

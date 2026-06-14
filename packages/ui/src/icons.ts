@@ -33,8 +33,13 @@ export {
   Search,
   Settings,
   Share2,
+  ShieldCheck,
+  Sparkles,
+  Star,
+  TrendingUp,
   Twitter,
   User,
   Users,
   X,
+  Zap,
 } from 'lucide-react';
