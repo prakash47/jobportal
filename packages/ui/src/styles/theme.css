@@ -25,20 +25,40 @@
   --color-neutral-950: oklch(0.13  0.005 270);
 
   /* ============================================================
-   * Primary — restrained blue (CLAUDE.md §2 + SRS §3.1)
-   * --color-primary-600 ~ rgb(10, 102, 194)
+   * Primary — JobPortal brand indigo
+   * --color-primary-600 = #393185 (canonical business primary)
+   * Built around the brand value at the -600 step so default CTAs,
+   * links, focus rings, and section eyebrows pick up the exact hex.
    * ============================================================ */
-  --color-primary-50:  oklch(0.97 0.014 254);
-  --color-primary-100: oklch(0.93 0.034 254);
-  --color-primary-200: oklch(0.88 0.072 254);
-  --color-primary-300: oklch(0.80 0.115 254);
-  --color-primary-400: oklch(0.70 0.165 254);
-  --color-primary-500: oklch(0.62 0.195 254);
-  --color-primary-600: oklch(0.55 0.20  254);
-  --color-primary-700: oklch(0.47 0.18  254);
-  --color-primary-800: oklch(0.39 0.15  254);
-  --color-primary-900: oklch(0.32 0.12  254);
-  --color-primary-950: oklch(0.22 0.08  254);
+  --color-primary-50:  oklch(0.97  0.012 282);
+  --color-primary-100: oklch(0.92  0.030 282);
+  --color-primary-200: oklch(0.85  0.060 282);
+  --color-primary-300: oklch(0.76  0.090 282);
+  --color-primary-400: oklch(0.62  0.115 282);
+  --color-primary-500: oklch(0.48  0.130 282);
+  --color-primary-600: oklch(0.374 0.135 282);  /* #393185 */
+  --color-primary-700: oklch(0.32  0.125 282);
+  --color-primary-800: oklch(0.26  0.105 282);
+  --color-primary-900: oklch(0.20  0.080 282);
+  --color-primary-950: oklch(0.14  0.055 282);
+
+  /* ============================================================
+   * Accent — JobPortal brand pink (#f50051)
+   * Sparingly used: hero "live" pulse, recruiter CTA underline,
+   * one focal hover state. Per CLAUDE.md §2, accents stay restrained —
+   * if you find yourself painting whole surfaces with it, stop.
+   * ============================================================ */
+  --color-accent-50:  oklch(0.97  0.012 16);
+  --color-accent-100: oklch(0.93  0.035 16);
+  --color-accent-200: oklch(0.86  0.080 16);
+  --color-accent-300: oklch(0.78  0.140 16);
+  --color-accent-400: oklch(0.70  0.205 16);
+  --color-accent-500: oklch(0.616 0.246 16);   /* #f50051 */
+  --color-accent-600: oklch(0.54  0.235 16);
+  --color-accent-700: oklch(0.46  0.205 16);
+  --color-accent-800: oklch(0.38  0.170 16);
+  --color-accent-900: oklch(0.30  0.135 16);
+  --color-accent-950: oklch(0.20  0.090 16);
 
   /* ============================================================
    * Semantic — functional only, NOT brand accents
@@ -111,6 +131,25 @@
   --color-fg-subtle:    var(--color-neutral-500);
   --color-border:       var(--color-neutral-800);
   --color-border-strong:var(--color-neutral-700);
+}
+
+/* ============================================================
+ * Keyframes — Radix accordion open/close (uses the CSS var Radix
+ * sets on the content element). Motion stays within the 150–250ms
+ * ease-out budget (CLAUDE.md §2).
+ * ============================================================ */
+@keyframes accordion-down {
+  from { height: 0; }
+  to   { height: var(--radix-accordion-content-height); }
+}
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to   { height: 0; }
+}
+
+@layer utilities {
+  .animate-accordion-down { animation: accordion-down var(--duration-base) var(--ease-out); }
+  .animate-accordion-up   { animation: accordion-up var(--duration-base) var(--ease-out); }
 }
 
 /* ============================================================

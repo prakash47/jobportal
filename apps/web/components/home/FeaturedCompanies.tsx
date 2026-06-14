@@ -26,7 +26,7 @@ export function FeaturedCompanies({ companies }: Props) {
             <li key={c.id}>
               <Link
                 href={`/company/${c.slug}-overview-${c.id}`}
-                className="group flex h-full items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-4 transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-muted)]"
+                className="group flex h-full items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-4 transition-colors hover:border-[var(--color-primary-300)] hover:bg-[var(--color-primary-50)]"
               >
                 <CompanyLogo
                   companyId={c.id}

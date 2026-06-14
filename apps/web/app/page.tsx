@@ -2,15 +2,19 @@ import type { Metadata } from 'next';
 import { loadHomePageData } from '../lib/home/queries';
 import { JsonLd } from '../lib/seo';
 import {
+  FaqSection,
   FeaturedCompanies,
   Hero,
+  IndustriesGrid,
   PopularCitiesGrid,
   PopularSkillsGrid,
   RecentArticles,
   RecruiterCta,
+  RolesGrid,
   SiteFooter,
   SiteHeader,
   TrustStrip,
+  WhyJobPortal,
 } from '../components/home';
 
 // Public homepage. SSR + 30-min revalidate (counts can lag half an hour;
@@ -56,16 +60,20 @@ export default async function HomePage() {
       <SiteHeader />
 
       <main>
-        <Hero activeJobsCount={data.counts.activeJobs} />
+        <Hero activeJobsCount={data.counts.activeJobs} cities={data.popularCities} />
         <TrustStrip
           activeJobs={data.counts.activeJobs}
           companies={data.counts.companies}
           recruiters={data.counts.recruiters}
         />
+        <IndustriesGrid industries={data.topIndustries} />
+        <RolesGrid roles={data.topRoles} />
         <PopularCitiesGrid cities={data.popularCities} />
         <PopularSkillsGrid skills={data.popularSkills} />
         <FeaturedCompanies companies={data.featuredCompanies} />
+        <WhyJobPortal />
         <RecentArticles articles={data.recentArticles} />
+        <FaqSection />
         <RecruiterCta />
       </main>
 

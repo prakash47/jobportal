@@ -31,7 +31,7 @@ export function PopularCitiesGrid({ cities }: Props) {
           <li key={c.slug}>
             <Link
               href={`/jobs?city=${encodeURIComponent(c.slug)}`}
-              className="group flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-3 transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-muted)]"
+              className="group flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-3 transition-colors hover:border-[var(--color-primary-300)] hover:bg-[var(--color-primary-50)]"
             >
               <span className="flex items-center gap-2 truncate">
                 <MapPin
