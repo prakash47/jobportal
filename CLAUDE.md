@@ -319,7 +319,7 @@ git push --follow-tags
 4. Branch names: lowercase, hyphen-separated, type-prefixed (no spaces, no camelCase, no underscores).
 5. Keep feature branches short-lived (≤ ~1 week). Long-lived branches drift and create merge pain.
 6. Before starting any branch, `git checkout develop && git pull` so the base is the latest integration tip.
-7. After a successful merge, delete the branch both locally (`git branch -d`) and on remote (`git push origin --delete`).
+7. After a successful merge, **do NOT delete the feature branch** — keep it on both local and remote (owner preference, set 2026-06-14, overrides the old "delete after merge" rule). Branches accumulate intentionally; the owner prunes them manually if/when desired.
 8. Releases use `git merge --no-ff develop` on `main` (preserves the merge commit for traceability) + an annotated tag `vX.Y.Z`, pushed with `--follow-tags`.
 
 ---

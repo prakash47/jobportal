@@ -2,7 +2,12 @@
 
 > India-focused job-search and recruitment platform. Modeled functionally on Naukri.com; designed with the visual restraint of Linear, Stripe, and Vercel.
 
-> **Setting up on a new machine?** Read [`MIGRATION.md`](./MIGRATION.md) for clone-and-run steps + the Claude Code handoff prompt. [`CLAUDE.md`](./CLAUDE.md) is the project's locked stack + design rules; [`PROGRESS.md`](./PROGRESS.md) is the running record of every PR shipped.
+> **👋 New to the team? Read these three docs in order:**
+> 1. [`ARCHITECTURE.md`](./ARCHITECTURE.md) — what the system is and how the pieces fit together.
+> 2. [`ONBOARDING.md`](./ONBOARDING.md) — set up your machine from clone to a fully running local stack.
+> 3. [`DEVELOPMENT.md`](./DEVELOPMENT.md) — the branching + merge workflow you must follow.
+>
+> **Setting up on a new machine?** [`ONBOARDING.md`](./ONBOARDING.md) is the full setup guide; [`MIGRATION.md`](./MIGRATION.md) has the Claude Code handoff prompt. [`CLAUDE.md`](./CLAUDE.md) is the project's locked stack + engineering rules; [`PROGRESS.md`](./PROGRESS.md) is the running record of every PR shipped.
 
 [![CI](https://github.com/prakash47/jobportal/actions/workflows/ci.yml/badge.svg)](https://github.com/prakash47/jobportal/actions)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-red.svg)](#license)
