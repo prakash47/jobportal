@@ -6,18 +6,22 @@ import { Logo } from '../brand/Logo';
 // global SiteHeader that every route opts into is its own PR (touches every
 // existing page). Keep this lean — logo, three nav anchors, sign-in, primary
 // recruiter CTA. No header search — the hero owns it.
+//
+// Layout: a 3-column grid (1fr / auto / 1fr) rather than flex+justify-between,
+// so the centre nav stays in the header's true centre regardless of the
+// (asymmetric) logo and CTA widths on either side.
 
 const RECRUITER_URL = process.env.NEXT_PUBLIC_RECRUITER_URL ?? 'http://localhost:3001';
 
 export function SiteHeader() {
   return (
     <header className="border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
-      <div className="mx-auto flex h-14 w-full max-w-[var(--container-max)] items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" aria-label="Career Queue — home" className="flex items-center">
+      <div className="mx-auto grid h-14 w-full max-w-[var(--container-max)] grid-cols-[1fr_auto_1fr] items-center px-4 sm:px-6 lg:px-8">
+        <Link href="/" aria-label="Career Queue — home" className="flex items-center justify-self-start">
           <Logo variant="mark" priority className="h-8 w-auto" />
         </Link>
 
-        <nav className="hidden items-center gap-6 md:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-6 justify-self-center md:flex" aria-label="Primary">
           <Link
             href="/jobs"
             className="text-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
@@ -38,7 +42,7 @@ export function SiteHeader() {
           </Link>
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 justify-self-end">
           <Link
             href="/login"
             className="hidden text-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)] sm:block"
