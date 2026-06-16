@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Logo } from '../brand/Logo';
 
 const RECRUITER_URL = process.env.NEXT_PUBLIC_RECRUITER_URL ?? 'http://localhost:3001';
 
@@ -30,7 +31,7 @@ const COLUMNS: Array<{ title: string; links: FooterLink[] }> = [
   {
     title: 'For recruiters',
     links: [
-      { label: 'Hire on JobPortal', href: `${RECRUITER_URL}/register`, external: true },
+      { label: 'Hire on Career Queue', href: `${RECRUITER_URL}/register`, external: true },
       { label: 'Recruiter sign in', href: `${RECRUITER_URL}/login`, external: true },
     ],
   },
@@ -42,11 +43,8 @@ export function SiteFooter() {
       <div className="mx-auto w-full max-w-[var(--container-max)] px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-4">
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
-            <Link
-              href="/"
-              className="text-base font-semibold tracking-tight text-[var(--color-fg)]"
-            >
-              JobPortal
+            <Link href="/" aria-label="Career Queue — home" className="inline-flex items-center">
+              <Logo variant="lockup" className="h-12 w-auto" />
             </Link>
             <p className="mt-3 max-w-xs text-sm leading-relaxed text-[var(--color-fg-muted)]">
               A calmer job search built for India.
@@ -84,7 +82,7 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-12 flex flex-col items-start justify-between gap-2 border-t border-[var(--color-border)] pt-6 text-xs text-[var(--color-fg-subtle)] sm:flex-row sm:items-center">
-          <span>&copy; {new Date().getFullYear()} JobPortal</span>
+          <span>&copy; {new Date().getFullYear()} Career Queue</span>
           <span>Made in India</span>
         </div>
       </div>
