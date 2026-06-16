@@ -1,2 +1,9 @@
 @import "tailwindcss";
 @import "@jobportal/ui/styles/theme.css";
+
+/* Dark mode is driven by [data-theme="dark"] on <html> (set by @jobportal/ui's
+   ThemeProvider; surface tokens swap on that selector in theme.css). Register
+   the matching Tailwind variant so `dark:` utilities key off that attribute
+   rather than prefers-color-scheme — keeping utilities in lockstep with the
+   token swap. */
+@custom-variant dark ([data-theme="dark"] &);

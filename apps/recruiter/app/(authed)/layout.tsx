@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireRecruiter } from '../../lib/auth/require-recruiter';
 import { SidebarNav } from '../../components/SidebarNav';
 import { SignOutButton } from '../../components/SignOutButton';
+import { Logo } from '../../components/brand/Logo';
 
 // Linear-app-shell: fixed 240px sidebar + main pane. Sidebar holds the nav
 // and a sign-out at the bottom; header strip mirrors the (auth) layout for
@@ -19,9 +20,11 @@ export default async function AuthedLayout({ children }: { children: React.React
           <div className="space-y-6">
             <Link
               href="/dashboard"
-              className="block px-3 text-sm font-semibold tracking-tight text-[var(--color-fg)]"
+              aria-label="Career Queue Recruiter — dashboard"
+              className="flex items-center gap-2 px-3"
             >
-              JobPortal · Recruiter
+              <Logo variant="mark" priority className="h-7 w-auto" />
+              <span className="text-sm font-medium text-[var(--color-fg-muted)]">Recruiter</span>
             </Link>
             <SidebarNav />
           </div>
