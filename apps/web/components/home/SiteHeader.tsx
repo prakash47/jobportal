@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Button } from '@jobportal/ui';
+import { Logo } from '../brand/Logo';
 
 // Homepage-scoped header. Other routes still use their per-page chrome; a
 // global SiteHeader that every route opts into is its own PR (touches every
@@ -12,11 +13,8 @@ export function SiteHeader() {
   return (
     <header className="border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
       <div className="mx-auto flex h-14 w-full max-w-[var(--container-max)] items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link
-          href="/"
-          className="text-base font-semibold tracking-tight text-[var(--color-fg)]"
-        >
-          JobPortal
+        <Link href="/" aria-label="Career Queue — home" className="flex items-center">
+          <Logo variant="mark" priority className="h-8 w-auto" />
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex" aria-label="Primary">
@@ -48,7 +46,7 @@ export function SiteHeader() {
             Sign in
           </Link>
           <Button asChild variant="secondary" size="sm">
-            <a href={RECRUITER_URL}>Hire on JobPortal</a>
+            <a href={RECRUITER_URL}>Hire on Career Queue</a>
           </Button>
         </div>
       </div>
