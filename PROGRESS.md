@@ -15,7 +15,7 @@
 - **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Local stack fully demo-ready end-to-end: every route serves, all 4 SEO landing patterns work, recruiter funnel populated, homepage company tiles show initials-on-color monogram fallbacks (no more empty Building2 icons).
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
 - **Branch state**: `develop` is the integration tip (40 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: PR #40 — `feature/logo-monograms` (closes chip #12 — homepage FeaturedCompanies tiles now reuse the shared `CompanyLogo` initials-monogram fallback instead of a generic Building2 icon).
+- **Last merge**: `feature/header-footer-branding` — Career Queue (CQ) logo across the web header/footer + recruiter portal chrome, plus a 3-col-grid fix that centres the homepage header nav. (Note: the snapshot below predates a few `develop` merges that were not individually logged here — naukri-redesign, collaborator-onboarding-docs, login pages.)
 - **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. **All 25 probed public routes return expected status codes** (200/307/404). ES indices populated (50 jobs, 12 companies, 3 articles in `jobs-v4`, `companies-v4`, `articles-v4`).
 - **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (now with stable Job IDs 100001-100050 and Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs.
 - **Test counts on develop**: 235 API + **173 web** (was 163; +10 catch-all dispatch tests) + 37 feature-flags + 18 observability = 463 unit tests.
@@ -51,6 +51,18 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### `feature/header-footer-branding` · 2026-06-17
+
+Career Queue (CQ) brand rollout across the job-seeker + recruiter chrome. CLI merge (no PR; no SRS section — branding/UI). Three commits:
+
+1. **web** — replaced the text "JobPortal" wordmark in the homepage `SiteHeader` (CQ monogram) and `SiteFooter` (full lockup) with the supplied CQ logo, and renamed the visible header/footer copy to "Career Queue" ("Hire on Career Queue", "© Career Queue"). New `apps/web/components/brand/Logo.tsx` (mark/lockup variants) renders the colour logo on light surfaces and the white reverse logo under `[data-theme="dark"]`; registered a `dark` Tailwind variant in `globals.css` (none existed before). Brand kit saved under `apps/web/public/brand/` — 5 source PNGs (all transparent RGBA, 2967×1784) + 4 web-optimised derivatives `cq-{mark,logo}-{color,white}.png` (monogram cropped above the wordmark for the slim header).
+2. **recruiter** — mirrored the same in the `(auth)` header and `(authed)` sidebar (CQ mark + a muted "Recruiter" qualifier). Assets copied to `apps/recruiter/public/brand/`; matching `Logo.tsx` + `dark` variant. `Logo` is intentionally duplicated per app (each Next app serves its own `/public/brand`); consolidating into `@jobportal/ui` is a noted follow-up.
+3. **web fix** — the homepage header nav (Jobs / Companies / Career advice) sat left-of-centre after the logo swap, because flex `justify-between` centres the nav between the asymmetric logo/CTA, not in the header's true centre. Switched the header container to a 3-col grid `[1fr auto 1fr]`; nav is now truly centred, logo pinned left, CTA right, mobile unaffected.
+
+**Deferred (owner decision)**: the site-wide rebrand — page `<title>`/metadata, JSON-LD `name`, and other routes' chrome still read "JobPortal". Only the header/footer + recruiter-portal chrome text changed. Dark mode remains dormant in both apps (no `ThemeProvider` mounted), so the white logo is wired-but-inactive until that lands — a natural follow-up.
+
+**Gate (integrated state)**: workspace typecheck 11/11, full test suite green (api 235 + web 181 + auth/feature-flags/observability), `pnpm build` 4/4 apps green with the local stack up. No new tests (presentational change; `Logo` is a 4-line image swap).
 
 ### PR #40 — `feature/logo-monograms` · 2026-05-17
 
