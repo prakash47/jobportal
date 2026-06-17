@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@theme {
+  --gradient-brand: linear-gradient(135deg, #192249, #22A0DA);
+  --gradient-brand-soft: linear-gradient(135deg, #eef, #def);
+  --glow-cyan: 0 12px 40px -12px rgba(34,160,218,0.4);
+  --shadow-float: 0 4px 12px rgba(25,34,73,0.08);
+  --color-bg-elevated: #fff;
+  --color-accent-500: #22A0DA;
+  --color-primary-600: #192249;
+  --duration-base: 200ms;
+  --ease-out: cubic-bezier(0.16,1,0.3,1);
+}

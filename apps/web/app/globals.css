@@ -7,3 +7,76 @@
    rather than prefers-color-scheme — keeping utilities in lockstep with the
    token swap. */
 @custom-variant dark ([data-theme="dark"] &);
+
+/* ── Home redesign: one motion language ───────────────────────────────────
+   A single entrance keyframe drives both the hero load entrance (.rise, with
+   staggered inline animation-delay) and the scroll-triggered <Reveal> (.reveal,
+   toggled by an IntersectionObserver). Transform+opacity only ⇒ zero CLS.
+   <Reveal> renders its final visible state by default; the animation only runs
+   once JS sets data-revealed, so SSR / no-JS / reduced-motion never hide content. */
+@keyframes fade-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@layer utilities {
+  .rise { animation: fade-rise var(--duration-slow) var(--ease-out) both; }
+  .reveal[data-revealed="true"] { animation: fade-rise var(--duration-slow) var(--ease-out) both; }
+
+  /* One disciplined hover-lift, reused on every grid card. Depth is the
+     navy-tinted --shadow-lift token. Replaces a tile's `transition-colors`. */
+  .card-lift {
+    transition:
+      transform var(--duration-base) var(--ease-out),
+      box-shadow var(--duration-base) var(--ease-out),
+      border-color var(--duration-base) var(--ease-out),
+      background-color var(--duration-base) var(--ease-out);
+  }
+  .card-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lift);
+  }
+
+  /* ── Glass + gradient recipes (modern redesign) ──────────────────────────
+     One codified glass recipe each so blur usage stays countable and the diff
+     reviewable. Bevel = an inset top catch-light via box-shadow (no pseudo,
+     no stacking issues). Glass is only used OVER the aurora / elevated
+     regions where contrast was checked. */
+  .glass {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-card), inset 0 1px 0 0 rgba(255, 255, 255, 0.65);
+  }
+  .glass-lg {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-float), inset 0 1px 0 0 rgba(255, 255, 255, 0.7);
+  }
+  /* Gradient ring with zero extra DOM (padding-box fill + border-box gradient).
+     Use on plain (non-glass) surfaces only — it owns `background`. */
+  .gradient-border {
+    border: 1px solid transparent;
+    background:
+      linear-gradient(var(--color-bg-elevated), var(--color-bg-elevated)) padding-box,
+      var(--gradient-brand) border-box;
+  }
+  /* Gradient ink for ONE hero keyword. Solid navy declared FIRST so
+     no-clip / forced-colors / print degrade to legible navy. */
+  .gradient-text {
+    color: var(--color-primary-600);
+    background-image: var(--gradient-text);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .reveal[data-revealed="true"] { animation: none; }
+  .card-lift:hover { transform: none; }
+}

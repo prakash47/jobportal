@@ -1,6 +1,8 @@
 export { SiteHeader } from './SiteHeader';
 export { Hero } from './Hero';
 export { TrustStrip } from './TrustStrip';
+export { HowItWorks } from './HowItWorks';
+export { BentoValue } from './BentoValue';
 export { SectionHeading } from './SectionHeading';
 export { IndustriesGrid } from './IndustriesGrid';
 export { RolesGrid } from './RolesGrid';

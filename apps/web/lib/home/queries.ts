@@ -74,6 +74,21 @@ export interface RecentArticle {
   coverImageUrl: string | null;
 }
 
+// Real ACTIVE jobs for the hero floating-card cluster (server-rendered proof
+// of inventory). Salary stays in paise; the card formats to LPA.
+export interface HeroJob {
+  canonicalSlug: string;
+  title: string;
+  companyId: number;
+  companyName: string;
+  companyLogoUrl: string | null;
+  cityName: string | null;
+  salaryMinPaise: number | null;
+  salaryMaxPaise: number | null;
+  workMode: string;
+  postedAt: Date;
+}
+
 export interface HomePageData {
   counts: { activeJobs: number; companies: number; recruiters: number };
   topIndustries: IndustryItem[];
@@ -82,6 +97,7 @@ export interface HomePageData {
   popularSkills: PopularItem[];
   featuredCompanies: FeaturedCompany[];
   recentArticles: RecentArticle[];
+  heroJobs: HeroJob[];
 }
 
 // Pure transform: takes `{ id, jobCount }` pairs (in priority order) and a
@@ -126,6 +142,7 @@ export async function loadHomePageData(): Promise<HomePageData> {
     skillRows,
     featured,
     recentArticles,
+    heroJobsRaw,
   ] = await Promise.all([
       prisma.job.count({ where: { status: 'ACTIVE' } }),
       prisma.company.count(),
@@ -186,6 +203,23 @@ export async function loadHomePageData(): Promise<HomePageData> {
           readTimeMinutes: true,
           tags: true,
           coverImageUrl: true,
+        },
+      }),
+
+      // Hero cluster — newest 3 ACTIVE jobs. Uses @@index([status, postedAt]).
+      prisma.job.findMany({
+        where: { status: 'ACTIVE' },
+        orderBy: { postedAt: 'desc' },
+        take: 3,
+        select: {
+          canonicalSlug: true,
+          title: true,
+          salaryMinPaise: true,
+          salaryMaxPaise: true,
+          workMode: true,
+          postedAt: true,
+          company: { select: { id: true, name: true, logoUrl: true } },
+          primaryCity: { select: { name: true } },
         },
       }),
     ]);
@@ -261,6 +295,19 @@ export async function loadHomePageData(): Promise<HomePageData> {
     openingsCount: openByCompany.get(c.id) ?? 0,
   }));
 
+  const heroJobs: HeroJob[] = heroJobsRaw.map((j) => ({
+    canonicalSlug: j.canonicalSlug,
+    title: j.title,
+    companyId: j.company.id,
+    companyName: j.company.name,
+    companyLogoUrl: j.company.logoUrl,
+    cityName: j.primaryCity?.name ?? null,
+    salaryMinPaise: j.salaryMinPaise,
+    salaryMaxPaise: j.salaryMaxPaise,
+    workMode: j.workMode,
+    postedAt: j.postedAt,
+  }));
+
   return {
     counts: { activeJobs, companies, recruiters },
     topIndustries: hydratePopularItems(industryPairs, industries).map((i) => ({
@@ -273,5 +320,6 @@ export async function loadHomePageData(): Promise<HomePageData> {
     popularSkills: hydratePopularItems(skillPairs, skills),
     featuredCompanies,
     recentArticles,
+    heroJobs,
   };
 }

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { loadHomePageData } from '../lib/home/queries';
 import { JsonLd } from '../lib/seo';
 import {
+  BentoValue,
   FaqSection,
   FeaturedCompanies,
   Hero,
@@ -14,7 +15,6 @@ import {
   SiteFooter,
   SiteHeader,
   TrustStrip,
-  WhyJobPortal,
 } from '../components/home';
 
 // Public homepage. SSR + 30-min revalidate (counts can lag half an hour;
@@ -60,18 +60,22 @@ export default async function HomePage() {
       <SiteHeader />
 
       <main>
-        <Hero activeJobsCount={data.counts.activeJobs} cities={data.popularCities} />
+        <Hero
+          activeJobsCount={data.counts.activeJobs}
+          cities={data.popularCities}
+          jobs={data.heroJobs}
+        />
         <TrustStrip
           activeJobs={data.counts.activeJobs}
           companies={data.counts.companies}
           recruiters={data.counts.recruiters}
         />
+        <BentoValue />
         <IndustriesGrid industries={data.topIndustries} />
         <RolesGrid roles={data.topRoles} />
         <PopularCitiesGrid cities={data.popularCities} />
         <PopularSkillsGrid skills={data.popularSkills} />
         <FeaturedCompanies companies={data.featuredCompanies} />
-        <WhyJobPortal />
         <RecentArticles articles={data.recentArticles} />
         <FaqSection />
         <RecruiterCta />

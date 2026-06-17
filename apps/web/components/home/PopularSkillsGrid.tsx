@@ -1,15 +1,16 @@
 import Link from 'next/link';
+import { cn } from '@jobportal/ui';
 import type { PopularItem } from '../../lib/home/queries';
 import { SectionHeading } from './SectionHeading';
+import { Reveal } from './Reveal';
 
 interface Props {
   skills: PopularItem[];
 }
 
-// Same href-target rationale as PopularCitiesGrid: `/jobs?skill=<slug>`
-// instead of `/<slug>-jobs` SEO landing, until chip #5 lands. Skill tiles
-// are denser than city tiles (no icon — keeps the row compact, helps the
-// type breathe).
+// Tag-cloud that rhymes the hero quick-filter chips. Glass chips on the neutral
+// band; the top 3 highest-count skills wear a faint brand-soft tint for
+// hierarchy. Color-only hover (no lift) keeps it airy at density.
 
 const fmt = (n: number) => n.toLocaleString('en-IN');
 
@@ -24,23 +25,28 @@ export function PopularSkillsGrid({ skills }: Props) {
         description="The skills companies are hiring against this week."
         cta={{ label: 'All filters', href: '/jobs' }}
       />
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {skills.map((s) => (
-          <li key={s.slug}>
-            <Link
-              href={`/jobs?skill=${encodeURIComponent(s.slug)}`}
-              className="group flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-3 transition-colors hover:border-[var(--color-primary-300)] hover:bg-[var(--color-primary-50)]"
-            >
-              <span className="truncate text-sm font-medium text-[var(--color-fg)]">
+      <Reveal>
+        <ul className="flex flex-wrap gap-2.5">
+          {skills.map((s, index) => (
+            <li key={s.slug}>
+              <Link
+                href={`/jobs?skill=${encodeURIComponent(s.slug)}`}
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-full border border-white/60 px-3 py-1.5 text-sm font-medium transition-colors hover:border-[var(--color-primary-300)] hover:bg-[image:var(--gradient-brand-soft)] hover:text-[var(--color-primary-700)]',
+                  index < 3
+                    ? 'bg-[image:var(--gradient-brand-soft)] text-[var(--color-primary-700)]'
+                    : 'bg-white/80 text-[var(--color-fg-muted)]',
+                )}
+              >
                 {s.name}
-              </span>
-              <span className="shrink-0 text-xs tabular-nums text-[var(--color-fg-muted)]">
-                {fmt(s.jobCount)}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+                <span className="text-xs tabular-nums text-[var(--color-fg-subtle)]">
+                  {fmt(s.jobCount)}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Reveal>
     </section>
   );
 }

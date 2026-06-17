@@ -4,12 +4,12 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@jobportal/ui';
+import { JsonLd } from '../../lib/seo';
 import { SectionHeading } from './SectionHeading';
 
-// FAQ accordion — structural inspiration from Naukri's recruiter-landing FAQ,
-// but jobseeker-facing and answering the questions our freemium model actually
-// raises. Content is hardcoded here (no CMS dependency); promote to a content
-// type if it grows past ~10 entries.
+// FAQ accordion — jobseeker-facing, answering the questions our freemium model
+// actually raises. Open items get a gradient left rail. A FAQPage JSON-LD block
+// ships the same content for rich results (SEO, CLAUDE.md §6).
 
 const FAQS: ReadonlyArray<{ q: string; a: string }> = [
   {
@@ -39,14 +39,27 @@ const FAQS: ReadonlyArray<{ q: string; a: string }> = [
 ];
 
 export function FaqSection() {
+  const faqJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: FAQS.map((f) => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a },
+    })),
+  };
+
   return (
     <section className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <JsonLd value={faqJsonLd} />
       <SectionHeading eyebrow="FAQ" title="Questions, answered" />
       <Accordion type="single" collapsible className="mt-2 border-t border-[var(--color-border)]">
         {FAQS.map((f) => (
           <AccordionItem key={f.q} value={f.q}>
-            <AccordionTrigger>{f.q}</AccordionTrigger>
-            <AccordionContent>{f.a}</AccordionContent>
+            <AccordionTrigger className="transition-[padding,border-color] duration-[var(--duration-base)] data-[state=open]:border-l-[3px] data-[state=open]:border-l-[var(--color-primary-600)] data-[state=open]:[border-image:var(--gradient-brand)_1] data-[state=open]:pl-4">
+              {f.q}
+            </AccordionTrigger>
+            <AccordionContent className="max-w-[60ch]">{f.a}</AccordionContent>
           </AccordionItem>
         ))}
       </Accordion>

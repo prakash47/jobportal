@@ -36,10 +36,30 @@ export interface LogoProps {
   className?: string;
   /** Set on above-the-fold placements (header) to skip lazy-loading. */
   priority?: boolean;
+  /**
+   * Force the white reverse logo regardless of theme. Use on fixed dark
+   * surfaces (the navy footer / CTA panel) whose background does NOT follow
+   * the light/dark theme swap — there the auto color-on-light / white-on-dark
+   * logic would show the navy logo on navy. `onDark` short-circuits that.
+   */
+  onDark?: boolean;
 }
 
-export function Logo({ variant = 'mark', className = 'h-8 w-auto', priority = false }: LogoProps) {
+export function Logo({
+  variant = 'mark',
+  className = 'h-8 w-auto',
+  priority = false,
+  onDark = false,
+}: LogoProps) {
   const a = ASSETS[variant];
+
+  // Fixed dark surface: always the white asset, no theme swap.
+  if (onDark) {
+    return (
+      <Image src={a.white} alt="" width={a.width} height={a.height} priority={priority} className={className} />
+    );
+  }
+
   return (
     <>
       <Image

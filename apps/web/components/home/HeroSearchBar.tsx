@@ -74,7 +74,7 @@ export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
     <form
       onSubmit={onSubmit}
       role="search"
-      className="mx-auto flex w-full max-w-3xl flex-col gap-2 rounded-xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-sm sm:flex-row sm:items-center sm:gap-0 sm:rounded-full sm:p-1.5"
+      className="glass-lg flex w-full max-w-xl flex-col gap-2 rounded-2xl p-2 transition-[border-color,box-shadow] duration-[var(--duration-base)] ease-[var(--ease-out)] focus-within:border-[var(--color-primary-400)] focus-within:shadow-[var(--shadow-float)] focus-within:ring-4 focus-within:ring-[var(--color-focus-ring)] sm:flex-row sm:items-center sm:gap-0 sm:rounded-full sm:p-1.5"
     >
       {/* What */}
       <div className="flex flex-1 items-center gap-2 px-3">
@@ -85,7 +85,7 @@ export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
           onChange={(e) => setWhat(e.target.value)}
           placeholder="Job title, skill, or company"
           aria-label="Job title, skill, or company"
-          className="h-11 w-full bg-transparent text-sm text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none"
+          className="h-11 w-full bg-transparent text-sm text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-elevated)]"
         />
       </div>
 
@@ -101,7 +101,7 @@ export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
           onChange={(e) => setWhere(e.target.value)}
           placeholder="Location"
           aria-label="Location"
-          className="h-11 w-full bg-transparent text-sm text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none"
+          className="h-11 w-full bg-transparent text-sm text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-elevated)]"
         />
         <datalist id="hero-cities">
           {cities.map((c) => (
@@ -119,7 +119,7 @@ export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
           value={exp}
           onChange={(e) => setExp(e.target.value)}
           aria-label="Experience"
-          className="h-11 w-full cursor-pointer bg-transparent text-sm text-[var(--color-fg)] focus:outline-none"
+          className="h-11 w-full cursor-pointer bg-transparent text-sm text-[var(--color-fg)] rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-elevated)]"
         >
           {EXPERIENCE_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -129,7 +129,12 @@ export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
         </select>
       </div>
 
-      <Button type="submit" size="lg" className="w-full shrink-0 sm:w-auto sm:rounded-full">
+      <Button
+        type="submit"
+        size="lg"
+        leadingIcon={<Search className="size-4" aria-hidden="true" />}
+        className="w-full shrink-0 hover:bg-[image:var(--gradient-brand)] hover:shadow-[var(--glow-cyan)] sm:w-auto sm:rounded-full sm:px-7"
+      >
         Search
       </Button>
     </form>
