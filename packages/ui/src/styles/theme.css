@@ -25,40 +25,46 @@
   --color-neutral-950: oklch(0.13  0.005 270);
 
   /* ============================================================
-   * Primary — JobPortal brand indigo
-   * --color-primary-600 = #393185 (canonical business primary)
-   * Built around the brand value at the -600 step so default CTAs,
-   * links, focus rings, and section eyebrows pick up the exact hex.
+   * Primary — Career Queue brand navy
+   * --color-primary-600 = #192249 (EXACT brand navy, lifted from the logo
+   * mark; verified to round-trip oklch -> sRGB to #192249). Anchored at the
+   * -600 step so default CTAs, links, focus rings, and section eyebrows pick
+   * up the exact brand hex. Steps below -600 deepen toward near-black navy;
+   * steps above are soft navy tints for hover/selected/badge surfaces.
+   * Hue 270.9 matches the neutral scale's cool tilt, so navy + greys agree.
    * ============================================================ */
-  --color-primary-50:  oklch(0.97  0.012 282);
-  --color-primary-100: oklch(0.92  0.030 282);
-  --color-primary-200: oklch(0.85  0.060 282);
-  --color-primary-300: oklch(0.76  0.090 282);
-  --color-primary-400: oklch(0.62  0.115 282);
-  --color-primary-500: oklch(0.48  0.130 282);
-  --color-primary-600: oklch(0.374 0.135 282);  /* #393185 */
-  --color-primary-700: oklch(0.32  0.125 282);
-  --color-primary-800: oklch(0.26  0.105 282);
-  --color-primary-900: oklch(0.20  0.080 282);
-  --color-primary-950: oklch(0.14  0.055 282);
+  --color-primary-50:  oklch(0.970 0.010 270.9);
+  --color-primary-100: oklch(0.935 0.020 270.9);
+  --color-primary-200: oklch(0.875 0.034 270.9);
+  --color-primary-300: oklch(0.790 0.050 270.9);
+  --color-primary-400: oklch(0.620 0.066 270.9);
+  --color-primary-500: oklch(0.440 0.078 270.9);
+  --color-primary-600: oklch(0.267 0.073 270.9);  /* #192249 — exact brand navy */
+  --color-primary-700: oklch(0.230 0.064 270.9);
+  --color-primary-800: oklch(0.195 0.054 270.9);
+  --color-primary-900: oklch(0.160 0.044 270.9);
+  --color-primary-950: oklch(0.120 0.032 270.9);
 
   /* ============================================================
-   * Accent — JobPortal brand pink (#f50051)
-   * Sparingly used: hero "live" pulse, recruiter CTA underline,
-   * one focal hover state. Per CLAUDE.md §2, accents stay restrained —
-   * if you find yourself painting whole surfaces with it, stop.
+   * Accent — Career Queue brand cyan
+   * --color-accent-500 = #22A0DA (EXACT brand cyan, the logo arrow).
+   * Sparingly used: hero "live" pulse, the section-eyebrow rule, link/icon
+   * hover accents, and as a fill on the dark navy surfaces. Cyan is light
+   * (2.95:1 on white) so it is NEVER used for body text or thin UI strokes
+   * on a light surface — only as a fill, an accent mark, or against navy.
+   * Per CLAUDE.md §2, accents stay restrained.
    * ============================================================ */
-  --color-accent-50:  oklch(0.97  0.012 16);
-  --color-accent-100: oklch(0.93  0.035 16);
-  --color-accent-200: oklch(0.86  0.080 16);
-  --color-accent-300: oklch(0.78  0.140 16);
-  --color-accent-400: oklch(0.70  0.205 16);
-  --color-accent-500: oklch(0.616 0.246 16);   /* #f50051 */
-  --color-accent-600: oklch(0.54  0.235 16);
-  --color-accent-700: oklch(0.46  0.205 16);
-  --color-accent-800: oklch(0.38  0.170 16);
-  --color-accent-900: oklch(0.30  0.135 16);
-  --color-accent-950: oklch(0.20  0.090 16);
+  --color-accent-50:  oklch(0.975 0.014 235.1);
+  --color-accent-100: oklch(0.940 0.032 235.1);
+  --color-accent-200: oklch(0.890 0.058 235.1);
+  --color-accent-300: oklch(0.820 0.086 235.1);
+  --color-accent-400: oklch(0.745 0.112 235.1);
+  --color-accent-500: oklch(0.668 0.133 235.1);   /* #22A0DA — exact brand cyan */
+  --color-accent-600: oklch(0.590 0.128 235.1);
+  --color-accent-700: oklch(0.500 0.110 235.1);
+  --color-accent-800: oklch(0.410 0.090 235.1);
+  --color-accent-900: oklch(0.330 0.070 235.1);
+  --color-accent-950: oklch(0.225 0.048 235.1);
 
   /* ============================================================
    * Semantic — functional only, NOT brand accents
@@ -79,6 +85,46 @@
   --color-border:       var(--color-neutral-200);
   --color-border-strong:var(--color-neutral-300);
   --color-ring:         var(--color-primary-500);
+
+  /* ============================================================
+   * Elevation — depth made of brand navy (#192249). Used by the
+   * shared hover-lift, the hero search surface, and the frosted
+   * header. Navy-tinted shadows read as authored, not generic grey.
+   * ============================================================ */
+  --shadow-color-card: rgba(25, 34, 73, 0.05);
+  --shadow-card: 0 1px 2px rgba(25, 34, 73, 0.05);
+  --shadow-lift: 0 2px 4px rgba(25, 34, 73, 0.05), 0 12px 24px -16px rgba(25, 34, 73, 0.18);
+
+  /* Soft tints resolved once here so Tailwind arbitrary classes can
+   * reference a clean var() instead of nesting color-mix() inside [...]. */
+  --color-focus-ring:      color-mix(in oklch, var(--color-primary-500) 22%, transparent);
+  --color-seam-accent:     color-mix(in oklch, var(--color-accent-500) 28%, transparent);
+  --color-header-scrolled: color-mix(in oklch, var(--color-bg-elevated) 82%, transparent);
+
+  /* ============================================================
+   * Modern "Confident light studio" system — ONE governed gradient
+   * (navy→cyan) + glass + deep elevation. Light-theme pass.
+   *   --gradient-brand  : FILL only (ends at accent-600). Panels, button
+   *                       hover, eyebrow rule, ≤3 gradient borders.
+   *   --gradient-text   : ENDS at accent-700 (~5.85:1 on white) so display
+   *                       gradient-text clears 4.5:1 across the sweep.
+   *   --gradient-mesh   : hero aurora, weighted right (text column stays light).
+   * ============================================================ */
+  --gradient-brand: linear-gradient(135deg, var(--color-primary-600) 0%, var(--color-primary-500) 42%, var(--color-accent-600) 100%);
+  --gradient-text: linear-gradient(100deg, var(--color-primary-600) 0%, var(--color-accent-700) 100%);
+  --gradient-brand-soft: linear-gradient(135deg, var(--color-primary-50), var(--color-accent-50));
+  --gradient-mesh:
+    radial-gradient(48rem 34rem at 50% 32%, color-mix(in oklch, var(--color-accent-500) 16%, transparent), transparent 70%),
+    radial-gradient(40rem 30rem at 24% 40%, color-mix(in oklch, var(--color-primary-500) 12%, transparent), transparent 72%),
+    radial-gradient(40rem 30rem at 76% 40%, color-mix(in oklch, var(--color-accent-300) 11%, transparent), transparent 72%);
+
+  /* Floating-tier elevation (hero cluster + recruiter finale) + brand glow. */
+  --shadow-float: 0 4px 12px rgba(25, 34, 73, 0.08), 0 24px 48px -20px rgba(25, 34, 73, 0.28);
+  --glow-cyan: 0 12px 40px -12px color-mix(in oklch, var(--color-accent-500) 40%, transparent);
+
+  /* Glass recipe inputs (light only). */
+  --glass-bg: color-mix(in oklch, white 75%, transparent);
+  --glass-border: color-mix(in oklch, white 65%, transparent);
 
   /* ============================================================
    * Typography — type scale 12/14/16/18/20/24/30/36/48
@@ -131,6 +177,11 @@
   --color-fg-subtle:    var(--color-neutral-500);
   --color-border:       var(--color-neutral-800);
   --color-border-strong:var(--color-neutral-700);
+
+  /* Navy is invisible on a near-black surface — switch elevation to black. */
+  --shadow-color-card: rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 24px -16px rgba(0, 0, 0, 0.6);
 }
 
 /* ============================================================
