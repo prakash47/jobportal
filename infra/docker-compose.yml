@@ -2,6 +2,10 @@ services:
   postgres:
     image: postgres:18-alpine
     container_name: jp-postgres
+    # Auto-restart with the Docker daemon (survives Docker Desktop / WSL / host
+    # restarts) so local dev never starts against a dead database. Only a manual
+    # `docker compose down`/stop keeps it down.
+    restart: unless-stopped
     ports: ["5432:5432"]
     environment:
       POSTGRES_USER: jobportal
@@ -13,11 +17,13 @@ services:
   redis:
     image: redis:8-alpine
     container_name: jp-redis
+    restart: unless-stopped
     ports: ["6379:6379"]
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.4.0
     container_name: jp-elasticsearch
+    restart: unless-stopped
     ports: ["9200:9200"]
     environment:
       - discovery.type=single-node
