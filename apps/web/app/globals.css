@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "@jobportal/ui/styles/theme.css";
 
+/* Tailwind 4 auto-detects sources in THIS app, but not the workspace UI package
+   (it resolves via a node_modules symlink, which Tailwind ignores). Without
+   this, utility classes used ONLY in @jobportal/ui — e.g. the primary Button's
+   `bg-[var(--color-primary-600)]` — are never generated, leaving those elements
+   unstyled (transparent buttons). Scan the package source explicitly. */
+@source "../../../packages/ui/src";
+
 /* Dark mode is driven by [data-theme="dark"] on <html> (set by @jobportal/ui's
    ThemeProvider; surface tokens swap on that selector in theme.css). Register
    the matching Tailwind variant so `dark:` utilities key off that attribute

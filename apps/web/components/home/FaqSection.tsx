@@ -53,13 +53,15 @@ export function FaqSection() {
     <section className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
       <JsonLd value={faqJsonLd} />
       <SectionHeading eyebrow="FAQ" title="Questions, answered" />
-      <Accordion type="single" collapsible className="mt-2 border-t border-[var(--color-border)]">
+      <Accordion type="single" collapsible className="space-y-3">
         {FAQS.map((f) => (
-          <AccordionItem key={f.q} value={f.q}>
-            <AccordionTrigger className="transition-[padding,border-color] duration-[var(--duration-base)] data-[state=open]:border-l-[3px] data-[state=open]:border-l-[var(--color-primary-600)] data-[state=open]:[border-image:var(--gradient-brand)_1] data-[state=open]:pl-4">
-              {f.q}
-            </AccordionTrigger>
-            <AccordionContent className="max-w-[60ch]">{f.a}</AccordionContent>
+          <AccordionItem
+            key={f.q}
+            value={f.q}
+            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-5 shadow-[var(--shadow-card)] transition-colors hover:border-[var(--color-border-strong)] data-[state=open]:border-[var(--color-primary-300)]"
+          >
+            <AccordionTrigger className="py-4 text-left text-[15px]">{f.q}</AccordionTrigger>
+            <AccordionContent className="max-w-[60ch] pb-5 leading-relaxed">{f.a}</AccordionContent>
           </AccordionItem>
         ))}
       </Accordion>

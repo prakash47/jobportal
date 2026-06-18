@@ -1,5 +1,7 @@
 import { Briefcase, Building2, Users, ShieldCheck } from '@jobportal/ui/icons';
+import { SectionHeading } from './SectionHeading';
 import { Reveal } from './Reveal';
+import { CountUp } from './CountUp';
 
 interface TrustStripProps {
   activeJobs: number;
@@ -7,51 +9,66 @@ interface TrustStripProps {
   recruiters: number;
 }
 
-// Four floating glass stat cards — the quantitative masthead. Audited tabular
-// figures (no count-up), gradient-soft icon chips, and one faint cyan corner
-// glow on the freemium "₹0" card. SSR numbers, en-IN grouping.
-
-const fmt = (n: number) => n.toLocaleString('en-IN');
+// "By the numbers" stats band — a framed section (eyebrow + title) with rich
+// glass cards: gradient-soft icon chips, large count-up figures, a label and a
+// sublabel. The freemium "₹0" is the featured, gradient-bordered card. Sits on
+// a faint cyan wash; cards lift on hover and the numbers count up on scroll.
 
 export function TrustStrip({ activeJobs, companies, recruiters }: TrustStripProps) {
-  const stats: ReadonlyArray<{ value: string; label: string; icon: typeof Briefcase; glow?: boolean }> = [
-    { value: fmt(activeJobs), label: 'Active jobs', icon: Briefcase },
-    { value: fmt(companies), label: 'Companies hiring', icon: Building2 },
-    { value: fmt(recruiters), label: 'Hiring teams', icon: Users },
-    { value: '₹0', label: 'For job seekers', icon: ShieldCheck, glow: true },
+  const stats: ReadonlyArray<{ icon: typeof Briefcase; value: number; label: string; sub: string }> = [
+    { icon: Briefcase, value: activeJobs, label: 'Active jobs', sub: 'Open roles right now' },
+    { icon: Building2, value: companies, label: 'Companies hiring', sub: 'Across every industry' },
+    { icon: Users, value: recruiters, label: 'Hiring teams', sub: 'Verified recruiters' },
   ];
 
   return (
-    <section className="mx-auto w-full max-w-[var(--container-max)] px-4 py-12 sm:px-6 sm:py-14 lg:px-8">
-      <Reveal>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
-          {stats.map((s) => {
-            const Icon = s.icon;
-            return (
+    <section
+      className="relative border-b border-[var(--color-border)] py-16 sm:py-20"
+      style={{
+        backgroundImage:
+          'radial-gradient(55rem 20rem at 50% 0%, color-mix(in oklch, var(--color-accent-500) 5%, transparent), transparent 72%)',
+      }}
+    >
+      <div className="mx-auto w-full max-w-[var(--container-max)] px-4 sm:px-6 lg:px-8">
+        <SectionHeading
+          eyebrow="By the numbers"
+          title="Opportunity, in real numbers"
+          description="Open roles from companies hiring across India — and it's free for job seekers, always."
+        />
+        <Reveal>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {stats.map((s) => {
+              const Icon = s.icon;
+              return (
+                <div key={s.label} className="glass card-lift rounded-2xl p-6">
+                  <span className="flex size-11 items-center justify-center rounded-xl bg-[image:var(--gradient-brand-soft)] text-[var(--color-primary-700)]">
+                    <Icon className="size-5" aria-hidden="true" />
+                  </span>
+                  <div className="mt-4 text-4xl font-bold tracking-tight tabular-nums text-[var(--color-fg)] sm:text-5xl">
+                    <CountUp value={s.value} />
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--color-fg)]">{s.label}</div>
+                  <div className="mt-0.5 text-xs text-[var(--color-fg-subtle)]">{s.sub}</div>
+                </div>
+              );
+            })}
+
+            {/* Featured freemium stat. */}
+            <div className="gradient-border card-lift relative overflow-hidden rounded-2xl p-6 shadow-[var(--shadow-card)]">
               <div
-                key={s.label}
-                className="glass card-lift relative overflow-hidden rounded-xl p-6 text-center"
-              >
-                {s.glow && (
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute -right-8 -top-8 size-28 rounded-full bg-[var(--color-accent-500)] opacity-[0.10] blur-2xl"
-                  />
-                )}
-                <span className="mx-auto mb-3 flex size-9 items-center justify-center rounded-md bg-[image:var(--gradient-brand-soft)] text-[var(--color-primary-700)]">
-                  <Icon className="size-4" aria-hidden="true" />
-                </span>
-                <div className="text-3xl font-bold tracking-tight tabular-nums text-[var(--color-fg)] sm:text-4xl">
-                  {s.value}
-                </div>
-                <div className="mt-1 text-xs font-medium uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                  {s.label}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </Reveal>
+                aria-hidden="true"
+                className="pointer-events-none absolute -right-8 -top-8 size-28 rounded-full bg-[var(--color-accent-500)] opacity-[0.12] blur-2xl"
+              />
+              <span className="flex size-11 items-center justify-center rounded-xl bg-[image:var(--gradient-brand-soft)] text-[var(--color-primary-700)]">
+                <ShieldCheck className="size-5" aria-hidden="true" />
+              </span>
+              <div className="mt-4 text-4xl font-bold tracking-tight text-[var(--color-fg)] sm:text-5xl">₹0</div>
+              <div className="mt-1 text-sm font-semibold text-[var(--color-fg)]">For job seekers</div>
+              <div className="mt-0.5 text-xs text-[var(--color-fg-subtle)]">No paywalls, ever</div>
+            </div>
+          </div>
+        </Reveal>
+      </div>
     </section>
   );
 }

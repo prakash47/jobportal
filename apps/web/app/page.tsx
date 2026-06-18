@@ -60,11 +60,7 @@ export default async function HomePage() {
       <SiteHeader />
 
       <main>
-        <Hero
-          activeJobsCount={data.counts.activeJobs}
-          cities={data.popularCities}
-          jobs={data.heroJobs}
-        />
+        <Hero cities={data.popularCities} />
         <TrustStrip
           activeJobs={data.counts.activeJobs}
           companies={data.counts.companies}
