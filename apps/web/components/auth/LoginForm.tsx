@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Label } from '@jobportal/ui';
+import { apiErrorMessage } from '../../lib/auth/api-error';
+import { PasswordInput } from './PasswordInput';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -44,8 +46,8 @@ export function LoginForm({ onSuccess, next = '/', idPrefix = 'login' }: LoginFo
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(body.message ?? 'Login failed');
+        const body = await res.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(body, 'Login failed'));
       }
       if (onSuccess) onSuccess();
       else router.push(next);
@@ -74,9 +76,8 @@ export function LoginForm({ onSuccess, next = '/', idPrefix = 'login' }: LoginFo
       </div>
       <div className="space-y-1.5">
         <Label htmlFor={passwordId}>Password</Label>
-        <Input
+        <PasswordInput
           id={passwordId}
-          type="password"
           autoComplete="current-password"
           required
           value={password}
