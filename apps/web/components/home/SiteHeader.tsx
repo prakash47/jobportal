@@ -1,17 +1,17 @@
 import Link from 'next/link';
-import { ArrowRight } from '@jobportal/ui/icons';
+import { getGoogleEnabled } from '../../lib/auth/google-status';
 import { Logo } from '../brand/Logo';
 import { ScrollHeaderChrome } from './ScrollHeaderChrome';
-import { MobileMenu } from './MobileMenu';
+import { HeaderAuthActions } from './HeaderAuthActions';
 
-// Homepage header. Desktop (lg+): logo · centred nav · modern Sign in + a
-// gradient "Hire" CTA. Below lg (phones AND tablets): logo + hamburger drawer.
-// The lg breakpoint avoids cramming the wide CTA + nav at ~768px; the 3-section
-// flex (flex-1 / nav / flex-1) keeps the nav centred while everything stays in
-// flow, so the actions can never overlap the links.
+// Homepage header. Desktop (lg+): logo · centred nav · Sign in (outline) +
+// Register (solid navy) + a flat "Hire" CTA. Below lg (phones AND tablets):
+// logo + hamburger drawer. The lg breakpoint avoids cramming the actions + nav
+// at ~768px; the 3-section flex (flex-1 / nav / flex-1) keeps the nav centred
+// while everything stays in flow, so the actions can never overlap the links.
 //
-// The recruiter CTA is a plain styled <a> rather than <Button asChild> — the
-// Radix Slot clone hydrated inconsistently inside the ScrollHeaderChrome client island.
+// The auth actions + mobile drawer live in the HeaderAuthActions client island
+// (it owns the shared auth popup). The nav links stay server-rendered for SEO.
 
 const NAV_LINKS: ReadonlyArray<{ label: string; href: string }> = [
   { label: 'Jobs', href: '/jobs' },
@@ -28,7 +28,9 @@ const navLinkClass =
 
 const RECRUITER_URL = process.env.NEXT_PUBLIC_RECRUITER_URL ?? 'http://localhost:3001';
 
-export function SiteHeader() {
+export async function SiteHeader() {
+  const googleEnabled = await getGoogleEnabled();
+
   return (
     <ScrollHeaderChrome>
       <div className="mx-auto flex h-14 w-full max-w-[var(--container-max)] items-center px-4 sm:px-6 lg:px-8">
@@ -46,27 +48,7 @@ export function SiteHeader() {
           ))}
         </nav>
 
-        <div className="flex flex-1 items-center justify-end gap-1.5 sm:gap-2">
-          {/* Modern ghost Sign in (desktop). */}
-          <Link
-            href="/login"
-            className="hidden h-9 items-center rounded-lg px-3.5 text-sm font-medium text-[var(--color-fg)] transition-colors hover:bg-[var(--color-bg-muted)] lg:inline-flex"
-          >
-            Sign in
-          </Link>
-
-          {/* Engaging gradient recruiter CTA (desktop): white bold text clears
-              large-text contrast across the navy→cyan sweep; lifts + glows on hover. */}
-          <a
-            href={RECRUITER_URL}
-            className="hidden h-9 items-center gap-1.5 rounded-lg bg-[image:var(--gradient-brand)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-card)] transition-all duration-[var(--duration-base)] ease-[var(--ease-out)] hover:-translate-y-px hover:shadow-[var(--glow-cyan)] lg:inline-flex"
-          >
-            Hire on Career Queue
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </a>
-
-          <MobileMenu links={NAV_LINKS} recruiterUrl={RECRUITER_URL} />
-        </div>
+        <HeaderAuthActions links={NAV_LINKS} recruiterUrl={RECRUITER_URL} googleEnabled={googleEnabled} />
       </div>
     </ScrollHeaderChrome>
   );

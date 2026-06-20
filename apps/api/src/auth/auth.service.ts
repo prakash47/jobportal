@@ -56,12 +56,28 @@ export class AuthService {
     ipAddress: string | undefined,
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     const user = await prisma.user.findUnique({ where: { email: input.email } });
-    const ok = user
-      ? await verifyPassword(input.password, user.passwordHash)
-      : await verifyPassword(input.password, await dummyHash()).then(() => false);
+    // OAuth-only users have passwordHash === null — password login must never
+    // succeed for them. Still run a dummy verify so timing leaks nothing.
+    const ok =
+      user && user.passwordHash
+        ? await verifyPassword(input.password, user.passwordHash)
+        : await verifyPassword(input.password, await dummyHash()).then(() => false);
 
     if (!user || !ok) throw new UnauthorizedException('Invalid email or password');
 
+    return this.issueSession(user, deviceInfo, ipAddress);
+  }
+
+  // Mint an access + refresh token pair for an already-authenticated user and
+  // persist the refresh session. The single place that turns "this is user X"
+  // into the source tokens for our HS256 cookies — shared by password login and
+  // Google OAuth. (refresh() keeps its own minting: rotation must atomically
+  // revoke the old session in the same transaction.)
+  async issueSession(
+    user: User,
+    deviceInfo: string | undefined,
+    ipAddress: string | undefined,
+  ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     const claims: AccessClaims = {
       sub: user.id,
       email: user.email,
@@ -206,6 +222,17 @@ export class AuthService {
     await prisma.session.updateMany({
       where: { id: sessionId, userId, revokedAt: null },
       data: { revokedAt: new Date() },
+    });
+  }
+
+  // Update the authenticated user's display name. Used by the Google-signup
+  // onboarding step (name is prefilled from Google but editable). Email is NOT
+  // updatable here — onboarding locks it.
+  async updateName(userId: number, name: string): Promise<{ id: number; name: string }> {
+    return prisma.user.update({
+      where: { id: userId },
+      data: { name },
+      select: { id: true, name: true },
     });
   }
 }

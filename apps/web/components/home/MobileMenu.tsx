@@ -10,18 +10,25 @@ interface NavLink {
   href: string;
 }
 
-// Mobile navigation (< md): a hamburger that opens a full-width drawer. The
+// Mobile navigation (< lg): a hamburger that opens a full-width drawer. The
 // drawer + backdrop are PORTALED to <body> — if they render inside the sticky
 // header (its own z-50 stacking context), the backdrop paints over the header
 // and dims it. At the body level the header (z-50) stays clean above the
 // backdrop (z-40), and the drawer sits flush under it (top-14). Closes on link
 // tap / backdrop / Escape; locks body scroll while open.
+//
+// Sign in / Register open the shared auth popup (owned by HeaderAuthActions):
+// the drawer closes first, then the popup opens.
 export function MobileMenu({
   links,
   recruiterUrl,
+  onSignIn,
+  onRegister,
 }: {
   links: readonly NavLink[];
   recruiterUrl: string;
+  onSignIn: () => void;
+  onRegister: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -38,6 +45,15 @@ export function MobileMenu({
       document.body.style.overflow = previous;
     };
   }, [open]);
+
+  function handleSignIn() {
+    setOpen(false);
+    onSignIn();
+  }
+  function handleRegister() {
+    setOpen(false);
+    onRegister();
+  }
 
   return (
     <div className="lg:hidden">
@@ -73,16 +89,23 @@ export function MobileMenu({
                 ))}
               </nav>
               <div className="mt-3 flex flex-col gap-2 border-t border-[var(--color-border)] pt-4">
-                <Link
-                  href="/login"
-                  onClick={() => setOpen(false)}
+                <button
+                  type="button"
+                  onClick={handleSignIn}
                   className="inline-flex h-11 items-center justify-center rounded-lg border border-[var(--color-border-strong)] text-sm font-semibold text-[var(--color-fg)] transition-colors hover:bg-[var(--color-bg-muted)]"
                 >
                   Sign in
-                </Link>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRegister}
+                  className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--color-primary-600)] text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-700)]"
+                >
+                  Register
+                </button>
                 <a
                   href={recruiterUrl}
-                  className="inline-flex h-11 items-center justify-center gap-1.5 rounded-lg bg-[image:var(--gradient-brand)] text-sm font-semibold text-white shadow-[var(--shadow-card)] transition-shadow hover:shadow-[var(--glow-cyan)]"
+                  className="inline-flex h-11 items-center justify-center gap-1.5 rounded-lg bg-[var(--color-accent-500)] text-sm font-semibold text-[var(--color-primary-700)] transition-colors hover:bg-[var(--color-accent-600)]"
                 >
                   Hire on Career Queue
                   <ArrowRight className="size-4" aria-hidden="true" />

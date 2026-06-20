@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Req,
   Res,
@@ -28,7 +29,7 @@ import { isFlagEnabled } from '@jobportal/feature-flags';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
 import { PasswordResetService } from './password-reset.service';
-import { ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto } from './dto';
+import { ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto, UpdateNameDto } from './dto';
 import { EmailService } from '../email/email.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
@@ -181,6 +182,16 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async me(@CurrentUser() user: AccessClaims) {
     return this.auth.me(user.sub);
+  }
+
+  // Update the signed-in user's display name (onboarding name edit). Email is
+  // intentionally not updatable here.
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  async updateMe(@CurrentUser() user: AccessClaims, @Body() body: unknown) {
+    const parsed = UpdateNameDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return this.auth.updateName(user.sub, parsed.data.name);
   }
 
   @Delete('sessions/:id')

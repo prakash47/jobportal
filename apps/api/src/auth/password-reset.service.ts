@@ -19,6 +19,11 @@ export class PasswordResetService {
     const user = await prisma.user.findUnique({ where: { email } });
     // No-op when user does not exist — prevents email enumeration.
     if (!user) return;
+    // No-op for OAuth-only accounts (no local password). They sign in with
+    // their provider; a reset must not silently mint a password / second login
+    // path for them (ADR 0001). Same silent return, so enumeration stays
+    // impossible.
+    if (!user.passwordHash) return;
 
     const raw = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + RESET_TTL_MINUTES * 60 * 1000);
