@@ -26,6 +26,14 @@ enum UserRole {
   ADMIN
 }
 
+// How a user account authenticates. LOCAL = email + password (Argon2id).
+// GOOGLE = OAuth via Google (no local password). SRS §4.12.6 (Phase 2 feature
+// pulled into Phase 1 per ADR 0001). Add LinkedIn etc. here later.
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
 enum JobStatus {
   DRAFT
   PENDING_MODERATION
@@ -132,11 +140,14 @@ enum ProfileAuditAction {
 model User {
   id            Int      @id @default(autoincrement())
   email         String   @unique
-  passwordHash  String
+  passwordHash  String?  // null for OAuth-only users (no local password) — SRS §4.12.6
   name          String
   phone         String?
+  image         String?  // avatar URL from an OAuth provider (e.g. Google), optional
   emailVerified Boolean  @default(false)
   role          UserRole @default(CANDIDATE)
+  provider      AuthProvider @default(LOCAL) // auth method — SRS §4.12.6
+  googleId      String?      @unique         // Google "sub" claim; null for non-Google
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

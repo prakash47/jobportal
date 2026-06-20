@@ -29,3 +29,10 @@ export const ResetPasswordDto = z.object({
   password: passwordSchema,
 });
 export type ResetPasswordInput = z.infer<typeof ResetPasswordDto>;
+
+// Used by the Google-signup onboarding step (name editable, email locked) and
+// any future "edit display name" affordance.
+export const UpdateNameDto = z.object({
+  name: z.string().min(1).max(120),
+});
+export type UpdateNameInput = z.infer<typeof UpdateNameDto>;

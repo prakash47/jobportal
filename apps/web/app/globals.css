@@ -87,3 +87,27 @@
   .reveal[data-revealed="true"] { animation: none; }
   .card-lift:hover { transform: none; }
 }
+
+/* Thin, subtle scrollbar for scrollable overlays (the auth modal on short
+   viewports). Kept OUTSIDE @layer utilities so it is ALWAYS emitted — Tailwind 4
+   tree-shakes custom classes inside the utilities layer. Replaces the chunky
+   OS-default bar (a harsh dark strip) with a transparent track + slim rounded
+   neutral thumb. */
+.scrollbar-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+.scrollbar-slim::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-slim::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-strong);
+  border-radius: 9999px;
+}
+.scrollbar-slim::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-fg-subtle);
+}
