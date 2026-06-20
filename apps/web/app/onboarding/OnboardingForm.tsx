@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Label } from '@jobportal/ui';
+import { apiErrorMessage } from '../../lib/auth/api-error';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -27,8 +28,8 @@ export function OnboardingForm({ initialName, email }: { initialName: string; em
         body: JSON.stringify({ name }),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(body.message ?? 'Could not save your name');
+        const body = await res.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(body, 'Could not save your name'));
       }
       router.push('/profile');
       router.refresh();

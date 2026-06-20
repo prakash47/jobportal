@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Label } from '@jobportal/ui';
+import { apiErrorMessage } from '../../lib/auth/api-error';
+import { PasswordInput } from './PasswordInput';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -42,8 +44,8 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
         body: JSON.stringify({ name, email, password, phone: phone || undefined }),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(body.message ?? 'Registration failed');
+        const body = await res.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(body, 'Registration failed'));
       }
       if (onSuccess) onSuccess();
       else router.push('/login?registered=1');
@@ -85,9 +87,8 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
       </div>
       <div className="space-y-1.5">
         <Label htmlFor={passwordId}>Password</Label>
-        <Input
+        <PasswordInput
           id={passwordId}
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}

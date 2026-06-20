@@ -169,6 +169,7 @@
  * Dark mode — override surface tokens on [data-theme="dark"]
  * ============================================================ */
 [data-theme="dark"] {
+  color-scheme: dark;
   --color-bg:           var(--color-neutral-950);
   --color-bg-elevated:  var(--color-neutral-900);
   --color-bg-muted:     var(--color-neutral-800);
@@ -211,7 +212,12 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    color-scheme: light dark;
+    /* Bind the UA colour scheme to OUR theme (toggled via [data-theme]), NOT the
+       OS preference. With `light dark`, a visitor whose OS is in dark mode got
+       DARK-rendered form controls + autofill (grey background, pale text) on our
+       always-light site — unreadable. Light by default; dark only when the app
+       actually switches to dark mode (see [data-theme="dark"]). */
+    color-scheme: light;
   }
 
   body {
@@ -234,5 +240,25 @@
     outline: 2px solid var(--color-ring);
     outline-offset: 2px;
     border-radius: var(--radius-sm);
+  }
+
+  /* Browser autofill: Chrome/Safari force their OWN background + text color on
+     autofilled fields, which clashes with the design and tanks contrast (the
+     fields read as washed-out grey with pale text). Repaint with the input's
+     own surface + foreground tokens. The inset box-shadow fills the background
+     (autofill's bg can't be set directly); -webkit-text-fill-color overrides
+     the forced text color; the long transition defers Chrome's autofill
+     animation. Theme-aware via the semantic tokens. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-text-fill-color: var(--color-fg);
+    caret-color: var(--color-fg);
+    -webkit-box-shadow: 0 0 0 1000px var(--color-bg-elevated) inset;
+    box-shadow: 0 0 0 1000px var(--color-bg-elevated) inset;
+    transition: background-color 9999s ease-in-out 0s;
   }
 }
