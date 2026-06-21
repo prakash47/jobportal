@@ -29,7 +29,14 @@ async function dummyHash(): Promise<string> {
 
 @Injectable()
 export class AuthService {
-  async register(input: RegisterInput): Promise<{ userId: number }> {
+  // Registration auto-logs the new seeker in (issues a session) so they land
+  // straight on the onboarding step — no separate sign-in. Email verification
+  // still fires from the controller and gates applying/posting per FR-4.12.8.
+  async register(
+    input: RegisterInput,
+    deviceInfo: string | undefined,
+    ipAddress: string | undefined,
+  ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     if (!isStrongPassword(input.password)) {
       throw new BadRequestException('Password too weak');
     }
@@ -47,7 +54,7 @@ export class AuthService {
         role: 'CANDIDATE',
       },
     });
-    return { userId: user.id };
+    return this.issueSession(user, deviceInfo, ipAddress);
   }
 
   async login(

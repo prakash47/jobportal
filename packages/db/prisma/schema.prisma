@@ -58,6 +58,35 @@ enum WorkMode {
   HYBRID
 }
 
+// Onboarding "Professional status" toggle (SRS §4.3). FRESHER hides the work-
+// experience block; EXPERIENCED reveals it.
+enum WorkStatus {
+  FRESHER
+  EXPERIENCED
+}
+
+// Onboarding "Looking for" toggle (SRS §4.3) — distinct axis from the
+// preferredJobTypes (full-time/part-time/…) collected on the preferences step.
+enum LookingFor {
+  JOB
+  INTERNSHIP
+  BOTH
+}
+
+// SRS §4.3 — self-rated language proficiency for the candidate languages list.
+enum LanguageProficiency {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+// SRS §4.3 — optional self-identified gender on the candidate profile.
+enum Gender {
+  MALE
+  FEMALE
+  PREFER_NOT_TO_SAY
+}
+
 enum ApplicationStatus {
   APPLIED
   IN_REVIEW
@@ -218,6 +247,20 @@ model Candidate {
   noticePeriodDays       Int?
   preferredCityIds       Int[]
   skillIds               Int[]
+  // Onboarding-wizard job preferences (SRS §4.3). Scalar enum arrays, empty by
+  // default. The WorkMode / EmploymentType enums are shared with the Job model.
+  preferredWorkModes     WorkMode[]       @default([])
+  preferredJobTypes      EmploymentType[] @default([])
+  // Onboarding "Employment & Professional" step (SRS §4.3). Current company/city
+  // are free text (no catalogue link at onboarding); industry links to the
+  // catalogue. workStatus drives whether the work-experience block renders.
+  workStatus             WorkStatus?
+  lookingFor             LookingFor?
+  currentCompanyName     String?
+  currentCityName        String?
+  industryId             Int?
+  industry               Industry? @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  gender                 Gender?
   // Active resume points to the latest CLEAN row in Resume; older rows stay
   // for audit but are never returned by GET /me/resume.
   activeResumeId         Int?     @unique
@@ -231,9 +274,12 @@ model Candidate {
 
   educations  Education[]
   experiences WorkExperience[]
+  projects    Project[]
+  languages   CandidateLanguage[]
   resumes     Resume[]         @relation("CandidateResumes")
 
   @@index([currentCompanyId])
+  @@index([industryId])
 }
 
 model Education {
@@ -265,6 +311,36 @@ model WorkExperience {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  @@index([candidateId])
+}
+
+// SRS §4.3 — candidate portfolio projects shown on the profile. techStack is a
+// lightweight String[] (free text, no Skill FK) so onboarding stays frictionless.
+model Project {
+  id          Int       @id @default(autoincrement())
+  candidateId Int
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  techStack   String[]  @default([])
+  url         String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([candidateId])
+}
+
+// SRS §4.3 — languages the candidate knows + self-rated proficiency. Unique per
+// (candidate, name) so the same language can't be added twice.
+model CandidateLanguage {
+  id          Int                 @id @default(autoincrement())
+  candidateId Int
+  candidate   Candidate           @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  name        String
+  proficiency LanguageProficiency
+  createdAt   DateTime            @default(now())
+
+  @@unique([candidateId, name])
   @@index([candidateId])
 }
 
@@ -542,8 +618,9 @@ model Industry {
   name      String
   createdAt DateTime @default(now())
 
-  companies Company[]
-  jobs      Job[]
+  companies  Company[]
+  jobs       Job[]
+  candidates Candidate[]
 }
 
 model FunctionalArea {
@@ -572,6 +649,10 @@ model Skill {
   slug      String   @unique
   name      String
   category  String?
+  // SRS §4.3 — true when a candidate created this skill by typing a name that
+  // wasn't in the seeded catalogue (find-or-create at /me/skills). Lets admins
+  // later review/merge user-created skills.
+  isCustom  Boolean  @default(false)
   createdAt DateTime @default(now())
 }
 

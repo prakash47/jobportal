@@ -36,6 +36,7 @@ export {
   ShieldCheck,
   Sparkles,
   Star,
+  Trash2,
   TrendingUp,
   Twitter,
   User,

@@ -133,14 +133,24 @@ export class TransactionalEmailQueueService
       );
       return;
     }
-    await this.queue.add(job.kind, job, {
-      // Keep BullMQ's default jobId (random) — collapsing two genuine sends to
-      // the same recipient (e.g. two password-reset requests in quick
-      // succession) by jobId would silently swallow the second, which is
-      // worse than two emails arriving.
-      removeOnComplete: 100,
-      removeOnFail: 500,
-    });
+    try {
+      await this.queue.add(job.kind, job, {
+        // Keep BullMQ's default jobId (random) — collapsing two genuine sends to
+        // the same recipient (e.g. two password-reset requests in quick
+        // succession) by jobId would silently swallow the second, which is
+        // worse than two emails arriving.
+        removeOnComplete: 100,
+        removeOnFail: 500,
+      });
+    } catch (err) {
+      // Queue object exists but Redis is unreachable at enqueue time → log and
+      // drop, honoring this method's contract above. Without this, a down Redis
+      // would reject queue.add() and surface a 5xx in the request path (e.g.
+      // it would 500 a registration AFTER the account + session were committed).
+      this.logger.warn(
+        `enqueue failed (kind=${job.kind}, to=${job.to}): ${(err as Error).message}`,
+      );
+    }
   }
 
   // Test seam.

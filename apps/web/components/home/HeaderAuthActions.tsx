@@ -10,17 +10,15 @@ interface NavLink {
   href: string;
 }
 
-// True only for a plain primary click we should intercept. Modified clicks
-// (cmd/ctrl/shift/alt or middle-click) fall through so the real /login and
-// /register pages still open in a new tab — progressive enhancement.
-function isPlainClick(e: React.MouseEvent): boolean {
-  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
-}
-
 // Client island for the header's right-side actions + the auth popup. Owns the
 // modal open/tab state so the desktop buttons AND the mobile drawer share one
-// AuthModal instance. The desktop triggers are real <a href> links (no-JS /
-// crawlers reach the working pages) whose plain-click opens the popup instead.
+// AuthModal instance. The triggers are real <button>s (NOT <a href> links): a
+// click always opens the popup and can never fall through to a full-page
+// navigation — not even in the brief window before this island hydrates, which
+// was the cause of the intermittent "redirect to /login instead of popup" bug.
+// The /login and /register pages still exist as a fallback (direct URL + the
+// footer's Sign in / Create account links) per the "keep routes as fallback"
+// decision.
 export function HeaderAuthActions({
   links,
   recruiterUrl,
@@ -44,33 +42,23 @@ export function HeaderAuthActions({
 
   return (
     <div className="flex flex-1 items-center justify-end gap-1.5 sm:gap-2">
-      {/* Sign in — outline (the reference's "Login"). */}
-      <a
-        href="/login"
-        onClick={(e) => {
-          if (isPlainClick(e)) {
-            e.preventDefault();
-            openLogin();
-          }
-        }}
+      {/* Sign in — outline (the reference's "Login"). Opens the Sign-in tab. */}
+      <button
+        type="button"
+        onClick={openLogin}
         className="hidden h-9 items-center rounded-lg border border-[var(--color-border-strong)] px-3.5 text-sm font-medium text-[var(--color-fg)] transition-colors hover:bg-[var(--color-bg-muted)] lg:inline-flex"
       >
         Sign in
-      </a>
+      </button>
 
       {/* Register — solid navy (the reference's "Register"). Opens the Register tab. */}
-      <a
-        href="/register"
-        onClick={(e) => {
-          if (isPlainClick(e)) {
-            e.preventDefault();
-            openRegister();
-          }
-        }}
+      <button
+        type="button"
+        onClick={openRegister}
         className="hidden h-9 items-center rounded-lg bg-[var(--color-primary-600)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-card)] transition-colors hover:bg-[var(--color-primary-700)] lg:inline-flex"
       >
         Register
-      </a>
+      </button>
 
       {/* "For Employers" slot — flat pale-cyan tint + navy text (no gradient),
           text unchanged per owner. */}

@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -39,13 +38,6 @@ export interface AuthModalProps {
 // on short viewports.
 export function AuthModal({ open, tab, onOpenChange, onTabChange, googleEnabled }: AuthModalProps) {
   const router = useRouter();
-  const [justRegistered, setJustRegistered] = useState(false);
-
-  // The "account created" note only belongs to a fresh registration → clear it
-  // whenever the popup closes.
-  useEffect(() => {
-    if (!open) setJustRegistered(false);
-  }, [open]);
 
   function handleLoginSuccess() {
     onOpenChange(false);
@@ -55,10 +47,9 @@ export function AuthModal({ open, tab, onOpenChange, onTabChange, googleEnabled 
   }
 
   function handleRegisterSuccess() {
-    // Mirror the page flow (register → sign in) inside the popup: jump to the
-    // Sign in tab with a confirmation note. /auth/register sets no session.
-    setJustRegistered(true);
-    onTabChange('login');
+    // Registration auto-logs the seeker in; RegisterForm navigates to
+    // /onboarding. Just close the popup.
+    onOpenChange(false);
   }
 
   return (
@@ -78,14 +69,7 @@ export function AuthModal({ open, tab, onOpenChange, onTabChange, googleEnabled 
           </DialogDescription>
         </div>
 
-        <Tabs
-          value={tab}
-          onValueChange={(v) => {
-            setJustRegistered(false);
-            onTabChange(v as AuthTab);
-          }}
-          className="mt-5"
-        >
+        <Tabs value={tab} onValueChange={(v) => onTabChange(v as AuthTab)} className="mt-5">
           <div className="px-6">
             <TabsList className="grid h-11 w-full grid-cols-2 rounded-lg p-1">
               <TabsTrigger
@@ -104,11 +88,6 @@ export function AuthModal({ open, tab, onOpenChange, onTabChange, googleEnabled 
           </div>
 
           <TabsContent value="login" className="mt-5 px-6 pb-6">
-            {justRegistered && (
-              <div className="mb-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-muted)] px-3.5 py-2.5 text-sm text-[var(--color-fg)]">
-                Account created — sign in to continue.
-              </div>
-            )}
             {googleEnabled && (
               <>
                 <GoogleButton label="Sign in with Google" />

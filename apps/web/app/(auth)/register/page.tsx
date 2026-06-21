@@ -5,8 +5,8 @@ import { OrDivider } from '../../../components/auth/OrDivider';
 import { RegisterForm } from '../../../components/auth/RegisterForm';
 
 // Standalone /register route — kept as the fallback path (the navbar opens the
-// auth popup). The shared RegisterForm navigates to /login?registered=1 on
-// success here (page mode).
+// auth popup). On success the shared RegisterForm auto-logs-in and navigates to
+// /onboarding (identical to the popup — there is no longer a page-vs-popup branch).
 export default async function RegisterPage() {
   const googleEnabled = await getGoogleEnabled();
 

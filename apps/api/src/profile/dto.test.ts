@@ -4,7 +4,9 @@ import {
   EducationUpdateDto,
   ExperienceCreateDto,
   ExperienceUpdateDto,
+  LanguageCreateDto,
   ProfilePatchDto,
+  ProjectCreateDto,
   SkillsUpdateDto,
 } from './dto';
 
@@ -21,6 +23,13 @@ describe('Education DTOs', () => {
         startYear: 2014,
         endYear: 2018,
       }).success,
+    ).toBe(true);
+  });
+
+  it('Create accepts a null endYear (currently pursuing)', () => {
+    expect(
+      EducationCreateDto.safeParse({ institute: 'X', degree: 'Y', startYear: 2020, endYear: null })
+        .success,
     ).toBe(true);
   });
 
@@ -103,9 +112,103 @@ describe('ProfilePatchDto', () => {
   });
 });
 
+describe('ProfilePatchDto — employment & professional fields', () => {
+  it('accepts the new onboarding fields', () => {
+    expect(
+      ProfilePatchDto.safeParse({
+        workStatus: 'EXPERIENCED',
+        lookingFor: 'BOTH',
+        currentCompanyName: 'Acme',
+        currentCityName: 'Mumbai, Maharashtra',
+        industryId: 3,
+        experienceMonths: 42,
+        currentSalaryPaise: 80_000_000,
+        noticePeriodDays: 30,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects an invalid workStatus enum', () => {
+    expect(ProfilePatchDto.safeParse({ workStatus: 'SENIOR' }).success).toBe(false);
+  });
+
+  it('rejects a non-positive industryId', () => {
+    expect(ProfilePatchDto.safeParse({ industryId: 0 }).success).toBe(false);
+  });
+});
+
 describe('SkillsUpdateDto', () => {
   it('rejects more than 50 skills', () => {
     const ids = Array.from({ length: 51 }, (_, i) => i + 1);
     expect(SkillsUpdateDto.safeParse({ skillIds: ids }).success).toBe(false);
+  });
+
+  it('accepts an empty patch (both fields optional)', () => {
+    expect(SkillsUpdateDto.safeParse({}).success).toBe(true);
+  });
+
+  it('accepts free-text customSkills', () => {
+    expect(
+      SkillsUpdateDto.safeParse({ skillIds: [1, 2], customSkills: ['GraphQL', 'tRPC'] }).success,
+    ).toBe(true);
+  });
+
+  it('rejects a blank custom skill', () => {
+    expect(SkillsUpdateDto.safeParse({ customSkills: ['   '] }).success).toBe(false);
+  });
+});
+
+describe('ProjectCreateDto', () => {
+  it('accepts a full project', () => {
+    expect(
+      ProjectCreateDto.safeParse({
+        title: 'Portfolio site',
+        description: 'My personal site',
+        techStack: ['Next.js', 'Tailwind'],
+        url: 'https://example.com',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts a title-only project', () => {
+    expect(ProjectCreateDto.safeParse({ title: 'Side project' }).success).toBe(true);
+  });
+
+  it('rejects an empty title', () => {
+    expect(ProjectCreateDto.safeParse({ title: '   ' }).success).toBe(false);
+  });
+
+  it('rejects a malformed url', () => {
+    expect(ProjectCreateDto.safeParse({ title: 'X', url: 'not-a-url' }).success).toBe(false);
+  });
+
+  it('rejects a javascript: scheme url (stored-XSS guard)', () => {
+    expect(ProjectCreateDto.safeParse({ title: 'X', url: 'javascript:alert(1)' }).success).toBe(false);
+  });
+
+  it('rejects a data: scheme url', () => {
+    expect(
+      ProjectCreateDto.safeParse({ title: 'X', url: 'data:text/html,<script>1</script>' }).success,
+    ).toBe(false);
+  });
+
+  it('accepts an https url', () => {
+    expect(ProjectCreateDto.safeParse({ title: 'X', url: 'https://example.com' }).success).toBe(true);
+  });
+});
+
+describe('LanguageCreateDto', () => {
+  it('accepts a valid language', () => {
+    expect(LanguageCreateDto.safeParse({ name: 'Hindi', proficiency: 'INTERMEDIATE' }).success).toBe(
+      true,
+    );
+  });
+
+  it('rejects an unknown proficiency', () => {
+    expect(LanguageCreateDto.safeParse({ name: 'Hindi', proficiency: 'FLUENT' }).success).toBe(false);
+  });
+
+  it('rejects a blank name', () => {
+    expect(LanguageCreateDto.safeParse({ name: '', proficiency: 'BEGINNER' }).success).toBe(false);
   });
 });

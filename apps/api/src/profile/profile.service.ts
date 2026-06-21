@@ -39,6 +39,16 @@ export class ProfileService {
   }
 
   async updateProfile(userId: number, input: ProfilePatchInput): Promise<ProfileView> {
+    // Validate the industry FK up front so a bad id is a clean 404, not a raw
+    // Postgres FK-violation 500 from the update below.
+    if (input.industryId !== undefined) {
+      const industry = await prisma.industry.findUnique({
+        where: { id: input.industryId },
+        select: { id: true },
+      });
+      if (!industry) throw new NotFoundException('Industry not found');
+    }
+
     const before = await this.getProfile(userId);
 
     // Split the input: name + phone live on User, the rest on Candidate.
@@ -127,6 +137,14 @@ function flatten(u: ProfileView['user'], c: Candidate): Record<string, unknown> 
     expectedSalaryMaxPaise: c.expectedSalaryMaxPaise,
     noticePeriodDays: c.noticePeriodDays,
     preferredCityIds: c.preferredCityIds,
+    preferredWorkModes: c.preferredWorkModes,
+    preferredJobTypes: c.preferredJobTypes,
+    workStatus: c.workStatus,
+    lookingFor: c.lookingFor,
+    currentCompanyName: c.currentCompanyName,
+    currentCityName: c.currentCityName,
+    industryId: c.industryId,
+    gender: c.gender,
   };
 }
 

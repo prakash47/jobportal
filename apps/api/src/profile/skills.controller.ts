@@ -20,6 +20,6 @@ export class ProfileSkillsController {
   async update(@CurrentUser() user: AccessClaims, @Body() body: unknown) {
     const parsed = SkillsUpdateDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
-    return this.service.update(user.sub, parsed.data.skillIds);
+    return this.service.update(user.sub, parsed.data);
   }
 }

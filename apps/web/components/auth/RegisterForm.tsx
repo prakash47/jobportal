@@ -10,10 +10,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export interface RegisterFormProps {
   /**
-   * Modal usage: called after a successful registration INSTEAD of navigating
-   * to /login?registered=1 (the popup switches to its Sign in tab). When
-   * omitted (standalone /register page), the original navigation is preserved.
-   * Note: /auth/register does not establish a session — the user signs in next.
+   * Called right after a successful registration so the popup can close itself.
+   * Registration now auto-logs-in; both the popup and the standalone page then
+   * navigate to /onboarding (name prefilled + editable, email locked).
    */
   onSuccess?: () => void;
   /** Prefix for element ids so this form can coexist with the login form in the modal. */
@@ -47,8 +46,11 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
         const body = await res.json().catch(() => ({}));
         throw new Error(apiErrorMessage(body, 'Registration failed'));
       }
-      if (onSuccess) onSuccess();
-      else router.push('/login?registered=1');
+      // Account is created AND auto-logged-in → straight to the onboarding step
+      // (name editable, email locked). onSuccess lets the popup close itself.
+      onSuccess?.();
+      router.push('/onboarding');
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

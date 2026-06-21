@@ -71,23 +71,43 @@ export class AuthController {
   @Post('register')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.CREATED)
-  async register(@Body() body: unknown) {
+  async register(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const parsed = RegisterDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
-    const { userId } = await this.auth.register(parsed.data);
+    const result = await this.auth.register(
+      parsed.data,
+      req.headers['user-agent'] ? String(req.headers['user-agent']) : undefined,
+      req.ip,
+    );
+    // Auto-login: set the session cookies so the new seeker lands authenticated
+    // on the onboarding step (no separate sign-in).
+    setAuthCookies(res, result.accessToken, result.refreshToken, cookieEnvFromProcess());
     // SRS §4.13 — registration confirmation + email-verification fire as
     // separate templates so the welcome message is not coupled to the
     // verification token TTL. Don't gate on killswitch here: an emergency
     // killswitch should not silently break account creation; the worker's
     // L3 no-op is sufficient and a reasonable failure mode (user signs up,
     // emails are deferred until killswitch lifts).
-    await this.emailVerify.issueAndSend(userId, parsed.data.email);
+    // Belt-and-suspenders: the account + session + cookies are already committed
+    // above, so an email failure must NEVER 500 the request and strand a
+    // created-but-"failed" account. Swallow it — the user can request a fresh
+    // verification email later. (enqueue() also log-and-drops on a down queue;
+    // this also covers any failure in token creation.)
+    try {
+      await this.emailVerify.issueAndSend(result.user.id, parsed.data.email);
+    } catch {
+      // No logger injected in the controller; the email/queue layers log.
+    }
     // Fire-and-log: enqueue is fast, but a Redis blip should not flip a
     // successful registration into a 5xx. The verify email above IS awaited
     // because the user can't apply without it; this welcome email is
     // strictly cosmetic.
     this.email
-      .enqueueRegistrationConfirmation(parsed.data.email, userId, {
+      .enqueueRegistrationConfirmation(parsed.data.email, result.user.id, {
         name: parsed.data.name,
       })
       .catch(() => {
@@ -96,7 +116,7 @@ export class AuthController {
         // cases. Other failures (Redis ack timeout) are rare enough that
         // swallowing here is acceptable for a welcome email.
       });
-    return { ok: true };
+    return { user: publicUser(result.user) };
   }
 
   @Post('login')
