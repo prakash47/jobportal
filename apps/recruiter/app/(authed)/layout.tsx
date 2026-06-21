@@ -13,10 +13,13 @@ export const dynamic = 'force-dynamic';
 export default async function AuthedLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRecruiter();
 
+  // App-shell scroll model: the viewport is locked (h-screen + overflow-hidden)
+  // and each pane scrolls independently. The sidebar stays fixed while the main
+  // content pane scrolls on its own.
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
-      <div className="grid min-h-screen grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="hidden border-r border-[var(--color-border)] md:flex md:flex-col md:justify-between md:p-4">
+    <div className="h-screen overflow-hidden bg-[var(--color-bg)]">
+      <div className="grid h-screen grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="hidden h-screen border-r border-[var(--color-border)] md:flex md:flex-col md:justify-between md:overflow-y-auto md:p-4">
           <div className="space-y-6">
             <Link
               href="/dashboard"
@@ -33,7 +36,7 @@ export default async function AuthedLayout({ children }: { children: React.React
             <SignOutButton />
           </div>
         </aside>
-        <main className="min-w-0">
+        <main className="h-screen min-w-0 overflow-y-auto">
           <div className="mx-auto max-w-3xl px-6 py-10">{children}</div>
         </main>
       </div>

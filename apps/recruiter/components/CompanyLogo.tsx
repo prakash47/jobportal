@@ -44,6 +44,11 @@ export function CompanyLogo({ companyId, name, logoUrl, size = 48, className }: 
         alt={`${name} logo`}
         width={size}
         height={size}
+        // Logos are small, already-sized assets served from our own R2/CDN (and
+        // the API /media passthrough in dev). Serve them as-is: the Next image
+        // optimizer otherwise has to proxy-fetch the upstream, which fails for
+        // the local http://localhost:4000/media URL and renders a broken image.
+        unoptimized
         className={cn(
           'shrink-0 border border-[var(--color-border)] object-contain',
           radius,
