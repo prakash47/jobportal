@@ -24,7 +24,9 @@ export class RecruiterWorkEmailService {
     return `${s}:recruiter-work-email`;
   }
 
-  async issueAndSend(recruiterId: number, workEmail: string): Promise<void> {
+  // `email` is the recruiter's single Email ID (the login address); the link
+  // verifies the recruiter controls that mailbox before any job-post can land.
+  async issueAndSend(recruiterId: number, email: string): Promise<void> {
     const token = jwt.sign(
       { sub: recruiterId, purpose: PURPOSE } satisfies VerificationClaims,
       this.secret(),
@@ -34,7 +36,7 @@ export class RecruiterWorkEmailService {
     const url = `${base}/verify-email/${encodeURIComponent(token)}`;
     // userId=null because email_verification is mandatory (no preference
     // gating); skipping the recruiter→user lookup keeps the hot path lean.
-    await this.email.enqueueEmailVerification(workEmail, null, { verifyUrl: url });
+    await this.email.enqueueEmailVerification(email, null, { verifyUrl: url });
   }
 
   // Idempotent: re-clicking the link after success is a no-op that still

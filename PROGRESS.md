@@ -10,15 +10,15 @@
 
 ---
 
-## Snapshot — 2026-05-17
+## Snapshot — 2026-06-21
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Local stack fully demo-ready end-to-end: every route serves, all 4 SEO landing patterns work, recruiter funnel populated, homepage company tiles show initials-on-color monogram fallbacks (no more empty Building2 icons).
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Owner is now working **exclusively on the recruiter portal**; changes are scoped to recruiter code paths + `packages/db` and must not disturb web / candidate-API behaviour.
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
-- **Branch state**: `develop` is the integration tip (40 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: `feature/header-footer-branding` — Career Queue (CQ) logo across the web header/footer + recruiter portal chrome, plus a 3-col-grid fix that centres the homepage header nav. (Note: the snapshot below predates a few `develop` merges that were not individually logged here — naukri-redesign, collaborator-onboarding-docs, login pages.)
-- **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. **All 25 probed public routes return expected status codes** (200/307/404). ES indices populated (50 jobs, 12 companies, 3 articles in `jobs-v4`, `companies-v4`, `articles-v4`).
-- **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (now with stable Job IDs 100001-100050 and Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs.
-- **Test counts on develop**: 235 API + **173 web** (was 163; +10 catch-all dispatch tests) + 37 feature-flags + 18 observability = 463 unit tests.
+- **Branch state**: `develop` is the integration tip; `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: `feature/recruiter-profile-edit` — the recruiter **Profile tab is now editable** (recruiter-personal fields incl. department + alternate POC, company fields incl. company-type/industry/website, and company-logo upload). Additive migration `20260621064256_recruiter_profile_editing` (history now **13 migrations**); new API `recruiter-profile` + `media` modules; `apps/web` and candidate auth/profile **byte-untouched**. (Earlier note still applies: the PR log between ~2026-05-17 and the recruiter-single-email entry is incomplete — several `develop` merges predate disciplined logging; treat older snapshot detail as approximate.)
+- **Local runtime status (DB verified 2026-06-21)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) up; `jobportal_dev` reset + reseeded + ES reindexed cleanly; `pnpm build` green for all 4 apps. App dev servers (`:3000/:3001/:4000`) not booted this session. ES indices repopulated (50 jobs, 12 companies, 3 articles in `jobs-v2`/`companies-v2`/`articles-v2` — alias version reset by the DB rebuild).
+- **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (stable Job IDs 100001-100050, Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs / 20 candidates / 371 applications.
+- **Test counts on develop**: **258 API** + 181 web + 37 feature-flags + 18 observability + auth = ~486 unit tests (recruiter-profile-edit added 23 API tests: recruiter-profile service + logo validators).
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2 / Sentry / PostHog.
 
 ---
@@ -51,6 +51,42 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### `feature/recruiter-profile-edit` · 2026-06-21
+
+Recruiter **Profile tab is now editable** (refinement of SRS §4.9.1). CLI merge (no PR). Scoped to recruiter code paths + `packages/db` — **`apps/web` and candidate auth/profile (`apps/api/src/auth`, `apps/api/src/profile`) are byte-untouched** (verified via `git status`).
+
+**What shipped:**
+- **Schema** (additive migration `20260621064256_recruiter_profile_editing`, history now 13): `Recruiter` gains `department` + `altPocName`/`altPocEmail`/`altPocPhone` (alternate POC); `Company` gains `companyType` (new `CompanyType` enum — Indian-market set: Startup / Indian MNC / Foreign MNC / Private / Public / Government·PSU / NGO·Non-profit / Partnership / Sole Proprietorship); `ProfileAuditAction` gains `RECRUITER_PROFILE_UPDATE` / `COMPANY_UPDATE` / `COMPANY_LOGO_UPDATE`. All columns nullable → no impact on existing reads.
+- **API** (new `recruiter-profile` module): `PATCH /recruiter/profile` (recruiter-personal fields), `PATCH /recruiter/company` (name/description/website/companyType/industry/HQ-city/employees/founded), `POST`+`DELETE /recruiter/company/logo`. `JwtAuthGuard + RolesGuard('RECRUITER')` is the trusted L3 boundary; company id resolved server-side from the JWT, never the body. Edits write `ProfileAuditLog` rows (reuses candidate `buildDiff`/`stripUndefined` leaf utils) and fire-and-log `syncCompany()` only when an ES-mirrored field changes.
+- **Logo pipeline**: PNG/JPG/WebP only (SVG rejected — script-injection risk), ≤2 MB, ClamAV-scanned, stored in R2; `Company.logoUrl` holds a permanent public URL. `StorageService` gains `getPublicUrl`/`getObject`/`keyFromPublicUrl`; new `MediaController` (`GET /media/company-logos/:file`) serves logos publicly **in local dev only** (dormant in prod where `R2_PUBLIC_URL` points at the CDN). `R2_PUBLIC_URL` added to `.env.example`.
+- **Recruiter UI**: Profile tab → two editable sections (your details / company details) + auto-uploading logo picker (preview / replace / remove). Logo renders **before the company name** on the dashboard. Reads via RSC/Prisma, mutations via the BFF. Added image `remotePatterns` (the app had none) + a recruiter-local `api-client` and `CompanyLogo`.
+
+**No feature flag** — profile editing is core, free Day-0 functionality (matches the unflagged candidate profile editor; owner-confirmed).
+
+**Review fixes (same branch):** (1) uploaded logo rendered as a broken image because the Next image optimizer 400s on the local `http://localhost:4000/media` URL (`"url" parameter is not allowed`) while the raw URL serves 200 → company logo `<Image>` is now `unoptimized` (browser loads it directly; logos are small pre-sized assets, optimization adds nothing). (2) the authed app shell now locks the viewport (`h-screen` + `overflow-hidden`) and scrolls each pane independently so the sidebar stays fixed while only the content pane scrolls.
+
+**Gate:** workspace typecheck 11/11 · tests **258 API (+23)** + 181 web + auth/feature-flags/observability green · `pnpm build` 4/4 apps. End-to-end smoke-tested against the running stack (login → PATCH profile → PATCH company → logo upload → public `/media` serve 200 → persist → PDF-reject 400 → DELETE).
+
+**Deferred / follow-ups:** `MediaController` is a dev convenience — production needs `R2_PUBLIC_URL` + a real R2 public bucket/CDN (the host must also be whitelisted in each app's `next.config` image patterns). In local dev R2 is unconfigured, so logos live in the API's in-memory store and vanish on API restart (re-upload). `CompanyLogo` is duplicated in web + recruiter (consolidating into `@jobportal/ui` is a standing chip). Company edits are last-write-wins across multiple recruiters sharing one company (acceptable for MVP).
+
+### `feature/recruiter-single-email` · 2026-06-21
+
+Recruiter registration now collects a **single "Email ID"** instead of two separate "login email" + "work email" inputs (refinement of SRS §4.9.1). CLI merge (no PR). Owner is now working exclusively on the recruiter portal, so this is scoped to recruiter-only code paths + `packages/db` — **`apps/web` and candidate auth (`apps/api/src/auth`) are byte-untouched** (verified via `git grep`).
+
+**What changed:**
+- **Schema**: dropped the redundant `Recruiter.workEmail` column (it was always derivable from `User.email`). Kept `Recruiter.workEmailVerified` as the job-post gate — the verification link (now sent to the single Email ID) still flips it. Name kept deliberately to avoid colliding with `User.emailVerified` (candidate flow + JWT claims).
+- **API** (`recruiter-auth`): `RegisterRecruiterDto` drops `workEmail`; registration writes only the single email and sends the verification link there. `recruiter-jobs` gate comment + error copy updated (logic unchanged — already used `User.email`).
+- **Recruiter UI**: register page asks for one field labeled **"Email ID"**; dashboard / jobs-new / profile read `recruiter.user.email`; profile collapses its two email rows into one. Banner + gate copy softened "work email" → "email".
+- **Demo seed**: the 8 recruiter rows drop `workEmail`.
+
+**Migration + DB reconciliation** (the messy part): the local `jobportal_dev` DB had diverged from the repo — an orphan `20260614104341_sync` migration was applied while the repo's `google_oauth` migration (adds `User.provider`/`googleId`/`image`) was **not**. An owner-consented `prisma migrate reset` replayed all 11 repo migrations + the new `20260621040149_recruiter_single_email` drop, discarding `_sync` and finally applying `google_oauth`. `prisma migrate status` is now "up to date" with a clean **12-migration** history. Reseeded base + demo + apps (12 companies / 8 recruiters / 50 jobs / 20 candidates / 371 applications) + ES reindex (`jobs-v2`/`companies-v2`/`articles-v2`).
+
+**Gate (clean state)**: typecheck 11/11 · tests 235 API + 181 web + auth/feature-flags/observability all green (counts unchanged — edited existing recruiter tests in place) · `pnpm build` 4/4 apps. `ARCHITECTURE.md` Recruiter-entity line updated.
+
+**Email verification delivery (same branch)**: the recruiter verification pipeline was fully built (enqueue → BullMQ worker → `ResendClient.send` → click `/verify-email/[token]` → `verify()` flips `workEmailVerified`) but **dormant locally** because `RESEND_API_KEY` was blank — `ResendClient.send()` is a no-op console stub then, so no email ever left the process. Fix was **config, not code**: set `RESEND_FROM` in both env files (the in-code default `noreply@jobportal.com` is an unverified domain Resend rejects) and documented it in `.env.example`. Confirmed **live delivery** to the owner's Resend-account address via the shared test sender (`onboarding@resend.dev`, Resend message-id returned). The click→verify→status-update path is unchanged prior-shipped code (PR #22) with passing unit tests. Added `apps/api/scripts/send-recruiter-verification.ts` — an ops helper to (re)send a verification link by `recruiterId` (DB-looked-up recipient, `--dry-run`), filling in for the still-absent in-app resend (Task 16). **Caveat**: the test sender only delivers to the Resend-account email; emailing arbitrary recruiters requires verifying a domain in Resend.
+
+**Deferred (noted, not done)**: `RecruiterWorkEmailService` class name still says "WorkEmail" (internal only; it now does generic recruiter email-verification) — left as-is to avoid churn beyond the schema change. The recruiter work-email **resend** affordance is still absent in-app (pre-existing; tied to admin-console Task 16) — the new ops script is the interim stopgap. Domain verification in Resend (to email real recruiters, not just the owner's address) is owner-side config, not yet done.
 
 ### `feature/header-footer-branding` · 2026-06-17
 

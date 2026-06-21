@@ -83,7 +83,6 @@ export class RecruiterRegistrationService {
         data: {
           userId: user.id,
           companyId: company.id,
-          workEmail: input.workEmail,
           workEmailVerified: false,
         },
       });
@@ -111,12 +110,13 @@ export class RecruiterRegistrationService {
       },
     });
 
-    // Fire-and-log: do NOT block the response on the email backend. If send
-    // fails the recruiter can hit a /resend endpoint (lands with Task 16).
+    // Fire-and-log: do NOT block the response on the email backend. The
+    // verification link goes to the single Email ID (the login address). If
+    // send fails the recruiter can hit a /resend endpoint (lands with Task 16).
     // .catch() rather than `void` so a Resend failure logs cleanly instead
     // of triggering Node's unhandledRejection warning.
     this.workEmail
-      .issueAndSend(created.recruiterId, input.workEmail)
+      .issueAndSend(created.recruiterId, input.email)
       .catch((err: unknown) => {
         this.logger.warn(
           `recruiter ${created.recruiterId} work-email send failed: ${

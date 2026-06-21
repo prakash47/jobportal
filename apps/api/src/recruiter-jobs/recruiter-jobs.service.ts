@@ -87,8 +87,8 @@ export class RecruiterJobsService {
   }
 
   // Resolves the recruiter's company (every recruiter has one — guaranteed
-  // by SRS §4.9.1 registration). Throws if the work email isn't verified —
-  // hard gate per SRS §4.9.5 lands here, not just a banner.
+  // by SRS §4.9.1 registration). Throws if the email isn't verified — hard
+  // gate per SRS §4.9.5 lands here, not just a banner.
   private async resolveRecruiterContext(userId: number): Promise<{ companyId: number }> {
     const recruiter = await prisma.recruiter.findUnique({
       where: { userId },
@@ -96,7 +96,7 @@ export class RecruiterJobsService {
     });
     if (!recruiter) throw new ForbiddenException('Recruiter profile required');
     if (!recruiter.workEmailVerified) {
-      throw new ForbiddenException('Verify your work email before posting jobs');
+      throw new ForbiddenException('Verify your email before posting jobs');
     }
     return { companyId: recruiter.companyId };
   }
@@ -273,9 +273,8 @@ export class RecruiterJobsService {
   }
 
   // SRS §4.13 — recruiter notification on first publish + reopen. Looks up
-  // the recruiter's login email; deliberately not the workEmail (workEmail
-  // is for company verification, login email is the canonical channel for
-  // transactional notifications and matches password reset etc.).
+  // the recruiter's Email ID (User.email) — the canonical channel for
+  // transactional notifications, matching password reset etc.
   private async fireJobPostedEmail(userId: number, job: Job): Promise<void> {
     const user = await prisma.user.findUnique({
       where: { id: userId },

@@ -40,8 +40,8 @@ export default async function NewJobPage() {
   const recruiter = await prisma.recruiter.findUnique({
     where: { userId: session.sub },
     select: {
-      workEmail: true,
       workEmailVerified: true,
+      user: { select: { email: true } },
       company: { select: { name: true } },
     },
   });
@@ -58,11 +58,11 @@ export default async function NewJobPage() {
     return (
       <div className="space-y-4 rounded-md border border-[var(--color-border)] p-10">
         <h1 className="text-xl font-semibold tracking-tight text-[var(--color-fg)]">
-          Verify your work email first
+          Verify your email first
         </h1>
         <p className="text-sm text-[var(--color-fg-muted)]">
           We sent a verification link to{' '}
-          <span className="font-medium text-[var(--color-fg)]">{recruiter.workEmail}</span>.
+          <span className="font-medium text-[var(--color-fg)]">{recruiter.user.email}</span>.
           Click the link before posting a job — recruiter↔company association needs to be
           confirmed.
         </p>
