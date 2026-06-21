@@ -163,7 +163,6 @@ const COMPANIES: CompanyTemplate[] = [
 interface RecruiterTemplate {
   companySlug: string;
   email: string;
-  workEmail: string;
   name: string;
   designation: string;
 }
@@ -172,56 +171,48 @@ const RECRUITERS: RecruiterTemplate[] = [
   {
     companySlug: 'nimbus-cloud-systems',
     email: 'priya.sharma+demo@jobportal.dev',
-    workEmail: 'priya.sharma@nimbuscloud.demo',
     name: 'Priya Sharma',
     designation: 'Senior Talent Partner',
   },
   {
     companySlug: 'veridian-analytics',
     email: 'rohan.mehta+demo@jobportal.dev',
-    workEmail: 'rohan.mehta@veridian.demo',
     name: 'Rohan Mehta',
     designation: 'Head of Talent',
   },
   {
     companySlug: 'sahaj-pay',
     email: 'aditi.iyer+demo@jobportal.dev',
-    workEmail: 'aditi.iyer@sahajpay.demo',
     name: 'Aditi Iyer',
     designation: 'Talent Lead',
   },
   {
     companySlug: 'lumen-health',
     email: 'karthik.reddy+demo@jobportal.dev',
-    workEmail: 'karthik.reddy@lumenhealth.demo',
     name: 'Karthik Reddy',
     designation: 'People Operations Manager',
   },
   {
     companySlug: 'pathshala-learning',
     email: 'aarti.singh+demo@jobportal.dev',
-    workEmail: 'aarti.singh@pathshala.demo',
     name: 'Aarti Singh',
     designation: 'Recruiting Manager',
   },
   {
     companySlug: 'kirana-stack',
     email: 'vivek.patel+demo@jobportal.dev',
-    workEmail: 'vivek.patel@kiranastack.demo',
     name: 'Vivek Patel',
     designation: 'Talent Acquisition',
   },
   {
     companySlug: 'rasta-logistics',
     email: 'neha.kapoor+demo@jobportal.dev',
-    workEmail: 'neha.kapoor@rasta.demo',
     name: 'Neha Kapoor',
     designation: 'Senior Recruiter',
   },
   {
     companySlug: 'sutra-labs',
     email: 'sanjay.verma+demo@jobportal.dev',
-    workEmail: 'sanjay.verma@sutralabs.demo',
     name: 'Sanjay Verma',
     designation: 'Founding Recruiter',
   },
@@ -510,13 +501,11 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
         userId: user.id,
         companyId,
         designation: r.designation,
-        workEmail: r.workEmail,
         workEmailVerified: true,
       },
       update: {
         companyId,
         designation: r.designation,
-        workEmail: r.workEmail,
         workEmailVerified: true,
       },
     });

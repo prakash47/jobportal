@@ -41,7 +41,6 @@ const validInput = {
   email: 'me@example.com',
   password: 'Sup3rSecret!',
   name: 'Anjali',
-  workEmail: 'anjali@acme.com',
   companyName: 'Acme Inc',
 };
 
@@ -129,7 +128,6 @@ describe('RecruiterRegistrationService.register', () => {
         data: expect.objectContaining({
           userId: 42,
           companyId: 7,
-          workEmail: 'anjali@acme.com',
           workEmailVerified: false,
         }),
       }),
@@ -144,7 +142,8 @@ describe('RecruiterRegistrationService.register', () => {
         }),
       }),
     );
-    expect(fakeWorkEmail.issueAndSend).toHaveBeenCalledWith(99, 'anjali@acme.com');
+    // Verification link now goes to the single Email ID (the login address).
+    expect(fakeWorkEmail.issueAndSend).toHaveBeenCalledWith(99, 'me@example.com');
   });
 
   it('slug-collision links the recruiter to the existing Company', async () => {

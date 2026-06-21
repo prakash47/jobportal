@@ -156,7 +156,7 @@ The schema lives at **`packages/db/prisma/schema.prisma`**. Core entities:
 |---|---|
 | `User` | Account + role (`CANDIDATE` / `RECRUITER` / `ADMIN`). |
 | `Candidate` | Job-seeker profile attached to a User. |
-| `Recruiter` | Recruiter profile (separate `workEmail` from login email). |
+| `Recruiter` | Recruiter profile (single Email ID = `User.email`; `workEmailVerified` gates job posting). |
 | `Company` | Employer record (slug, industry, HQ city, denormalized rating). |
 | `Job` | A posting (status: `DRAFT`/`PENDING_MODERATION`/`ACTIVE`/`EXPIRED`/`CLOSED`). |
 | `Application` | A candidate's application to a job, with a status state machine. |

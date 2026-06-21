@@ -310,11 +310,13 @@ model Recruiter {
   company           Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
   designation       String?
   contactPhone      String?
-  // SRS §4.9.1 — work email is distinct from User.email (which is the login
-  // identifier). Verification establishes the recruiter has access to the
-  // claimed company's mailbox; admin still verifies the recruiter↔company
-  // association before any job-post can land (Task 16 + Task 17).
-  workEmail         String
+  // Registration captures a single "Email ID" (the User.email login
+  // identifier); there is no separate work-email column anymore. The flag
+  // below still gates job posting: clicking the verification link sent to
+  // User.email establishes the recruiter controls that mailbox. Admin still
+  // verifies the recruiter↔company association before any job-post can land
+  // (Task 16 + Task 17). Kept the `workEmailVerified` name to avoid colliding
+  // with User.emailVerified (which feeds the candidate flow + JWT claims).
   workEmailVerified Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
