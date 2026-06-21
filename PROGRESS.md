@@ -15,10 +15,10 @@
 - **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Owner is now working **exclusively on the recruiter portal**; changes are scoped to recruiter code paths + `packages/db` and must not disturb web / candidate-API behaviour.
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
 - **Branch state**: `develop` is the integration tip; `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: `feature/recruiter-single-email` — recruiter registration collapsed to a single "Email ID"; dropped `Recruiter.workEmail`. Bundled a **DB migration-history reconciliation**: the local DB had drifted (orphan `20260614104341_sync` applied, repo's `google_oauth` un-applied); a consented `prisma migrate reset` rebuilt a clean **12-migration** history that now matches the repo + `schema.prisma`. (Note: the PR log between ~2026-05-17 and here is incomplete — several `develop` merges — naukri-redesign, collaborator-onboarding-docs, login pages, header-footer-branding — predate disciplined logging; treat older snapshot detail as approximate.)
+- **Last merge**: `feature/recruiter-profile-edit` — the recruiter **Profile tab is now editable** (recruiter-personal fields incl. department + alternate POC, company fields incl. company-type/industry/website, and company-logo upload). Additive migration `20260621064256_recruiter_profile_editing` (history now **13 migrations**); new API `recruiter-profile` + `media` modules; `apps/web` and candidate auth/profile **byte-untouched**. (Earlier note still applies: the PR log between ~2026-05-17 and the recruiter-single-email entry is incomplete — several `develop` merges predate disciplined logging; treat older snapshot detail as approximate.)
 - **Local runtime status (DB verified 2026-06-21)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) up; `jobportal_dev` reset + reseeded + ES reindexed cleanly; `pnpm build` green for all 4 apps. App dev servers (`:3000/:3001/:4000`) not booted this session. ES indices repopulated (50 jobs, 12 companies, 3 articles in `jobs-v2`/`companies-v2`/`articles-v2` — alias version reset by the DB rebuild).
 - **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (stable Job IDs 100001-100050, Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs / 20 candidates / 371 applications.
-- **Test counts on develop**: 235 API + **181 web** + 37 feature-flags + 18 observability + auth = ~463 unit tests (recruiter single-email edited existing tests in place; no net change).
+- **Test counts on develop**: **258 API** + 181 web + 37 feature-flags + 18 observability + auth = ~486 unit tests (recruiter-profile-edit added 23 API tests: recruiter-profile service + logo validators).
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2 / Sentry / PostHog.
 
 ---
@@ -51,6 +51,24 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### `feature/recruiter-profile-edit` · 2026-06-21
+
+Recruiter **Profile tab is now editable** (refinement of SRS §4.9.1). CLI merge (no PR). Scoped to recruiter code paths + `packages/db` — **`apps/web` and candidate auth/profile (`apps/api/src/auth`, `apps/api/src/profile`) are byte-untouched** (verified via `git status`).
+
+**What shipped:**
+- **Schema** (additive migration `20260621064256_recruiter_profile_editing`, history now 13): `Recruiter` gains `department` + `altPocName`/`altPocEmail`/`altPocPhone` (alternate POC); `Company` gains `companyType` (new `CompanyType` enum — Indian-market set: Startup / Indian MNC / Foreign MNC / Private / Public / Government·PSU / NGO·Non-profit / Partnership / Sole Proprietorship); `ProfileAuditAction` gains `RECRUITER_PROFILE_UPDATE` / `COMPANY_UPDATE` / `COMPANY_LOGO_UPDATE`. All columns nullable → no impact on existing reads.
+- **API** (new `recruiter-profile` module): `PATCH /recruiter/profile` (recruiter-personal fields), `PATCH /recruiter/company` (name/description/website/companyType/industry/HQ-city/employees/founded), `POST`+`DELETE /recruiter/company/logo`. `JwtAuthGuard + RolesGuard('RECRUITER')` is the trusted L3 boundary; company id resolved server-side from the JWT, never the body. Edits write `ProfileAuditLog` rows (reuses candidate `buildDiff`/`stripUndefined` leaf utils) and fire-and-log `syncCompany()` only when an ES-mirrored field changes.
+- **Logo pipeline**: PNG/JPG/WebP only (SVG rejected — script-injection risk), ≤2 MB, ClamAV-scanned, stored in R2; `Company.logoUrl` holds a permanent public URL. `StorageService` gains `getPublicUrl`/`getObject`/`keyFromPublicUrl`; new `MediaController` (`GET /media/company-logos/:file`) serves logos publicly **in local dev only** (dormant in prod where `R2_PUBLIC_URL` points at the CDN). `R2_PUBLIC_URL` added to `.env.example`.
+- **Recruiter UI**: Profile tab → two editable sections (your details / company details) + auto-uploading logo picker (preview / replace / remove). Logo renders **before the company name** on the dashboard. Reads via RSC/Prisma, mutations via the BFF. Added image `remotePatterns` (the app had none) + a recruiter-local `api-client` and `CompanyLogo`.
+
+**No feature flag** — profile editing is core, free Day-0 functionality (matches the unflagged candidate profile editor; owner-confirmed).
+
+**Review fixes (same branch):** (1) uploaded logo rendered as a broken image because the Next image optimizer 400s on the local `http://localhost:4000/media` URL (`"url" parameter is not allowed`) while the raw URL serves 200 → company logo `<Image>` is now `unoptimized` (browser loads it directly; logos are small pre-sized assets, optimization adds nothing). (2) the authed app shell now locks the viewport (`h-screen` + `overflow-hidden`) and scrolls each pane independently so the sidebar stays fixed while only the content pane scrolls.
+
+**Gate:** workspace typecheck 11/11 · tests **258 API (+23)** + 181 web + auth/feature-flags/observability green · `pnpm build` 4/4 apps. End-to-end smoke-tested against the running stack (login → PATCH profile → PATCH company → logo upload → public `/media` serve 200 → persist → PDF-reject 400 → DELETE).
+
+**Deferred / follow-ups:** `MediaController` is a dev convenience — production needs `R2_PUBLIC_URL` + a real R2 public bucket/CDN (the host must also be whitelisted in each app's `next.config` image patterns). In local dev R2 is unconfigured, so logos live in the API's in-memory store and vanish on API restart (re-upload). `CompanyLogo` is duplicated in web + recruiter (consolidating into `@jobportal/ui` is a standing chip). Company edits are last-write-wins across multiple recruiters sharing one company (acceptable for MVP).
 
 ### `feature/recruiter-single-email` · 2026-06-21
 
