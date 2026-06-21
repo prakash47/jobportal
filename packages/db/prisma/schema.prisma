@@ -120,6 +120,9 @@ enum ResumeScanStatus {
 
 // SRS §4.3.6 — every profile edit writes one row of this enum's actions to
 // ProfileAuditLog. The diff column captures before/after at field level.
+// The RECRUITER_* / COMPANY_* actions cover the recruiter-portal profile editor
+// (recruiter-personal fields, company fields, and the company-logo upload);
+// they reuse the same audit table keyed by the recruiter's User id.
 enum ProfileAuditAction {
   PROFILE_UPDATE
   EDUCATION_ADD
@@ -131,6 +134,25 @@ enum ProfileAuditAction {
   SKILLS_UPDATE
   RESUME_UPLOAD
   RESUME_DELETE
+  RECRUITER_PROFILE_UPDATE
+  COMPANY_UPDATE
+  COMPANY_LOGO_UPDATE
+}
+
+// SRS §4.9 — legal / organisational classification of an employer, shown on the
+// recruiter-managed company profile and (later) filterable on the public
+// directory. Indian-market value set; nullable so existing companies are
+// unaffected until a recruiter sets it.
+enum CompanyType {
+  STARTUP
+  INDIAN_MNC
+  FOREIGN_MNC
+  PRIVATE
+  PUBLIC
+  GOVERNMENT_PSU
+  NGO_NONPROFIT
+  PARTNERSHIP
+  SOLE_PROPRIETORSHIP
 }
 
 // ============================================================
@@ -309,7 +331,17 @@ model Recruiter {
   companyId         Int
   company           Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
   designation       String?
+  // SRS §4.9.1 — recruiter-editable profile fields (recruiter portal). All
+  // nullable: registration only captures name + Email ID + company, the rest is
+  // filled in later from the Profile tab.
+  department        String?
   contactPhone      String?
+  // Alternate point of contact — a backup person for this recruiter's company
+  // (e.g. the hiring manager). Captured as discrete fields so the email/phone
+  // can be validated and surfaced as a proper contact card.
+  altPocName        String?
+  altPocEmail       String?
+  altPocPhone       String?
   // Registration captures a single "Email ID" (the User.email login
   // identifier); there is no separate work-email column anymore. The flag
   // below still gates job posting: clicking the verification link sent to
@@ -336,6 +368,9 @@ model Company {
   description        String?
   logoUrl            String?
   websiteUrl         String?
+  // SRS §4.9 — recruiter-editable organisational classification. Nullable so
+  // existing companies are unaffected until a recruiter sets it.
+  companyType        CompanyType?
   industryId         Int?
   industry           Industry? @relation(fields: [industryId], references: [id], onDelete: SetNull)
   headquartersCityId Int?

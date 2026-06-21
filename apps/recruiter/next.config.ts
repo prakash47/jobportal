@@ -12,6 +12,17 @@ const config: NextConfig = {
     '@jobportal/types',
     '@jobportal/observability',
   ],
+  // Company logos render via next/image. Allow the same public hosts as the web
+  // app (R2 / CDN) plus the API's /media passthrough used in local dev (where
+  // R2_PUBLIC_URL is blank and StorageService serves logos from the API).
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: '*.r2.cloudflarestorage.com' },
+      { protocol: 'https', hostname: 'cdn.jobportal.com' },
+      { protocol: 'https', hostname: 'imagedelivery.net' },
+      { protocol: 'http', hostname: 'localhost', port: '4000', pathname: '/media/**' },
+    ],
+  },
 };
 
 // Phase 1 item 18 — withSentryConfig adds the webpack plugin for

@@ -9,11 +9,13 @@ import { ClamAVModule } from './clamav/clamav.module';
 import { EmailModule } from './email/email.module';
 import { FeatureFlagsModule } from './feature-flags/feature-flags.module';
 import { JobLifecycleModule } from './job-lifecycle/job-lifecycle.module';
+import { MediaModule } from './media/media.module';
 import { NotificationsPreferencesModule } from './notifications-preferences/notifications-preferences.module';
 import { ProfileModule } from './profile/profile.module';
 import { RecruiterApplicantsModule } from './recruiter-applicants/recruiter-applicants.module';
 import { RecruiterAuthModule } from './recruiter-auth/recruiter-auth.module';
 import { RecruiterJobsModule } from './recruiter-jobs/recruiter-jobs.module';
+import { RecruiterProfileModule } from './recruiter-profile/recruiter-profile.module';
 import { RecruiterPostQuotaModule } from './recruiter-post-quota/quota.module';
 import { RedisModule } from './redis/redis.module';
 import { ResumeModule } from './resume/resume.module';
@@ -42,8 +44,10 @@ import { StorageModule } from './storage/storage.module';
     RecruiterPostQuotaModule,
     RecruiterJobsModule,
     RecruiterApplicantsModule,
+    RecruiterProfileModule,
     JobLifecycleModule,
     NotificationsPreferencesModule,
+    MediaModule,
   ],
   controllers: [AppController],
 })

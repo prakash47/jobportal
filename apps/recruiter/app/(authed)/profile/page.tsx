@@ -1,27 +1,47 @@
 import { prisma } from '@jobportal/db';
-import { Badge } from '@jobportal/ui';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { EditableProfile } from '../../../components/profile/EditableProfile';
 
-const fmtDate = (d: Date) =>
-  d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+// Editable recruiter profile (SRS §4.9.1). Reads run here in the RSC via Prisma
+// (reads/writes split — only mutations hit the BFF); the EditableProfile client
+// component PATCHes /recruiter/profile + /recruiter/company and uploads the logo.
 
-// Read-only profile view. Editing lands with the recruiter portal next
-// iteration; this page surfaces the data the registration captured plus the
-// derived company link so the recruiter can confirm what we've stored.
+export const dynamic = 'force-dynamic';
 
 export default async function ProfilePage() {
   const session = (await readUserFromCookie())!;
-  const recruiter = await prisma.recruiter.findUnique({
-    where: { userId: session.sub },
-    select: {
-      designation: true,
-      contactPhone: true,
-      workEmailVerified: true,
-      createdAt: true,
-      user: { select: { name: true, email: true } },
-      company: { select: { name: true, slug: true } },
-    },
-  });
+
+  const [recruiter, industries, cities] = await Promise.all([
+    prisma.recruiter.findUnique({
+      where: { userId: session.sub },
+      select: {
+        designation: true,
+        department: true,
+        contactPhone: true,
+        altPocName: true,
+        altPocEmail: true,
+        altPocPhone: true,
+        workEmailVerified: true,
+        user: { select: { name: true, email: true, emailVerified: true } },
+        company: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            logoUrl: true,
+            websiteUrl: true,
+            companyType: true,
+            industryId: true,
+            headquartersCityId: true,
+            employeeCount: true,
+            foundedYear: true,
+          },
+        },
+      },
+    }),
+    prisma.industry.findMany({ select: { id: true, slug: true, name: true }, orderBy: { name: 'asc' } }),
+    prisma.city.findMany({ select: { id: true, slug: true, name: true }, orderBy: { name: 'asc' } }),
+  ]);
 
   if (!recruiter) {
     return (
@@ -36,39 +56,25 @@ export default async function ProfilePage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Profile</h1>
         <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          What we know about you. Editing lands in the next release.
+          Keep your details and company information up to date.
         </p>
       </header>
 
-      <dl className="space-y-4 rounded-md border border-[var(--color-border)] p-6">
-        <Field label="Name" value={recruiter.user.name} />
-        <Field
-          label="Email ID"
-          value={
-            <span className="flex items-center gap-2">
-              {recruiter.user.email}
-              {recruiter.workEmailVerified ? (
-                <Badge variant="success">Verified</Badge>
-              ) : (
-                <Badge variant="warning">Unverified</Badge>
-              )}
-            </span>
-          }
-        />
-        <Field label="Company" value={recruiter.company.name} />
-        {recruiter.designation && <Field label="Designation" value={recruiter.designation} />}
-        {recruiter.contactPhone && <Field label="Contact phone" value={recruiter.contactPhone} />}
-        <Field label="Joined" value={fmtDate(recruiter.createdAt)} />
-      </dl>
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-1 gap-1 sm:grid-cols-[180px_minmax(0,1fr)] sm:gap-4">
-      <dt className="text-sm text-[var(--color-fg-muted)]">{label}</dt>
-      <dd className="text-sm text-[var(--color-fg)]">{value}</dd>
+      <EditableProfile
+        user={recruiter.user}
+        recruiter={{
+          designation: recruiter.designation,
+          department: recruiter.department,
+          contactPhone: recruiter.contactPhone,
+          altPocName: recruiter.altPocName,
+          altPocEmail: recruiter.altPocEmail,
+          altPocPhone: recruiter.altPocPhone,
+          workEmailVerified: recruiter.workEmailVerified,
+        }}
+        company={recruiter.company}
+        industries={industries}
+        cities={cities}
+      />
     </div>
   );
 }
