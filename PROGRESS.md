@@ -10,15 +10,15 @@
 
 ---
 
-## Snapshot — 2026-05-17
+## Snapshot — 2026-06-21
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Local stack fully demo-ready end-to-end: every route serves, all 4 SEO landing patterns work, recruiter funnel populated, homepage company tiles show initials-on-color monogram fallbacks (no more empty Building2 icons).
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Owner is now working **exclusively on the recruiter portal**; changes are scoped to recruiter code paths + `packages/db` and must not disturb web / candidate-API behaviour.
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
-- **Branch state**: `develop` is the integration tip (40 PRs after this lands); `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: `feature/header-footer-branding` — Career Queue (CQ) logo across the web header/footer + recruiter portal chrome, plus a 3-col-grid fix that centres the homepage header nav. (Note: the snapshot below predates a few `develop` merges that were not individually logged here — naukri-redesign, collaborator-onboarding-docs, login pages.)
-- **Local runtime status (verified 2026-05-17)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) + API (`:4000`) + web (`:3000`) + recruiter (`:3001`) all booted cleanly. **All 25 probed public routes return expected status codes** (200/307/404). ES indices populated (50 jobs, 12 companies, 3 articles in `jobs-v4`, `companies-v4`, `articles-v4`).
-- **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (now with stable Job IDs 100001-100050 and Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs.
-- **Test counts on develop**: 235 API + **173 web** (was 163; +10 catch-all dispatch tests) + 37 feature-flags + 18 observability = 463 unit tests.
+- **Branch state**: `develop` is the integration tip; `main` is still the initial scaffold (no production release cut yet).
+- **Last merge**: `feature/recruiter-single-email` — recruiter registration collapsed to a single "Email ID"; dropped `Recruiter.workEmail`. Bundled a **DB migration-history reconciliation**: the local DB had drifted (orphan `20260614104341_sync` applied, repo's `google_oauth` un-applied); a consented `prisma migrate reset` rebuilt a clean **12-migration** history that now matches the repo + `schema.prisma`. (Note: the PR log between ~2026-05-17 and here is incomplete — several `develop` merges — naukri-redesign, collaborator-onboarding-docs, login pages, header-footer-branding — predate disciplined logging; treat older snapshot detail as approximate.)
+- **Local runtime status (DB verified 2026-06-21)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) up; `jobportal_dev` reset + reseeded + ES reindexed cleanly; `pnpm build` green for all 4 apps. App dev servers (`:3000/:3001/:4000`) not booted this session. ES indices repopulated (50 jobs, 12 companies, 3 articles in `jobs-v2`/`companies-v2`/`articles-v2` — alias version reset by the DB rebuild).
+- **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (stable Job IDs 100001-100050, Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs / 20 candidates / 371 applications.
+- **Test counts on develop**: 235 API + **181 web** + 37 feature-flags + 18 observability + auth = ~463 unit tests (recruiter single-email edited existing tests in place; no net change).
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2 / Sentry / PostHog.
 
 ---
@@ -51,6 +51,22 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### `feature/recruiter-single-email` · 2026-06-21
+
+Recruiter registration now collects a **single "Email ID"** instead of two separate "login email" + "work email" inputs (refinement of SRS §4.9.1). CLI merge (no PR). Owner is now working exclusively on the recruiter portal, so this is scoped to recruiter-only code paths + `packages/db` — **`apps/web` and candidate auth (`apps/api/src/auth`) are byte-untouched** (verified via `git grep`).
+
+**What changed:**
+- **Schema**: dropped the redundant `Recruiter.workEmail` column (it was always derivable from `User.email`). Kept `Recruiter.workEmailVerified` as the job-post gate — the verification link (now sent to the single Email ID) still flips it. Name kept deliberately to avoid colliding with `User.emailVerified` (candidate flow + JWT claims).
+- **API** (`recruiter-auth`): `RegisterRecruiterDto` drops `workEmail`; registration writes only the single email and sends the verification link there. `recruiter-jobs` gate comment + error copy updated (logic unchanged — already used `User.email`).
+- **Recruiter UI**: register page asks for one field labeled **"Email ID"**; dashboard / jobs-new / profile read `recruiter.user.email`; profile collapses its two email rows into one. Banner + gate copy softened "work email" → "email".
+- **Demo seed**: the 8 recruiter rows drop `workEmail`.
+
+**Migration + DB reconciliation** (the messy part): the local `jobportal_dev` DB had diverged from the repo — an orphan `20260614104341_sync` migration was applied while the repo's `google_oauth` migration (adds `User.provider`/`googleId`/`image`) was **not**. An owner-consented `prisma migrate reset` replayed all 11 repo migrations + the new `20260621040149_recruiter_single_email` drop, discarding `_sync` and finally applying `google_oauth`. `prisma migrate status` is now "up to date" with a clean **12-migration** history. Reseeded base + demo + apps (12 companies / 8 recruiters / 50 jobs / 20 candidates / 371 applications) + ES reindex (`jobs-v2`/`companies-v2`/`articles-v2`).
+
+**Gate (clean state)**: typecheck 11/11 · tests 235 API + 181 web + auth/feature-flags/observability all green (counts unchanged — edited existing recruiter tests in place) · `pnpm build` 4/4 apps. `ARCHITECTURE.md` Recruiter-entity line updated.
+
+**Deferred (noted, not done)**: `RecruiterWorkEmailService` class name still says "WorkEmail" (internal only; it now does generic recruiter email-verification) — left as-is to avoid churn beyond the schema change. The recruiter work-email **resend** affordance is still absent (pre-existing; tied to admin-console Task 16).
 
 ### `feature/header-footer-branding` · 2026-06-17
 

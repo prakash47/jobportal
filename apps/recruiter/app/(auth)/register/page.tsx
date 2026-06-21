@@ -12,7 +12,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [workEmail, setWorkEmail] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -26,7 +25,7 @@ export default function RegisterPage() {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name, workEmail, companyName }),
+        body: JSON.stringify({ email, password, name, companyName }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { message?: string };
@@ -64,7 +63,7 @@ export default function RegisterPage() {
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="email">Login email</Label>
+          <Label htmlFor="email">Email ID</Label>
           <Input
             id="email"
             type="email"
@@ -73,6 +72,9 @@ export default function RegisterPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
+          <p className="text-xs text-[var(--color-fg-subtle)]">
+            We&rsquo;ll send a verification link to this address.
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="password">Password</Label>
@@ -97,19 +99,6 @@ export default function RegisterPage() {
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="workEmail">Work email</Label>
-          <Input
-            id="workEmail"
-            type="email"
-            required
-            value={workEmail}
-            onChange={(e) => setWorkEmail(e.target.value)}
-          />
-          <p className="text-xs text-[var(--color-fg-subtle)]">
-            We&rsquo;ll send a verification link to this address.
-          </p>
         </div>
 
         {error && (

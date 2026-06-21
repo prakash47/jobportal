@@ -11,7 +11,7 @@ export default async function DashboardPage() {
   const session = (await readUserFromCookie())!;
   const recruiter = await prisma.recruiter.findUnique({
     where: { userId: session.sub },
-    select: { workEmail: true, workEmailVerified: true },
+    select: { workEmailVerified: true, user: { select: { email: true } } },
   });
 
   return (
@@ -24,7 +24,7 @@ export default async function DashboardPage() {
       </header>
 
       {recruiter && !recruiter.workEmailVerified && (
-        <VerifyWorkEmailBanner workEmail={recruiter.workEmail} />
+        <VerifyWorkEmailBanner email={recruiter.user.email} />
       )}
 
       <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">

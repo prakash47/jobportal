@@ -16,7 +16,6 @@ export default async function ProfilePage() {
     select: {
       designation: true,
       contactPhone: true,
-      workEmail: true,
       workEmailVerified: true,
       createdAt: true,
       user: { select: { name: true, email: true } },
@@ -43,12 +42,11 @@ export default async function ProfilePage() {
 
       <dl className="space-y-4 rounded-md border border-[var(--color-border)] p-6">
         <Field label="Name" value={recruiter.user.name} />
-        <Field label="Login email" value={recruiter.user.email} />
         <Field
-          label="Work email"
+          label="Email ID"
           value={
             <span className="flex items-center gap-2">
-              {recruiter.workEmail}
+              {recruiter.user.email}
               {recruiter.workEmailVerified ? (
                 <Badge variant="success">Verified</Badge>
               ) : (
