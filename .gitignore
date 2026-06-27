@@ -11,6 +11,10 @@ node_modules/
 .yarn-integrity
 jspm_packages/
 web_modules/
+# Non-pnpm lockfiles — this repo uses pnpm (pnpm-lock.yaml) only. A stray
+# `npm install` / `yarn` must not commit a competing lockfile.
+package-lock.json
+yarn.lock
 
 # ---------- Environment variables (NEVER commit) ----------
 .env
