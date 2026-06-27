@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@jobportal/ui';
 
 const ITEMS = [
-  { href: '/profile', label: 'Overview' },
+  { href: '/profile/details', label: 'Personal details' },
   { href: '/profile/education', label: 'Education' },
   { href: '/profile/experience', label: 'Experience' },
   { href: '/profile/skills', label: 'Skills' },
