@@ -10,15 +10,15 @@
 
 ---
 
-## Snapshot — 2026-06-21
+## Snapshot — 2026-06-22
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Owner is now working **exclusively on the recruiter portal**; changes are scoped to recruiter code paths + `packages/db` and must not disturb web / candidate-API behaviour.
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Build-order is complete; current focus has moved to **polishing the candidate (seeker) experience**. The post-registration **onboarding flow was fully redesigned** (shipped to `develop`) and a **seeker-dashboard UI layout update** is now starting.
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
-- **Branch state**: `develop` is the integration tip; `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: `feature/recruiter-profile-edit` — the recruiter **Profile tab is now editable** (recruiter-personal fields incl. department + alternate POC, company fields incl. company-type/industry/website, and company-logo upload). Additive migration `20260621064256_recruiter_profile_editing` (history now **13 migrations**); new API `recruiter-profile` + `media` modules; `apps/web` and candidate auth/profile **byte-untouched**. (Earlier note still applies: the PR log between ~2026-05-17 and the recruiter-single-email entry is incomplete — several `develop` merges predate disciplined logging; treat older snapshot detail as approximate.)
-- **Local runtime status (DB verified 2026-06-21)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) up; `jobportal_dev` reset + reseeded + ES reindexed cleanly; `pnpm build` green for all 4 apps. App dev servers (`:3000/:3001/:4000`) not booted this session. ES indices repopulated (50 jobs, 12 companies, 3 articles in `jobs-v2`/`companies-v2`/`articles-v2` — alias version reset by the DB rebuild).
+- **Branch state**: `develop` is the integration tip; `main` is still the initial scaffold (no production release cut yet). **In-flight branches**: `feature/seeker-onboarding-changes` (three onboarding-input refinements — **pushed to origin**, awaiting merge to develop) and `feature/seeker-dashboard-ui-layout-update` (dashboard UI work — just cut from develop, local-only).
+- **Last develop change**: `0ae7a79` "full onboarding steps finalized" — the **seeker onboarding redesign** (3-step wizard + navbar/rail/tips/footer chrome + schema + API; full entry in the PR log below). Committed **directly to `develop`** (CLI, no PR — same pattern as the recent recruiter merges). Also recently on develop but only lightly logged: the login/register **tabbed popup modal** (`feature/navbar-ui`, PR #43).
+- **Local runtime status (verified 2026-06-22)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) up; all three app dev servers running — web `:3000`, recruiter `:3001`, API `:4000`. Note: a `pnpm install --force` was required this session — because the repo lives under **OneDrive**, `node_modules` had de-materialized the `next` CLI binary (`Cannot find module …/next/dist/bin/next`); reinstalling restored it. (Durable fix: move the repo out of OneDrive or exclude it from sync.)
 - **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (stable Job IDs 100001-100050, Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs / 20 candidates / 371 applications.
-- **Test counts on develop**: **258 API** + 181 web + 37 feature-flags + 18 observability + auth = ~486 unit tests (recruiter-profile-edit added 23 API tests: recruiter-profile service + logo validators).
+- **Test counts**: develop API grew past the **258** baseline (recruiter-profile-edit) by the onboarding redesign's additions (projects/languages/skills-DTO + `slugifySkill` + register-auto-login unit tests) + 181 web + 37 feature-flags + 18 observability + auth. Not re-tallied this session — treat as approximate.
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2 / Sentry / PostHog.
 
 ---
@@ -51,6 +51,32 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### Seeker onboarding redesign — `develop` commit `0ae7a79` · 2026-06-22
+
+The post-registration onboarding was rebuilt from a single form into a guided **multi-step wizard**, and the auth entry points were reworked to flow straight into it (SRS §4.3 + §4.12). Committed **directly to `develop`** (CLI, no PR — same pattern as the recent recruiter merges). Work spanned several sessions; the popup-login half landed earlier on `feature/navbar-ui` (PR #43).
+
+**Auth → onboarding flow:**
+- Login + Register are now a **tabbed popup modal** opened from the navbar (Sign in / Register tabs), not standalone pages. Includes **Sign in / Sign up with Google** (server-side OAuth, flag-gated **off** by default) and a show/hide password toggle.
+- Registering (email+password **or** Google) now **auto-logs-in and redirects straight to onboarding** — name pre-filled + editable, email locked — instead of the old "account created, sign in to continue".
+
+**The wizard** (`apps/web/components/onboarding/`, replaces the deleted `OnboardingForm.tsx`) — **3 data steps + a done screen**, each step skippable and saved as you go:
+1. **Employment & professional** — work status (Fresher / Experienced toggle), looking-for (Job / Internship / Both), and (when Experienced) total experience, current salary, company, designation, current city, industry, notice period; **skills** (autosuggest from the catalogue + type-your-own, which find-or-creates a `Skill`); **projects** and **languages** sub-lists (add / remove, each persisted immediately).
+2. **Education** — First Degree + Class 12 (institute / degree / specialization, start–end year, CGPA, "currently pursuing"). Reuses the existing `/me/education` model + API.
+3. **Headline & preferences** — resume headline (250 chars), highlighted position/role, preferred work locations, preferred salary, gender.
+- **Done** screen → a single **"Go to dashboard"** button (`/profile`).
+
+**Chrome / layout:** a top **navbar**, a left **vertical progress rail** (`StepTracker`), a right **quick-tips** panel, and the shared **site footer** — a 3-column layout with **sticky side rails** + a wider card; fully responsive (rails collapse below `lg`/`xl`; the card falls back to its inline step bar on mobile). Flat navy/cyan brand, no gradients.
+
+**Schema** (additive): new `Project` + `CandidateLanguage` models; `Candidate` gains `workStatus`, `lookingFor`, `currentCompanyName`, `currentCityName`, `industryId`, `gender`; new enums `WorkStatus` / `LookingFor` / `LanguageProficiency` / `Gender`; `Skill.isCustom`. All additive — existing rows untouched.
+
+**API** (`apps/api/src/profile/`): new ownership-scoped `GET/POST/DELETE /me/projects` + `/me/languages`; `ProfilePatchDto` extended with the new candidate fields; `/me/skills` accepts free-text `customSkills` and find-or-creates catalogue rows (race-safe `createMany`, 50-skill cap enforced **before** any write); `auth` register returns an auto-login session. New unit tests for the DTOs, `slugifySkill`, and register auto-login.
+
+**Reviewed:** each major slice went through an adversarial multi-agent review. Confirmed + fixed: a **stored-XSS** sink (a `javascript:`/`data:` project URL → restricted to http(s) at the DTO + guarded on render), WCAG-AA contrast misses (eyebrow / step-label `fg-subtle` → `fg-muted`; dark-mode helper text), the segmented control's broken `radiogroup` keyboard model (roving tabindex + arrow nav), custom-skill catalogue rows being written before the cap check, and a couple of controlled-`<select>` desync edges.
+
+**In-flight (NOT yet on develop):**
+- **`feature/seeker-onboarding-changes`** (commit `76f46ce`, **pushed to origin**, awaiting merge): three onboarding-input refinements — salary fields now render **Indian thousands-separators** (display only; state stays raw digits so the rupees→paise math is untouched); **Current city** is a searchable city-catalogue **dropdown with an "Other" free-text** fallback; and a **PDF resume/CV upload** was added to the Headline step (reuses the shipped `/me/resume` pipeline — PDF-only, 5 MB, ClamAV-scanned, R2 in prod / in-memory in dev, writes a `Resume` row + sets `activeResumeId`). Plus a `chore` commit (`015b442`) that removed a stray `package-lock.json` and gitignored `package-lock.json` / `yarn.lock` (this repo is **pnpm-only**).
+- **`feature/seeker-dashboard-ui-layout-update`** (local, cut from develop): seeker dashboard (`/profile`) UI layout update — just started.
 
 ### `feature/recruiter-profile-edit` · 2026-06-21
 
