@@ -7,6 +7,8 @@ import { FieldSelect } from './FieldSelect';
 import { SkillAutocomplete, type SelectedSkill, type SkillCatalogueItem } from './SkillAutocomplete';
 import { ProjectsEditor, type ProjectItem } from './ProjectsEditor';
 import { LanguagesEditor, type LanguageItem } from './LanguagesEditor';
+import { CitySelect } from './CitySelect';
+import { formatINR } from './format';
 
 const WORK_STATUS = [
   { value: 'FRESHER', label: 'Fresher' },
@@ -70,6 +72,7 @@ export function EmploymentStep({
   skillSelection,
   onSkillsChange,
   industries,
+  cities,
   projects,
   onProjectsChange,
   languages,
@@ -81,6 +84,7 @@ export function EmploymentStep({
   skillSelection: SelectedSkill[];
   onSkillsChange: (next: SelectedSkill[]) => void;
   industries: { id: number; name: string }[];
+  cities: { id: number; name: string; state: string }[];
   projects: ProjectItem[];
   onProjectsChange: (next: ProjectItem[]) => void;
   languages: LanguageItem[];
@@ -160,11 +164,11 @@ export function EmploymentStep({
                   id="emp-salary"
                   type="text"
                   inputMode="numeric"
-                  value={value.salary}
-                  // Digits only. type="text" (not "number") so a stray
-                  // mouse-wheel / arrow keypress can't silently mutate the value.
+                  // Display Indian-grouped (8,00,000), keep state as raw digits.
+                  // type="text" so a stray wheel/arrow can't silently mutate it.
+                  value={formatINR(value.salary)}
                   onChange={(e) => onChange({ salary: e.target.value.replace(/\D/g, '') })}
-                  placeholder="e.g. 800000"
+                  placeholder="e.g. 8,00,000"
                   className="pl-7"
                 />
               </div>
@@ -194,13 +198,7 @@ export function EmploymentStep({
 
             <div className="space-y-1.5">
               <Label htmlFor="emp-city">Current city</Label>
-              <Input
-                id="emp-city"
-                value={value.city}
-                onChange={(e) => onChange({ city: e.target.value })}
-                maxLength={120}
-                placeholder="e.g. Mumbai, Maharashtra"
-              />
+              <CitySelect cities={cities} value={value.city} onChange={(city) => onChange({ city })} />
             </div>
 
             <div className="space-y-1.5">

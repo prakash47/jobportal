@@ -29,7 +29,7 @@ export default async function OnboardingPage() {
       .create({ data: { userId: claims.sub } })
       .catch(() => prisma.candidate.findUniqueOrThrow({ where: { userId: claims.sub } })));
 
-  const [skills, cities, industries, projects, languages, education] = await Promise.all([
+  const [skills, cities, industries, projects, languages, education, activeResume] = await Promise.all([
     prisma.skill.findMany({ select: { id: true, name: true, category: true }, orderBy: { name: 'asc' } }),
     prisma.city.findMany({ select: { id: true, name: true, state: true }, orderBy: { name: 'asc' } }),
     prisma.industry.findMany({ select: { id: true, name: true }, orderBy: { name: 'asc' } }),
@@ -42,6 +42,9 @@ export default async function OnboardingPage() {
       where: { candidateId: candidate.id },
       orderBy: [{ startYear: 'desc' }],
     }),
+    candidate.activeResumeId != null
+      ? prisma.resume.findUnique({ where: { id: candidate.activeResumeId } })
+      : Promise.resolve(null),
   ]);
 
   // The structured education form owns two rows, discriminated by the Class 12
@@ -49,6 +52,19 @@ export default async function OnboardingPage() {
   const class12Row = education.find((e) => e.degree === CLASS12_DEGREE);
   const degreeRow = education.find((e) => e.degree !== CLASS12_DEGREE);
   const currentYear = new Date().getFullYear();
+
+  // Active resume metadata (serialised) for the headline-step CV uploader.
+  const resume =
+    activeResume && activeResume.deletedAt === null
+      ? {
+          id: activeResume.id,
+          originalFilename: activeResume.originalFilename,
+          sizeBytes: activeResume.sizeBytes,
+          mimeType: activeResume.mimeType,
+          scanStatus: activeResume.scanStatus,
+          uploadedAt: activeResume.uploadedAt.toISOString(),
+        }
+      : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--color-bg-muted)]">
@@ -104,6 +120,7 @@ export default async function OnboardingPage() {
         url: p.url,
       }))}
       languages={languages.map((l) => ({ id: l.id, name: l.name, proficiency: l.proficiency }))}
+      resume={resume}
       />
       <SiteFooter />
     </div>

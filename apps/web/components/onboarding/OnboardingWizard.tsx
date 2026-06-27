@@ -16,6 +16,7 @@ import { CLASS12_DEGREE } from './education-constants';
 import { type SelectedSkill } from './SkillAutocomplete';
 import { type ProjectItem } from './ProjectsEditor';
 import { type LanguageItem } from './LanguagesEditor';
+import { type ResumeItem } from './ResumeUpload';
 
 // 3 data steps (0 = employment, 1 = education, 2 = headline & preferences) + a
 // final "done" screen (3).
@@ -70,6 +71,7 @@ export interface OnboardingWizardProps {
   industries: { id: number; name: string }[];
   projects: ProjectItem[];
   languages: LanguageItem[];
+  resume: ResumeItem | null;
 }
 
 // Post-registration onboarding wizard. The seeker is already auto-logged-in, so
@@ -86,6 +88,7 @@ export function OnboardingWizard({
   industries,
   projects: initialProjects,
   languages: initialLanguages,
+  resume: initialResume,
 }: OnboardingWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -128,6 +131,7 @@ export function OnboardingWizard({
   );
   const [projects, setProjects] = useState<ProjectItem[]>(initialProjects);
   const [languages, setLanguages] = useState<LanguageItem[]>(initialLanguages);
+  const [resume, setResume] = useState<ResumeItem | null>(initialResume);
 
   // Step 1 — education.
   const [degreeEdu, setDegreeEdu] = useState<EduSection>(education.degree);
@@ -349,6 +353,7 @@ export function OnboardingWizard({
             skillSelection={skillSelection}
             onSkillsChange={setSkillSelection}
             industries={industries}
+            cities={cities}
             projects={projects}
             onProjectsChange={setProjects}
             languages={languages}
@@ -373,6 +378,8 @@ export function OnboardingWizard({
             cityOptions={cityOptions}
             cityIds={cityIds}
             onCityIdsChange={setCityIds}
+            resume={resume}
+            onResumeChange={setResume}
           />
         );
       default:
