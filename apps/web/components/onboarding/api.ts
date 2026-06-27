@@ -33,3 +33,27 @@ export async function apiSend<T = unknown>(
   if (res.ok) return { ok: true, data: parsed as T };
   return { ok: false, error: apiErrorMessage(parsed, 'Something went wrong. Please try again.') };
 }
+
+// Multipart POST (file upload). No Content-Type header — the browser sets the
+// multipart boundary itself; setting it manually breaks the boundary.
+export async function apiUpload<T = unknown>(
+  path: string,
+  formData: FormData,
+): Promise<ApiResult<T>> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+  } catch {
+    return { ok: false, error: 'Network error. Check your connection and try again.' };
+  }
+
+  if (res.status === 204) return { ok: true, data: undefined as T };
+
+  const parsed = (await res.json().catch(() => ({}))) as unknown;
+  if (res.ok) return { ok: true, data: parsed as T };
+  return { ok: false, error: apiErrorMessage(parsed, 'Could not upload your file. Please try again.') };
+}

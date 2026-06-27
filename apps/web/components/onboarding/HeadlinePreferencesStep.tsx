@@ -4,6 +4,8 @@ import { Input, Label, Textarea } from '@jobportal/ui';
 import { Check } from '@jobportal/ui/icons';
 import { SegmentedControl } from './SegmentedControl';
 import { ChipMultiSelect, type ChipOption } from './ChipMultiSelect';
+import { ResumeUpload, type ResumeItem } from './ResumeUpload';
+import { formatINR } from './format';
 
 const HEADLINE_MAX = 250;
 
@@ -31,12 +33,16 @@ export function HeadlinePreferencesStep({
   cityOptions,
   cityIds,
   onCityIdsChange,
+  resume,
+  onResumeChange,
 }: {
   value: HeadlinePrefsValue;
   onChange: (patch: Partial<HeadlinePrefsValue>) => void;
   cityOptions: ChipOption[];
   cityIds: number[];
   onCityIdsChange: (ids: number[]) => void;
+  resume: ResumeItem | null;
+  onResumeChange: (resume: ResumeItem | null) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -61,6 +67,14 @@ export function HeadlinePreferencesStep({
           rows={3}
           placeholder="e.g. Full Stack Developer with 2.5 years of experience building scalable web applications with React and Node.js."
         />
+      </div>
+
+      {/* Resume / CV */}
+      <div className="space-y-1.5">
+        <Label>
+          Resume / CV <span className="font-normal text-[var(--color-fg-muted)]">(PDF)</span>
+        </Label>
+        <ResumeUpload resume={resume} onChange={onResumeChange} />
       </div>
 
       {/* Position / Role */}
@@ -101,10 +115,10 @@ export function HeadlinePreferencesStep({
             id="hp-salary"
             type="text"
             inputMode="numeric"
-            value={value.salary}
-            // Digits only; type="text" so a stray wheel/arrow can't mutate it.
+            // Display Indian-grouped (5,00,000), keep state as raw digits.
+            value={formatINR(value.salary)}
             onChange={(e) => onChange({ salary: e.target.value.replace(/\D/g, '') })}
-            placeholder="e.g. 500000"
+            placeholder="e.g. 5,00,000"
             className="flex-1 rounded-none"
           />
           <span className="inline-flex items-center whitespace-nowrap rounded-r-md border border-l-0 border-[var(--color-border-strong)] bg-[var(--color-bg-muted)] px-3 text-sm text-[var(--color-fg-muted)]">
