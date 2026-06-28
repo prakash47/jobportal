@@ -2,6 +2,8 @@
 
 > India-focused job-search and recruitment platform. Modeled functionally on Naukri.com; designed with the visual restraint of Linear, Stripe, and Vercel.
 
+> **🚀 Start here:** [`TEAM_QUICKSTART.md`](./TEAM_QUICKSTART.md) — one page: setup, the daily workflow, and the exact Claude Code prompts to follow our team process.
+>
 > **👋 New to the team? Read these docs in order:**
 > 1. [`ARCHITECTURE.md`](./ARCHITECTURE.md) — what the system is and how the pieces fit together.
 > 2. [`ONBOARDING.md`](./ONBOARDING.md) — set up your machine from clone to a fully running local stack.
