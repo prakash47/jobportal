@@ -2,12 +2,15 @@
 
 > India-focused job-search and recruitment platform. Modeled functionally on Naukri.com; designed with the visual restraint of Linear, Stripe, and Vercel.
 
-> **👋 New to the team? Read these three docs in order:**
+> **👋 New to the team? Read these docs in order:**
 > 1. [`ARCHITECTURE.md`](./ARCHITECTURE.md) — what the system is and how the pieces fit together.
 > 2. [`ONBOARDING.md`](./ONBOARDING.md) — set up your machine from clone to a fully running local stack.
 > 3. [`DEVELOPMENT.md`](./DEVELOPMENT.md) — the branching + merge workflow you must follow.
+> 4. [`COLLABORATION.md`](./COLLABORATION.md) — **multi-developer playbook**: how 3 devs build in parallel without duplicate work or conflicts (schema locks, naming, migrations).
 >
-> **Setting up on a new machine?** [`ONBOARDING.md`](./ONBOARDING.md) is the full setup guide; [`MIGRATION.md`](./MIGRATION.md) has the Claude Code handoff prompt. [`CLAUDE.md`](./CLAUDE.md) is the project's locked stack + engineering rules; [`PROGRESS.md`](./PROGRESS.md) is the running record of every PR shipped.
+> **Building day-to-day?** Check [`WORKLOG.md`](./WORKLOG.md) — the live "who is building what right now" board. Read it (and `git pull`) before starting any new work, and claim your work there.
+>
+> **Setting up on a new machine?** [`ONBOARDING.md`](./ONBOARDING.md) is the full setup guide; [`MIGRATION.md`](./MIGRATION.md) has the Claude Code handoff prompt. [`CLAUDE.md`](./CLAUDE.md) is the project's locked stack + engineering rules (§15 = the coordination protocol); [`PROGRESS.md`](./PROGRESS.md) is the running record of every PR shipped.
 
 [![CI](https://github.com/prakash47/jobportal/actions/workflows/ci.yml/badge.svg)](https://github.com/prakash47/jobportal/actions)
 [![License: Proprietary](https://img.shields.io/badge/license-proprietary-red.svg)](#license)

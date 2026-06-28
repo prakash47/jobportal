@@ -332,9 +332,10 @@ Before doing anything else on a new task:
 
 1. **Read this file** (auto-loaded — already done).
 2. **Read `PROGRESS.md`** at the repo root — current snapshot, last merged PR, open follow-ups, deliberate deferrals. This file is the running record of what has actually shipped to `develop`; reading it prevents re-deriving context from `git log` every session and prevents proposing work that has already shipped.
-3. *Then* start the task.
+3. **Read `WORKLOG.md`** at the repo root — the live "who is building what right now" board (3 developers work in parallel, each on their own machine). This prevents starting work someone else has already claimed and surfaces which shared files are currently locked. See §15 for the full multi-developer protocol.
+4. *Then* start the task.
 
-If `PROGRESS.md` is missing, surface that — do NOT silently skip. Either the user wants you to recreate it (rare) or the repo is in an unexpected state worth flagging.
+If `PROGRESS.md` or `WORKLOG.md` is missing, surface that — do NOT silently skip. Either the user wants you to recreate it (rare) or the repo is in an unexpected state worth flagging.
 
 ### When the user asks for a feature
 
@@ -453,7 +454,7 @@ When the user asks for "the next thing", suggest the next un-merged item in this
 - **Project name**: **JobPortal** (not "YourPortal", not anything else)
 - **Path alias prefix**: `@jobportal/*`
 - **Freemium-on-launch**: Day-0 user experience is 100% free. The Services menu is hidden. `/pricing` returns 404.
-- **Solo developer**: prefer pragmatic over perfect. Suggest tradeoffs.
+- **Team of 3 developers** (was solo until ~2026-06): all work in parallel with Claude Code, each on their own machine + own local Postgres, all merging to one shared `develop`. Coordinate via `WORKLOG.md` + the §15 protocol to avoid duplicate work and conflicts. Still prefer pragmatic over perfect; suggest tradeoffs.
 - **India market**: INR only at launch. Indian English idioms acceptable.
 - **Reference site = Naukri.com for functionality**, big-tech minimal for look/feel.
 - **Search = Elasticsearch 9**, despite SRS saying Meilisearch.
@@ -461,6 +462,47 @@ When the user asks for "the next thing", suggest the next un-merged item in this
 - **Tailwind 4 is CSS-first** — no JS config file.
 - **Architectural decisions worth keeping go in `docs/adr/`**.
 - **Phase 1 first**: SRS §12.1. Don't enable monetization features until Phase 2 (Months 3–6).
+
+---
+
+## 15. Multi-Developer Coordination (3 devs, parallel Claude Code)
+
+Three developers build JobPortal in parallel, each on their own machine with their own local Postgres, all merging to one shared `develop`. The risks are **duplicate work** (two people build the same table/feature) and **conflicts** (schema, migrations, barrels, theme tokens, component/id names). The full playbook is in `COLLABORATION.md`; the live board is `WORKLOG.md`. Claude Code MUST enforce the following.
+
+### 15.1 The coordination files (all git-tracked → auto-sync on pull/push)
+- **`WORKLOG.md`** — the live board: *🔒 Shared-surface locks*, *🔨 In Progress*, *🅿️ Planned*, *✅ Recently merged*. Fast-moving.
+- **`COLLABORATION.md`** — the playbook: schema/migration rules, naming conventions, conflict resolution.
+- **`PROGRESS.md`** — the permanent shipped-log (unchanged role).
+- There is **no separate sync system** — `git pull` brings teammates' updates, `git push` shares yours. Pull `develop` at session start and before each new feature.
+
+### 15.2 Before starting ANY new work — claim it
+1. Ensure `develop` is fresh (`git checkout develop && git pull`) so `WORKLOG.md` is current.
+2. **Read `WORKLOG.md`.** If the feature/table/component the user asked for overlaps an *In Progress* or *Planned* row by someone else → **stop and surface it to the user** before coding ("Dev X already has a row building `SavedSearch` on `feature/...` — proceed anyway, coordinate, or pick something else?").
+3. **Write the claim:** add a row under *🔨 In Progress* naming the concrete models / components / endpoints, and the shared surfaces you'll touch. Commit + push this early (a tiny `chore` commit is fine) so the other machines see it.
+
+### 15.3 Shared-surface locks (hold before editing the hot files)
+Before editing any of these, take the lock in `WORKLOG.md` (replace `— free —` with name+branch+date, push); release it (`— free —`) the moment your change merges:
+- `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) — **the #1 conflict source**
+- `packages/ui/src/styles/theme.css`, `packages/types/src/*`, `packages/feature-flags/src/keys.ts`
+- Barrel files (`apps/web/components/home/index.ts`, `packages/ui/src/components/*/index.ts`) — *append-only edits are safe without the lock; reorders/rewrites need it.*
+
+### 15.4 Database/schema discipline (prevents duplicate tables + migrations)
+- **`grep` before creating** a model/enum: `grep -in "model <Name>" packages/db/prisma/schema.prisma`. Extend an existing model rather than making a parallel one.
+- **Always name migrations:** `prisma migrate dev --name <clear_snake_case>` (e.g. `add_saved_search_table`). Never accept a blank/auto name (that produced the junk `_a` / `_jobportaldb` folders).
+- **Never edit an already-merged migration** — add a new one.
+- **On pulling a new migration from a teammate:** run `pnpm db:generate && pnpm db:migrate:dev` before starting servers. If `migrate dev` wants to reset, STOP and tell the user (a reset wipes local data).
+
+### 15.5 Naming (prevents component / CSS / id clashes)
+- DB models `PascalCase` singular; fields `camelCase`. Files `kebab-case`; components `PascalCase`; utils `camelCase`.
+- **No invented global CSS class names** — use Tailwind utilities + `theme.css` tokens (`text-[var(--color-fg)]`, not hardcoded hex). New tokens go in `theme.css` under its lock.
+- **HTML `id`s must be unique** — prefer React `useId()`; otherwise prefix with the component name (`apply-form-email`, not `email`).
+- New shared UI primitive → `grep` the atoms/molecules barrels first (we already hit a duplicate `Accordion`).
+
+### 15.6 On finishing work
+After merging to `develop`: move the `WORKLOG.md` row to *✅ Recently merged*, **release any lock you held**, and record the permanent entry in `PROGRESS.md` (§12). Keep the branch (§11 rule 7). Integrate `develop` + run the full build gate on the integrated state **before** merging (DEVELOPMENT.md §5).
+
+### 15.7 Drift-correction phrase
+If the user pastes: *"Coordinate per CLAUDE.md §15"* → re-read `WORKLOG.md`, check for overlap with the current task, claim it / take needed locks, and flag any conflict before proceeding.
 
 ---
 
