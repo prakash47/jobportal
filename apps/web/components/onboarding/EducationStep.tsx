@@ -2,7 +2,7 @@
 
 import { Checkbox, Input, Label } from '@jobportal/ui';
 import { FieldSelect } from './FieldSelect';
-import { SectionHeading } from './EmploymentStep';
+import { SectionHeading } from './SectionHeading';
 
 // One education section's editable state, owned by the wizard. `degree` is the
 // user-entered degree name for the first-degree section; it's unused (fixed to a

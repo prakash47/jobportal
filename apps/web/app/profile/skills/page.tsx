@@ -20,7 +20,8 @@ export default async function SkillsPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Skills</h1>
         <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          Pick the skills recruiters can find you with. Three or more makes a noticeable difference.
+          Pick the skills recruiters can find you with. Three or more makes a noticeable
+          difference.
         </p>
       </header>
       <SkillsManager initialSelected={skillIds} catalogue={allSkills} />

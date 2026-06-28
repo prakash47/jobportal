@@ -10,9 +10,9 @@
 
 ---
 
-## Snapshot — 2026-06-21
+## Snapshot — 2026-06-28
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13). Owner is now working **exclusively on the recruiter portal**; changes are scoped to recruiter code paths + `packages/db` and must not disturb web / candidate-API behaviour.
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13), complete. Active work is on the **job-seeker UI**: the post-registration onboarding redesign (on `develop`) and the **seeker dashboard redesign** (in flight on `feature/seeker-dashboard-ui-layout-update` — committed + pushed, PROGRESS bundled here, **merge to `develop` pending**). Scoped to `apps/web` seeker routes + shared `@jobportal/ui`.
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
 - **Branch state**: `develop` is the integration tip; `main` is still the initial scaffold (no production release cut yet).
 - **Last merge**: `feature/recruiter-profile-edit` — the recruiter **Profile tab is now editable** (recruiter-personal fields incl. department + alternate POC, company fields incl. company-type/industry/website, and company-logo upload). Additive migration `20260621064256_recruiter_profile_editing` (history now **13 migrations**); new API `recruiter-profile` + `media` modules; `apps/web` and candidate auth/profile **byte-untouched**. (Earlier note still applies: the PR log between ~2026-05-17 and the recruiter-single-email entry is incomplete — several `develop` merges predate disciplined logging; treat older snapshot detail as approximate.)
@@ -51,6 +51,24 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### `feature/seeker-dashboard-ui-layout-update` · 2026-06-28
+
+Full **seeker dashboard redesign**. The dashboard lives at `/profile` (the codebase calls it "the dashboard"; there is no `/dashboard` route). UI/UX work spanning the §4.3 profile, §4.4 saved jobs, §4.5 alerts, and §4.6 applications surfaces. Committed + pushed to origin; **merge to `develop` pending**. No schema migration, no feature flag (the dashboard is core, free Day-0 functionality — matches the unflagged profile editor). `apps/web` (seeker) + shared `@jobportal/ui` only.
+
+**What shipped:**
+- **Unified app-shell with a persistent sidebar** (new `apps/web/components/dashboard/`): a fixed navy (`--color-primary-600`, #192249) left rail — Career Queue brand → grouped nav (Dashboard · *Job search*: Applications / Saved jobs / Job alerts · *My profile*: Personal details / Education / Experience / Skills / Resume · *Account*: Notifications) → account card + sign-out pinned at the bottom, cyan active state. A top bar carries a search launcher (→ `/jobs`), the daily-apply quota pill, and a "Find jobs" action. `DashboardShell` (server; resolves the display name via a `React.cache`d lookup) wraps `DashboardChrome` (client). Replaces the four duplicated per-section "JobPortal" top bars — the stale wordmark is gone.
+- **Every seeker section now renders inside the shell**: the `/profile/*`, `/applications`, `/saved-jobs`, `/alerts`, and `/settings/notifications` layouts all delegate to `DashboardShell` (new `app/settings/layout.tsx`); the public `/alerts/unsubscribe/[token]` stays bare for logged-out visitors.
+- **Redesigned dashboard home** (`/profile`): "Welcome back, {name}" → a profile-strength / next-steps card → four activity metric cards (Applications / Saved jobs / Job alerts / Profile views) → an Elasticsearch-backed "Recommended for you" feed.
+- **Personal details — "Are you working or a fresher?" toggle** (`ProfileForm`): wired to the existing `Candidate.workStatus` enum (no migration). "Working" reveals the work-history fields (title, experience, salaries, notice period); "Fresher" hides them and saves `workStatus=FRESHER` (the PATCH DTO can't null fields, so prior values just stay hidden behind the status).
+- **Education editor now reuses the exact onboarding form**: `/profile/education` renders the onboarding `EducationStep` (First degree + Class 12 sections) via a new `EducationOnboardingForm`, with the same upsert semantics (POST/PATCH `/me/education`; the `Class XII` sentinel discriminates the Class 12 row). The tiny `SectionHeading` was extracted to its own file so the page doesn't pull in EmploymentStep's heavy editors.
+- **Removed** (obsolete after the redesign): the old free-form `EducationManager`, `ProfileNav`, and an interim `AccountShell`/`DashboardHeader`/`SignOutButton` from a first-pass hub the redesign superseded. Added 4 nav icons to `@jobportal/ui`.
+
+**Adversarial multi-agent reviews** were run on the substantive diffs; confirmed findings fixed in-branch: the mobile drawer now honours its `aria-modal` contract (body scroll-lock, `inert` background, Tab focus-trap, focus restored to the trigger on close, auto-close on resize-to-desktop); sidebar group-label contrast raised to AA on navy; metric-card radius aligned; a dead `StatCard.hint` prop removed; the recommended-jobs empty state made skill-aware (distinguishes ES-down from a true no-match). Logout-CSRF and a few others were reviewed and dismissed as non-issues (refresh cookie is `SameSite=Lax`).
+
+**Gate:** workspace typecheck **11/11** · `pnpm --filter @jobportal/web build` green. Browser-verified against the running stack with throwaway seekers (since deleted): sidebar persists across pages with correct `aria-current`; mobile drawer opens / scroll-locks / closes accessibly; the working/fresher toggle saves + round-trips; the education form saves (2 rows), prefills on reload, and re-saves as PATCH (no duplicates); zero console errors. No unit tests added (presentational/UI change).
+
+**Deferred / notes:** dark mode stays dormant (no `ThemeProvider`), so the navy rail is fixed-dark in both modes by design; the daily-apply quota pill is hidden below `sm` (tight top bar); the education form, like onboarding, manages exactly one degree + Class 12 — extra legacy rows from the old free-form editor stay in the DB untouched but aren't shown.
 
 ### `feature/recruiter-profile-edit` · 2026-06-21
 

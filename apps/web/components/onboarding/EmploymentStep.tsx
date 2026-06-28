@@ -1,7 +1,7 @@
 'use client';
 
-import { type ReactNode } from 'react';
 import { Input, Label } from '@jobportal/ui';
+import { SectionHeading } from './SectionHeading';
 import { SegmentedControl } from './SegmentedControl';
 import { FieldSelect } from './FieldSelect';
 import { SkillAutocomplete, type SelectedSkill, type SkillCatalogueItem } from './SkillAutocomplete';
@@ -48,17 +48,6 @@ export interface EmploymentValue {
   city: string;
   industryId: string; // '' = none
   noticePeriod: string; // '' = none
-}
-
-export function SectionHeading({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="size-1.5 rounded-full bg-[var(--color-accent-500)]" aria-hidden="true" />
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-fg-muted)]">
-        {children}
-      </h2>
-    </div>
-  );
 }
 
 // The "Employment & professional details" onboarding step. Presentational +
