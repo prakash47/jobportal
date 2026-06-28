@@ -4,6 +4,8 @@
 
 > **🚀 Start here:** [`TEAM_QUICKSTART.md`](./TEAM_QUICKSTART.md) — one page: setup, the daily workflow, and the exact Claude Code prompts to follow our team process.
 >
+> **🤖 Every Claude Code session:** paste [`MASTER_PROMPT.md`](./MASTER_PROMPT.md) as your first message — it bootstraps the session (reads the docs, pulls develop, locks in the pull→claim→build→merge→push workflow) since Claude has no memory between sessions.
+>
 > **👋 New to the team? Read these docs in order:**
 > 1. [`ARCHITECTURE.md`](./ARCHITECTURE.md) — what the system is and how the pieces fit together.
 > 2. [`ONBOARDING.md`](./ONBOARDING.md) — set up your machine from clone to a fully running local stack.
