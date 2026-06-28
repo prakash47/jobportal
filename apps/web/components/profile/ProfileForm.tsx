@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, Input, Label, Textarea } from '@jobportal/ui';
+import { Button, Input, Label, Textarea, cn } from '@jobportal/ui';
 import { api } from '../../lib/profile/api-client';
+
+type WorkStatus = 'FRESHER' | 'EXPERIENCED';
 
 // Stored in paise (1 INR = 100 paise) so we never round at the boundary.
 // The form takes lakhs-per-annum (LPA) as the human-friendly input and we
@@ -24,6 +26,7 @@ export interface ProfileFormProps {
     phone: string | null;
     headline: string | null;
     summary: string | null;
+    workStatus: WorkStatus | null;
     experienceMonths: number | null;
     currentTitle: string | null;
     currentSalaryPaise: number | null;
@@ -39,6 +42,10 @@ export function ProfileForm({ initial }: ProfileFormProps) {
   const [phone, setPhone] = useState(initial.phone ?? '');
   const [headline, setHeadline] = useState(initial.headline ?? '');
   const [summary, setSummary] = useState(initial.summary ?? '');
+  // "Working or fresher?" gate. New profiles default to Working so the work
+  // fields are visible; a fresher flips it to hide them.
+  const [workStatus, setWorkStatus] = useState<WorkStatus>(initial.workStatus ?? 'EXPERIENCED');
+  const working = workStatus === 'EXPERIENCED';
   const [experienceYears, setExperienceYears] = useState<number | ''>(
     initial.experienceMonths !== null ? Math.round((initial.experienceMonths / 12) * 10) / 10 : '',
   );
@@ -57,19 +64,24 @@ export function ProfileForm({ initial }: ProfileFormProps) {
     setError(null);
     setSaved(false);
 
-    const patch: Record<string, unknown> = { name };
+    const patch: Record<string, unknown> = { name, workStatus };
     if (phone) patch['phone'] = phone;
     if (headline) patch['headline'] = headline;
     if (summary) patch['summary'] = summary;
-    if (experienceYears !== '') patch['experienceMonths'] = Math.round(Number(experienceYears) * 12);
-    if (currentTitle) patch['currentTitle'] = currentTitle;
-    const cs = lpaToPaise(currentSalary);
-    if (cs !== null) patch['currentSalaryPaise'] = cs;
-    const ex0 = lpaToPaise(expectedMin);
-    if (ex0 !== null) patch['expectedSalaryMinPaise'] = ex0;
-    const ex1 = lpaToPaise(expectedMax);
-    if (ex1 !== null) patch['expectedSalaryMaxPaise'] = ex1;
-    if (notice !== '') patch['noticePeriodDays'] = Number(notice);
+    // Work-history fields only apply to experienced candidates. When "Fresher"
+    // is selected we omit them — the PATCH DTO can't clear to null, so any
+    // previously-saved values simply stay hidden behind the FRESHER status.
+    if (working) {
+      if (experienceYears !== '') patch['experienceMonths'] = Math.round(Number(experienceYears) * 12);
+      if (currentTitle) patch['currentTitle'] = currentTitle;
+      const cs = lpaToPaise(currentSalary);
+      if (cs !== null) patch['currentSalaryPaise'] = cs;
+      const ex0 = lpaToPaise(expectedMin);
+      if (ex0 !== null) patch['expectedSalaryMinPaise'] = ex0;
+      const ex1 = lpaToPaise(expectedMax);
+      if (ex1 !== null) patch['expectedSalaryMaxPaise'] = ex1;
+      if (notice !== '') patch['noticePeriodDays'] = Number(notice);
+    }
 
     const res = await api('/me/profile', { method: 'PATCH', body: JSON.stringify(patch) });
     setBusy(false);
@@ -96,67 +108,111 @@ export function ProfileForm({ initial }: ProfileFormProps) {
         <Textarea id="summary" value={summary} onChange={(e) => setSummary(e.target.value)} rows={5} maxLength={5000} />
       </Field>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field id="currentTitle" label="Current title">
-          <Input
-            id="currentTitle"
-            value={currentTitle}
-            onChange={(e) => setCurrentTitle(e.target.value)}
-            maxLength={120}
-          />
-        </Field>
-        <Field id="experienceYears" label="Total experience (years)">
-          <Input
-            id="experienceYears"
-            type="number"
-            min={0}
-            max={60}
-            step={0.5}
-            value={experienceYears}
-            onChange={(e) => setExperienceYears(e.target.value === '' ? '' : Number(e.target.value))}
-          />
-        </Field>
-        <Field id="currentSalary" label="Current salary (LPA)">
-          <Input
-            id="currentSalary"
-            type="number"
-            min={0}
-            step={0.5}
-            value={currentSalary}
-            onChange={(e) => setCurrentSalary(e.target.value === '' ? '' : Number(e.target.value))}
-          />
-        </Field>
-        <Field id="notice" label="Notice period (days)">
-          <Input
-            id="notice"
-            type="number"
-            min={0}
-            max={365}
-            value={notice}
-            onChange={(e) => setNotice(e.target.value === '' ? '' : Number(e.target.value))}
-          />
-        </Field>
-        <Field id="expectedMin" label="Expected minimum (LPA)">
-          <Input
-            id="expectedMin"
-            type="number"
-            min={0}
-            step={0.5}
-            value={expectedMin}
-            onChange={(e) => setExpectedMin(e.target.value === '' ? '' : Number(e.target.value))}
-          />
-        </Field>
-        <Field id="expectedMax" label="Expected maximum (LPA)">
-          <Input
-            id="expectedMax"
-            type="number"
-            min={0}
-            step={0.5}
-            value={expectedMax}
-            onChange={(e) => setExpectedMax(e.target.value === '' ? '' : Number(e.target.value))}
-          />
-        </Field>
-      </div>
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium text-[var(--color-fg)]">
+          Are you working or a fresher?
+        </legend>
+        <div
+          role="radiogroup"
+          aria-label="Are you working or a fresher?"
+          className="inline-flex rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-0.5"
+        >
+          {(
+            [
+              ['EXPERIENCED', 'Working'],
+              ['FRESHER', 'Fresher'],
+            ] as const
+          ).map(([value, optionLabel]) => {
+            const selected = workStatus === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setWorkStatus(value)}
+                className={cn(
+                  'rounded-md px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]',
+                  selected
+                    ? 'bg-[var(--color-primary-600)] text-white'
+                    : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]',
+                )}
+              >
+                {optionLabel}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          {working
+            ? 'Add your current role, experience, and salary expectations below.'
+            : "We'll list you as a fresher — no work history needed."}
+        </p>
+      </fieldset>
+
+      {working && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field id="currentTitle" label="Current title">
+            <Input
+              id="currentTitle"
+              value={currentTitle}
+              onChange={(e) => setCurrentTitle(e.target.value)}
+              maxLength={120}
+            />
+          </Field>
+          <Field id="experienceYears" label="Total experience (years)">
+            <Input
+              id="experienceYears"
+              type="number"
+              min={0}
+              max={60}
+              step={0.5}
+              value={experienceYears}
+              onChange={(e) => setExperienceYears(e.target.value === '' ? '' : Number(e.target.value))}
+            />
+          </Field>
+          <Field id="currentSalary" label="Current salary (LPA)">
+            <Input
+              id="currentSalary"
+              type="number"
+              min={0}
+              step={0.5}
+              value={currentSalary}
+              onChange={(e) => setCurrentSalary(e.target.value === '' ? '' : Number(e.target.value))}
+            />
+          </Field>
+          <Field id="notice" label="Notice period (days)">
+            <Input
+              id="notice"
+              type="number"
+              min={0}
+              max={365}
+              value={notice}
+              onChange={(e) => setNotice(e.target.value === '' ? '' : Number(e.target.value))}
+            />
+          </Field>
+          <Field id="expectedMin" label="Expected minimum (LPA)">
+            <Input
+              id="expectedMin"
+              type="number"
+              min={0}
+              step={0.5}
+              value={expectedMin}
+              onChange={(e) => setExpectedMin(e.target.value === '' ? '' : Number(e.target.value))}
+            />
+          </Field>
+          <Field id="expectedMax" label="Expected maximum (LPA)">
+            <Input
+              id="expectedMax"
+              type="number"
+              min={0}
+              step={0.5}
+              value={expectedMax}
+              onChange={(e) => setExpectedMax(e.target.value === '' ? '' : Number(e.target.value))}
+            />
+          </Field>
+        </div>
+      )}
 
       <div className="flex items-center gap-3">
         <Button type="submit" loading={busy}>

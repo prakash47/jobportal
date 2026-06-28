@@ -1,6 +1,5 @@
 import { prisma } from '@jobportal/db';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
-import { AccountShell } from '../../../components/profile/AccountShell';
 import { ProfileForm } from '../../../components/profile/ProfileForm';
 
 // Lazily ensures the Candidate row exists, then loads the profile fields the
@@ -30,32 +29,31 @@ export default async function ProfileDetailsPage() {
   const { user, candidate } = await loadProfile(session.sub);
 
   return (
-    <AccountShell>
-      <div className="space-y-8">
-        <header>
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-            Personal details
-          </h1>
-          <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-            Recruiters see this when you apply. Keep it current.
-          </p>
-        </header>
+    <div className="space-y-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
+          Personal details
+        </h1>
+        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
+          Recruiters see this when you apply. Keep it current.
+        </p>
+      </header>
 
-        <ProfileForm
-          initial={{
-            name: user.name,
-            phone: user.phone,
-            headline: candidate.headline,
-            summary: candidate.summary,
-            experienceMonths: candidate.experienceMonths,
-            currentTitle: candidate.currentTitle,
-            currentSalaryPaise: candidate.currentSalaryPaise,
-            expectedSalaryMinPaise: candidate.expectedSalaryMinPaise,
-            expectedSalaryMaxPaise: candidate.expectedSalaryMaxPaise,
-            noticePeriodDays: candidate.noticePeriodDays,
-          }}
-        />
-      </div>
-    </AccountShell>
+      <ProfileForm
+        initial={{
+          name: user.name,
+          phone: user.phone,
+          headline: candidate.headline,
+          summary: candidate.summary,
+          workStatus: candidate.workStatus,
+          experienceMonths: candidate.experienceMonths,
+          currentTitle: candidate.currentTitle,
+          currentSalaryPaise: candidate.currentSalaryPaise,
+          expectedSalaryMinPaise: candidate.expectedSalaryMinPaise,
+          expectedSalaryMaxPaise: candidate.expectedSalaryMaxPaise,
+          noticePeriodDays: candidate.noticePeriodDays,
+        }}
+      />
+    </div>
   );
 }

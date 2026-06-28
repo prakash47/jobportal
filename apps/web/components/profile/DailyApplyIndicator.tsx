@@ -1,6 +1,6 @@
-// SRS §4.11.16-17 — small calm counter shown below the profile nav rail.
-// Hides when the user is on an unlimited tier (no surface = no friction).
-// Renders on the server so the count reflects the latest Redis value
+// SRS §4.11.16-17 — compact daily-application counter shown in the dashboard
+// top bar. Hides entirely when the user is on an unlimited tier (no surface =
+// no friction). Server component so the count reflects the latest Redis value
 // without a client round-trip.
 
 import { readApplyQuota } from '../../lib/applications/quota-state';
@@ -13,7 +13,7 @@ export async function DailyApplyIndicator() {
 
   const state = classifyQuota(quota);
   const pct = Math.max(0, Math.min(100, Math.round((quota.count / quota.limit) * 100)));
-  const radius = 14;
+  const radius = 8;
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - pct / 100);
   const stroke =
@@ -25,31 +25,28 @@ export async function DailyApplyIndicator() {
 
   return (
     <div
-      className="mt-6 flex items-center gap-3 border-t border-[var(--color-border)] pt-4"
+      className="hidden items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] py-1 pl-1.5 pr-3 sm:flex"
       role="status"
       aria-label={`Used ${quota.count} of ${quota.limit} applications today`}
     >
-      <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
-        <circle cx="18" cy="18" r={radius} fill="none" stroke="var(--color-border)" strokeWidth="2" />
+      <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="10" cy="10" r={radius} fill="none" stroke="var(--color-border)" strokeWidth="2.5" />
         <circle
-          cx="18"
-          cy="18"
+          cx="10"
+          cy="10"
           r={radius}
           fill="none"
           stroke={stroke}
-          strokeWidth="2"
+          strokeWidth="2.5"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
-          transform="rotate(-90 18 18)"
+          transform="rotate(-90 10 10)"
         />
       </svg>
-      <div className="flex flex-col">
-        <span className="text-sm font-semibold tabular-nums text-[var(--color-fg)]">
-          {quota.count}/{quota.limit}
-        </span>
-        <span className="text-xs text-[var(--color-fg-muted)]">applies today</span>
-      </div>
+      <span className="text-xs font-medium tabular-nums text-[var(--color-fg-muted)]">
+        {quota.count}/{quota.limit} today
+      </span>
     </div>
   );
 }

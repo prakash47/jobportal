@@ -1,14 +1,12 @@
-import Link from 'next/link';
 import { prisma } from '@jobportal/db';
-import { Button } from '@jobportal/ui';
-import { Bell, Bookmark, Briefcase } from '@jobportal/ui/icons';
+import { Bell, Bookmark, ClipboardList, Eye } from '@jobportal/ui/icons';
 import { readUserFromCookie } from '../../lib/auth/server-session';
 import { NextSteps, StatCard, type ProfileStep } from '../../components/profile';
 // Deep import (not via the barrel): RecommendedJobs is server-only (ES client +
 // Prisma), so it must not be reachable through the client-mixed barrel.
 import { RecommendedJobs } from '../../components/profile/RecommendedJobs';
 
-// Loads everything the dashboard hub renders in one SSR pass: the candidate row
+// Loads everything the dashboard home renders in one SSR pass: the candidate row
 // (creating it lazily for brand-new accounts), the activity counts, the
 // already-applied job ids (to exclude from recommendations), and the skill/city
 // slugs the recommendation query needs.
@@ -78,34 +76,31 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-            Hi {firstName ?? 'there'}
-          </h1>
-          <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-            Here&apos;s what&apos;s happening with your job search.
-          </p>
-        </div>
-        <Button asChild variant="secondary" size="sm">
-          <Link href="/profile/details">Edit profile</Link>
-        </Button>
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
+          Welcome back{firstName ? `, ${firstName}` : ''}
+        </h1>
+        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
+          Here&apos;s what&apos;s happening with your job search.
+        </p>
       </header>
 
       <NextSteps score={data.candidate.profileCompleteness} steps={steps} />
 
       <section aria-label="Your activity">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard
             href="/applications"
             label="Applications"
             count={data.applicationsCount}
-            icon={<Briefcase className="size-5" />}
+            chipClassName="bg-[var(--color-accent-50)] text-[var(--color-accent-600)]"
+            icon={<ClipboardList className="size-5" />}
           />
           <StatCard
             href="/saved-jobs"
             label="Saved jobs"
             count={data.savedCount}
+            chipClassName="bg-[var(--color-primary-50)] text-[var(--color-primary-600)]"
             icon={<Bookmark className="size-5" />}
           />
           <StatCard
@@ -113,6 +108,11 @@ export default async function DashboardPage() {
             label="Job alerts"
             count={data.alertsCount}
             icon={<Bell className="size-5" />}
+          />
+          <StatCard
+            label="Profile views"
+            count={data.candidate.profileViews}
+            icon={<Eye className="size-5" />}
           />
         </div>
       </section>

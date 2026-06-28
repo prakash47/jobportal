@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { requireUser } from '../../../lib/auth/require-user';
 import { readPreferences } from '../../../lib/notifications/preferences';
 import { NotificationPreferencesForm } from '../../../components/settings/NotificationPreferencesForm';
@@ -27,36 +26,26 @@ export default async function NotificationSettingsPage({ searchParams }: PagePro
   const prefs = await readPreferences();
   if (!prefs) {
     return (
-      <div className="mx-auto max-w-2xl px-6 py-10">
-        <p className="text-sm text-[var(--color-fg-muted)]">
-          Could not load your notification preferences. Please refresh.
-        </p>
-      </div>
+      <p className="text-sm text-[var(--color-fg-muted)]">
+        Could not load your notification preferences. Please refresh.
+      </p>
     );
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-10">
+    <div className="max-w-2xl space-y-8">
       <header className="space-y-1">
-        <div className="text-xs">
-          <Link
-            href="/profile"
-            className="text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
-          >
-            ← Back to profile
-          </Link>
-        </div>
         <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
           Notification preferences
         </h1>
         <p className="text-sm text-[var(--color-fg-muted)]">
-          Choose which emails you want from JobPortal. Account-related emails
+          Choose which emails you want from Career Queue. Account-related emails
           (verification, password reset, payment receipts) are always sent.
         </p>
       </header>
 
       {fromUnsubscribe && (
-        <div className="mt-6 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)] p-4">
+        <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)] p-4">
           <p className="text-sm text-[var(--color-fg)]">
             Toggle off any channel below and click <strong>Save</strong> to stop
             those emails.
@@ -64,9 +53,7 @@ export default async function NotificationSettingsPage({ searchParams }: PagePro
         </div>
       )}
 
-      <div className="mt-8">
-        <NotificationPreferencesForm initial={prefs} />
-      </div>
+      <NotificationPreferencesForm initial={prefs} />
     </div>
   );
 }
