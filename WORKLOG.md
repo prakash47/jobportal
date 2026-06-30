@@ -68,6 +68,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Date | Branch | What shipped |
 |---|---|---|
+| 2026-06-30 | `feature/recruiter-company-verification` | Recruiter Company Verification (KYC): `CompanyKyc`+`KycDocument`, `recruiter-kyc`+`admin-kyc` API, `/kyc` tab + status badge, `/admin/kyc-review`, `killswitch.recruiter_kyc` |
 | 2026-06-21 | `feature/recruiter-profile-editing` | Recruiter profile + company editing + logo upload |
 | 2026-06-21 | `feature/recruiter-single-email` | Recruiter single-email migration |
 | 2026-06-20 | `feature/google-oauth` | Google OAuth login |

@@ -10,15 +10,15 @@
 
 ---
 
-## Snapshot — 2026-06-28
+## Snapshot — 2026-06-30
 
-- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13), complete. Active work is on the **job-seeker UI**: the post-registration onboarding redesign (on `develop`) and the **seeker dashboard redesign** (in flight on `feature/seeker-dashboard-ui-layout-update` — committed + pushed, PROGRESS bundled here, **merge to `develop` pending**). Scoped to `apps/web` seeker routes + shared `@jobportal/ui`.
+- **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13), complete. Active work is **post-Phase-1 recruiter + job-seeker UX**: the seeker dashboard redesign (PR #47, on `develop`) and now recruiter **Company Verification (KYC)** (merged below).
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
 - **Branch state**: `develop` is the integration tip; `main` is still the initial scaffold (no production release cut yet).
-- **Last merge**: `feature/recruiter-profile-edit` — the recruiter **Profile tab is now editable** (recruiter-personal fields incl. department + alternate POC, company fields incl. company-type/industry/website, and company-logo upload). Additive migration `20260621064256_recruiter_profile_editing` (history now **13 migrations**); new API `recruiter-profile` + `media` modules; `apps/web` and candidate auth/profile **byte-untouched**. (Earlier note still applies: the PR log between ~2026-05-17 and the recruiter-single-email entry is incomplete — several `develop` merges predate disciplined logging; treat older snapshot detail as approximate.)
+- **Last merge**: `feature/recruiter-company-verification` — recruiter **Company Verification (KYC)**: new `/kyc` "Verification" tab (submit business-registration doc + GST number + authorized-person ID proof → Pending/Verified/Rejected badge), admin review console at `/admin/kyc-review`, and a `killswitch.recruiter_kyc` emergency stop. Additive migration `20260630073302_add_company_kyc` (new `CompanyKyc` + `KycDocument`); new API modules `recruiter-kyc` + `admin-kyc`; KYC docs are private (signed-URL only). **apps/web job-seeker surface byte-untouched** — only the isolated `app/admin/*` subtree was added. (Earlier note still applies: the PR log between ~2026-05-17 and the recruiter-single-email entry is incomplete — several `develop` merges predate disciplined logging; treat older snapshot detail as approximate.)
 - **Local runtime status (DB verified 2026-06-21)**: Docker (Postgres 18 + Redis 8 + Elasticsearch 9.4) up; `jobportal_dev` reset + reseeded + ES reindexed cleanly; `pnpm build` green for all 4 apps. App dev servers (`:3000/:3001/:4000`) not booted this session. ES indices repopulated (50 jobs, 12 companies, 3 articles in `jobs-v2`/`companies-v2`/`articles-v2` — alias version reset by the DB rebuild).
-- **Seed catalogue**: 30 flags / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (stable Job IDs 100001-100050, Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs / 20 candidates / 371 applications.
-- **Test counts on develop**: **258 API** + 181 web + 37 feature-flags + 18 observability + auth = ~486 unit tests (recruiter-profile-edit added 23 API tests: recruiter-profile service + logo validators).
+- **Seed catalogue**: 31 flags (added `killswitch.recruiter_kyc`) / 10 industries / 50 cities / 160 skills / 4 plans / 3 articles. Plus the demo overlay (stable Job IDs 100001-100050, Job_id_seq advanced past): 12 companies / 8 recruiters / 38 reviews / 50 jobs / 20 candidates / 371 applications.
+- **Test counts on develop**: **331 API** + 181 web + 37 feature-flags + 18 observability + auth = ~584 unit tests (recruiter-company-verification added 48 API tests: kyc-validators + dto + recruiter-kyc service + admin-kyc service).
 - **Locked stack as of CLAUDE.md §1**: Next 16.2 / React 19.2 / Tailwind 4.2 / NestJS 11 / Prisma 7.4 / Postgres 18 / Elasticsearch 9.4 / Redis 8 / BullMQ 5.76 / Resend / R2 / Sentry / PostHog.
 
 ---
@@ -51,6 +51,26 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### `feature/recruiter-company-verification` · 2026-06-30
+
+Recruiter **Company Verification (KYC)** — a new "Verification" tab in the recruiter portal where an HR submits company identity (business-registration document, GST number, authorized-person ID proof) and earns a Pending / Verified / Rejected badge once an admin approves. CLI merge (no PR). Scoped to recruiter code paths + a **new isolated admin subtree** under `apps/web/app/admin/` — the `apps/web` **job-seeker surface is untouched** (only `app/admin/*` + `components/admin/*` were added). Naming, schema shape, and process were grounded in a research pass over India KYB norms + competitor flows (Naukri/Apna/Indeed/LinkedIn) + DPDP-Act handling.
+
+**What shipped:**
+- **Schema** (additive migration `20260630073302_add_company_kyc`): **company-level** `CompanyKyc` (1:1 `Company`, `@unique companyId` — multiple recruiters share one Company) holding `legalName`/`gstNumber`/`panNumber`/`registrationNumber` + authorized-signatory fields + a `KycStatus` state machine (`NOT_SUBMITTED`/`PENDING`/`VERIFIED`/`REJECTED`) + review metadata (`submittedAt`/`reviewedAt`/`reviewedById`/`rejectionReason`); `KycDocument` (many per KYC, soft-deletable, private R2 `r2Key`, type `BUSINESS_REGISTRATION`|`AUTHORIZED_PERSON_ID`). Five new `ProfileAuditAction` values reuse the existing `ProfileAuditLog`.
+- **API — `recruiter-kyc`** (`JwtAuthGuard`+`RolesGuard('RECRUITER')`, companyId resolved from JWT): `GET/PUT /recruiter/kyc`, `POST/DELETE /recruiter/kyc/documents[/:id]`, `GET /recruiter/kyc/documents/:id/download` (15-min signed URL), `POST /recruiter/kyc/submit`. GSTIN/PAN format-validated (regex + normalize); ClamAV scan before private R2; supersede-on-reupload made race-free via a `FOR UPDATE` row lock on the parent `CompanyKyc`; audit writes. **KYC docs are never public** — signed-URL only, never the `/media` route.
+- **API — `admin-kyc`** (`AdminGuard`): `GET /admin/kyc` (paginated queue, GSTIN **masked**), `GET /admin/kyc/:companyId` (full identifiers + per-document signed URLs), `PATCH /admin/kyc/:companyId` (approve/reject + required reason), audit-logged.
+- **Recruiter UI**: 4th "Verification" sidebar item → `/kyc` page (RSC reads `CompanyKyc` via Prisma); identifier form (inline GSTIN/PAN hints) + two auto-firing document uploaders (mirror `LogoUpload`) + submit; read-only once PENDING/VERIFIED. `KycStatusBadge` (colour + icon + text, WCAG) also on the dashboard + profile headers.
+- **Admin UI** (isolated `apps/web/app/admin/` only): `/admin/kyc-review` queue + `/admin/kyc-review/[companyId]` detail with approve/reject; "KYC review" added to the admin nav.
+- **Flag**: `killswitch.recruiter_kyc` (BOOLEAN, seeded **OFF** → feature LIVE by default) — emergency stop enforced at the API service (L3) + the recruiter `/kyc` page (L2 `notFound()`). KYC is a free trust feature (not paid), so it ships unflagged-by-default with a killswitch (owner-chosen). Added `@jobportal/feature-flags` as a recruiter-app dependency for the L2 gate.
+
+**Privacy (DPDP Act 2023):** documents stored privately in R2, served only via short-lived signed URLs to the owning recruiter + admins (never public); raw GSTIN/PAN never logged or written to audit JSON; GSTIN masked in the admin list (full value only on the reviewer detail page).
+
+**Adversarial multi-agent review** (3 dimensions → independent per-finding verification) confirmed + fixed in-branch: (1) a race on concurrent same-type uploads → `FOR UPDATE` row-locked supersede + atomic `getOrCreateKycId` upsert; (2) a missing API-side status guard → `assertEditable` freezes edits while PENDING/VERIFIED on saveKyc/uploadDocument/deleteDocument (the API is the trusted boundary, not just the UI). Remaining candidates were verified as false positives / acceptable-by-design.
+
+**Gate:** workspace typecheck **11/11** · tests **API 331 (+48 new KYC)** + web 181 + packages green · `pnpm build` **4/4** apps. Migration applied to a clean local DB.
+
+**Deferred (Phase 2 / out of scope):** live GSTN/MCA registry verification (manual admin review for MVP); at-rest encryption/tokenization of GSTIN/PAN (currently access-controlled storage + masked admin list + never-logged); public "Verified" badge on job-seeker company pages/job cards (would touch the apps/web job-seeker surface); gating job-posting on verification; recruiter email notifications on submit/approve/reject (the BullMQ/Resend pipeline exists — a clean fast-follow).
 
 ### `feature/seeker-dashboard-ui-layout-update` · 2026-06-28
 

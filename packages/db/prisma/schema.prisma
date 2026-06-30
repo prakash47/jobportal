@@ -166,6 +166,14 @@ enum ProfileAuditAction {
   RECRUITER_PROFILE_UPDATE
   COMPANY_UPDATE
   COMPANY_LOGO_UPDATE
+  // Recruiter Company Verification (KYC). SUBMIT/UPLOAD/DELETE are written with
+  // the recruiter's User id; APPROVED/REJECTED with the reviewing admin's User
+  // id. Same audit table, distinguished by the action.
+  KYC_SUBMITTED
+  KYC_DOCUMENT_UPLOAD
+  KYC_DOCUMENT_DELETE
+  KYC_APPROVED
+  KYC_REJECTED
 }
 
 // SRS §4.9 — legal / organisational classification of an employer, shown on the
@@ -184,23 +192,44 @@ enum CompanyType {
   SOLE_PROPRIETORSHIP
 }
 
+// Recruiter "Company Verification" (KYC) state machine — see CompanyKyc.
+// NOT_SUBMITTED is the implicit initial state (also represented by the absence
+// of a CompanyKyc row). PENDING once the recruiter submits, then an admin moves
+// it to VERIFIED or REJECTED. The recruiter portal surfaces the last three as
+// the status badge (Pending / Verified / Rejected).
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+// The two document classes a recruiter uploads for company verification:
+// the business registration proof (Certificate of Incorporation / GST
+// registration certificate / Udyam, etc.) and the authorized signatory's
+// personal ID proof. Stored privately in R2 (signed-URL served, never public).
+enum KycDocumentType {
+  BUSINESS_REGISTRATION
+  AUTHORIZED_PERSON_ID
+}
+
 // ============================================================
 // User & profile (SRS §8.2)
 // ============================================================
 
 model User {
-  id            Int      @id @default(autoincrement())
-  email         String   @unique
-  passwordHash  String?  // null for OAuth-only users (no local password) — SRS §4.12.6
+  id            Int          @id @default(autoincrement())
+  email         String       @unique
+  passwordHash  String? // null for OAuth-only users (no local password) — SRS §4.12.6
   name          String
   phone         String?
-  image         String?  // avatar URL from an OAuth provider (e.g. Google), optional
-  emailVerified Boolean  @default(false)
-  role          UserRole @default(CANDIDATE)
+  image         String? // avatar URL from an OAuth provider (e.g. Google), optional
+  emailVerified Boolean      @default(false)
+  role          UserRole     @default(CANDIDATE)
   provider      AuthProvider @default(LOCAL) // auth method — SRS §4.12.6
-  googleId      String?      @unique         // Google "sub" claim; null for non-Google
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  googleId      String?      @unique // Google "sub" claim; null for non-Google
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   candidate           Candidate?
   recruiter           Recruiter?
@@ -253,16 +282,16 @@ model PasswordResetToken {
 }
 
 model Candidate {
-  id                     Int      @id @default(autoincrement())
-  userId                 Int      @unique
-  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                     Int              @id @default(autoincrement())
+  userId                 Int              @unique
+  user                   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   headline               String?
   summary                String?
   // SRS §4.3.1 — store experience in months for sub-year precision.
   experienceMonths       Int?
   currentTitle           String?
   currentCompanyId       Int?
-  currentCompany         Company? @relation(fields: [currentCompanyId], references: [id], onDelete: SetNull)
+  currentCompany         Company?         @relation(fields: [currentCompanyId], references: [id], onDelete: SetNull)
   currentSalaryPaise     Int?
   expectedSalaryMinPaise Int?
   expectedSalaryMaxPaise Int?
@@ -281,24 +310,24 @@ model Candidate {
   currentCompanyName     String?
   currentCityName        String?
   industryId             Int?
-  industry               Industry? @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  industry               Industry?        @relation(fields: [industryId], references: [id], onDelete: SetNull)
   gender                 Gender?
   // Active resume points to the latest CLEAN row in Resume; older rows stay
   // for audit but are never returned by GET /me/resume.
-  activeResumeId         Int?     @unique
-  activeResume           Resume?  @relation("ActiveResume", fields: [activeResumeId], references: [id], onDelete: SetNull)
+  activeResumeId         Int?             @unique
+  activeResume           Resume?          @relation("ActiveResume", fields: [activeResumeId], references: [id], onDelete: SetNull)
   // SRS §4.3.7 — denormalised completeness score (0–100), recomputed on every
   // PATCH so the UI hot path is one row read.
-  profileCompleteness    Int      @default(0)
-  profileViews           Int      @default(0)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  profileCompleteness    Int              @default(0)
+  profileViews           Int              @default(0)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
 
   educations  Education[]
   experiences WorkExperience[]
   projects    Project[]
   languages   CandidateLanguage[]
-  resumes     Resume[]         @relation("CandidateResumes")
+  resumes     Resume[]            @relation("CandidateResumes")
 
   @@index([currentCompanyId])
   @@index([industryId])
@@ -438,8 +467,8 @@ model Recruiter {
 // ============================================================
 
 model Company {
-  id                 Int       @id @default(autoincrement())
-  slug               String    @unique
+  id                 Int          @id @default(autoincrement())
+  slug               String       @unique
   name               String
   description        String?
   logoUrl            String?
@@ -448,29 +477,92 @@ model Company {
   // existing companies are unaffected until a recruiter sets it.
   companyType        CompanyType?
   industryId         Int?
-  industry           Industry? @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  industry           Industry?    @relation(fields: [industryId], references: [id], onDelete: SetNull)
   headquartersCityId Int?
-  headquartersCity   City?     @relation(fields: [headquartersCityId], references: [id], onDelete: SetNull)
+  headquartersCity   City?        @relation(fields: [headquartersCityId], references: [id], onDelete: SetNull)
   employeeCount      String?
   foundedYear        Int?
   // SRS §4.7.4 — denormalised review aggregates so the directory page renders
   // in one query. Recomputed when reviews are written; the write path lands
   // with the recruiter portal (Task 15).
   averageRating      Float?
-  reviewCount        Int       @default(0)
+  reviewCount        Int          @default(0)
   // SRS §4.7.6 — CMS-managed array of { heading, body, imageUrl? } blocks for
   // the /working-at-{slug} page. Admin tool to edit lands with Task 16.
   workingAtSections  Json?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   jobs       Job[]
   recruiters Recruiter[]
   candidates Candidate[]
   reviews    CompanyReview[]
+  kyc        CompanyKyc?
 
   @@index([industryId])
   @@index([headquartersCityId])
+}
+
+// Recruiter "Company Verification" (KYC) — one record per Company (multiple
+// recruiters share one Company, so verification is company-level, not
+// per-recruiter). Holds the Indian business identifiers + authorized-signatory
+// details + the admin-reviewed verification state. Uploaded files live in the
+// related KycDocument rows. Sensitive: identifiers are PII (DPDP Act 2023) — do
+// not log raw values; documents are served via short-lived signed URLs only.
+model CompanyKyc {
+  id        Int     @id @default(autoincrement())
+  companyId Int     @unique
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Business identifiers. GSTIN (15) / PAN (10) are format-validated at the API
+  // boundary; live registry (GSTN/MCA) verification is a Phase-2 follow-up.
+  legalName          String?
+  gstNumber          String?
+  panNumber          String?
+  registrationNumber String? // CIN / Udyam / free-text, optional
+
+  // Authorized signatory submitting on the company's behalf.
+  authorizedPersonName        String?
+  authorizedPersonDesignation String?
+  authorizedPersonIdType      String? // PAN | AADHAAR | PASSPORT | VOTER_ID | DRIVING_LICENSE (UI-constrained)
+
+  // Admin-reviewed verification state machine.
+  status          KycStatus @default(NOT_SUBMITTED)
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  reviewedById    Int? // admin User id; nullable, no FK (FlagAuditLog.changedById pattern)
+  rejectionReason String?
+
+  documents KycDocument[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([status])
+}
+
+// A single uploaded KYC file. Mirrors the private Resume pattern: the bytes live
+// in R2 keyed by r2Key, the row carries the bookkeeping. Soft-delete via
+// deletedAt so supersede-on-reupload keeps an audit trail. scanStatus reuses the
+// generic malware tristate. The "one active (deletedAt IS NULL) doc per docType
+// per company" invariant is enforced in the service: uploadDocument supersedes
+// the prior active doc inside a transaction that holds a FOR UPDATE row lock on
+// the parent CompanyKyc, serialising concurrent same-type uploads. (It can't be
+// a Prisma @@unique — the constraint is partial: WHERE deletedAt IS NULL.)
+model KycDocument {
+  id               Int              @id @default(autoincrement())
+  companyKycId     Int
+  companyKyc       CompanyKyc       @relation(fields: [companyKycId], references: [id], onDelete: Cascade)
+  docType          KycDocumentType
+  r2Key            String           @unique
+  originalFilename String
+  sizeBytes        Int
+  mimeType         String
+  scanStatus       ResumeScanStatus @default(PENDING)
+  uploadedById     Int // recruiter User id who uploaded
+  uploadedAt       DateTime         @default(now())
+  deletedAt        DateTime?
+
+  @@index([companyKycId, deletedAt])
 }
 
 // SRS §4.7.4 — read-only on the public profile page in this PR. Write paths

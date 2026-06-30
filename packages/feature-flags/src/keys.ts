@@ -38,6 +38,11 @@ export const FLAG = {
   KILL_JOB_ALERTS: 'killswitch.job_alerts',
   KILL_RESUME_UPLOADS: 'killswitch.resume_uploads',
   KILL_NEW_REGISTRATIONS: 'killswitch.new_registrations',
+  // Recruiter Company Verification (KYC). Emergency stop for the whole KYC flow
+  // (submission + document upload). Seeded enabled:false, so the feature is LIVE
+  // by default; an admin flipping this ON disables it without a redeploy. Being
+  // a `killswitch.*` key it is auto-classified critical (Slack + confirm modal).
+  KILL_RECRUITER_KYC: 'killswitch.recruiter_kyc',
 } as const;
 
 export type FlagKey = (typeof FLAG)[keyof typeof FLAG];

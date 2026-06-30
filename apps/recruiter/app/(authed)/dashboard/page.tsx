@@ -3,6 +3,7 @@ import { Button } from '@jobportal/ui';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
 import { VerifyWorkEmailBanner } from '../../../components/VerifyWorkEmailBanner';
 import { CompanyLogo } from '../../../components/CompanyLogo';
+import { KycStatusBadge } from '../../../components/kyc/KycStatusBadge';
 
 // Empty-state dashboard. The 'Post a job' button is intentionally disabled
 // until Task 17 wires the wizard — we want recruiters to see the path even
@@ -15,7 +16,9 @@ export default async function DashboardPage() {
     select: {
       workEmailVerified: true,
       user: { select: { email: true } },
-      company: { select: { id: true, name: true, logoUrl: true } },
+      company: {
+        select: { id: true, name: true, logoUrl: true, kyc: { select: { status: true } } },
+      },
     },
   });
 
@@ -34,6 +37,7 @@ export default async function DashboardPage() {
             <span className="text-base font-medium text-[var(--color-fg)]">
               {recruiter.company.name}
             </span>
+            <KycStatusBadge status={recruiter.company.kyc?.status ?? 'NOT_SUBMITTED'} />
           </div>
         )}
         <div>
