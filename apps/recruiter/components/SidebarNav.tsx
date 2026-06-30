@@ -8,6 +8,7 @@ const ITEMS = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/jobs', label: 'Jobs' },
   { href: '/profile', label: 'Profile' },
+  { href: '/kyc', label: 'Verification' },
 ] as const;
 
 // Linear-style left rail. Active state via aria-current; subtle hover row
