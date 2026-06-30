@@ -25,6 +25,10 @@ const m = prisma as unknown as {
 };
 
 const fakeStorage = { getSignedDownloadUrl: vi.fn() };
+// Recruiter notification producer — fire-and-log after a KYC decision.
+const fakeNotifications = {
+  notifyKycDecision: vi.fn().mockResolvedValue(undefined),
+} as { notifyKycDecision: ReturnType<typeof vi.fn> };
 
 function detailRow(over: Record<string, unknown> = {}) {
   return {
@@ -66,7 +70,8 @@ describe('AdminKycService', () => {
     fakeStorage.getSignedDownloadUrl.mockResolvedValue('https://signed.example/doc');
     m.profileAuditLog.create.mockResolvedValue({});
     m.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) => fn(prisma));
-    service = new AdminKycService(fakeStorage as never);
+    fakeNotifications.notifyKycDecision.mockResolvedValue(undefined);
+    service = new AdminKycService(fakeStorage as never, fakeNotifications as never);
   });
 
   describe('listKyc', () => {
@@ -144,6 +149,12 @@ describe('AdminKycService', () => {
       expect(updateArg.data.rejectionReason).toBeNull();
       const auditArg = m.profileAuditLog.create.mock.calls[0]?.[0] as { data: { action: string } };
       expect(auditArg.data.action).toBe('KYC_APPROVED');
+      // Recruiter-side notification fired after the decision committed.
+      expect(fakeNotifications.notifyKycDecision).toHaveBeenCalledWith({
+        companyId: 7,
+        decision: 'VERIFIED',
+        rejectionReason: null,
+      });
     });
 
     it('rejects a PENDING submission → REJECTED, persisting the reason', async () => {
@@ -161,6 +172,23 @@ describe('AdminKycService', () => {
       expect(updateArg.data.rejectionReason).toBe('GST mismatch');
       const auditArg = m.profileAuditLog.create.mock.calls[0]?.[0] as { data: { action: string } };
       expect(auditArg.data.action).toBe('KYC_REJECTED');
+      expect(fakeNotifications.notifyKycDecision).toHaveBeenCalledWith({
+        companyId: 7,
+        decision: 'REJECTED',
+        rejectionReason: 'GST mismatch',
+      });
+    });
+
+    it('still resolves when the recruiter notification producer rejects (fire-and-log)', async () => {
+      m.companyKyc.findUnique
+        .mockResolvedValueOnce({ status: 'PENDING' })
+        .mockResolvedValueOnce(detailRow({ status: 'VERIFIED' }));
+      m.companyKyc.update.mockResolvedValue({});
+      // Notification is fire-and-log after the decision commits — a failure must
+      // NOT roll back or 5xx the admin's review.
+      fakeNotifications.notifyKycDecision.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(service.review(1, 7, { decision: 'APPROVE' })).resolves.toBeDefined();
     });
 
     it('refuses to review a non-PENDING submission', async () => {

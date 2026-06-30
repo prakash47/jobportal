@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { prisma, Prisma, type Application, type ApplicationStatus } from '@jobportal/db';
 import { EmailService } from '../email/email.service';
+import { NotificationsProducerService } from '../recruiter-notifications/notifications-producer.service';
 import { ApplicationQuotaService } from './quota.service';
 import { buildHistoryEntry, canTransition, isTerminal } from './state-machine';
 
@@ -40,13 +41,14 @@ export class ApplicationsService {
   constructor(
     private readonly email: EmailService,
     private readonly quota: ApplicationQuotaService,
+    private readonly notifications: NotificationsProducerService,
   ) {}
 
   async apply(userId: number, jobId: number, coverLetter?: string): Promise<Application> {
     // FR-4.12.8: email verification gates apply.
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { emailVerified: true, email: true },
+      select: { emailVerified: true, email: true, name: true },
     });
     if (!user) throw new NotFoundException('User not found');
     if (!user.emailVerified) {
@@ -60,6 +62,9 @@ export class ApplicationsService {
         status: true,
         title: true,
         canonicalSlug: true,
+        // Recruiter who owns the job — the recipient of the new-application
+        // bell notification (nullable: poster may have been removed).
+        postedById: true,
         company: { select: { name: true } },
       },
     });
@@ -125,6 +130,22 @@ export class ApplicationsService {
       .catch((err: unknown) => {
         this.logger.warn(
           `application-submitted enqueue failed for application ${created.id}: ${(err as Error).message}`,
+        );
+      });
+
+    // Recruiter-side in-app notification (the bell). Fire-and-log: a write
+    // failure here must never turn a successful apply into a 5xx, and it never
+    // alters the candidate-facing flow. Recipient is the job owner (postedById).
+    this.notifications
+      .notifyNewApplication({
+        recruiterUserId: job.postedById,
+        jobId,
+        jobTitle: job.title,
+        candidateName: user.name,
+      })
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `new-application notification failed for application ${created.id}: ${(err as Error).message}`,
         );
       });
 

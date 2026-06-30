@@ -44,6 +44,11 @@ const fakeQuota = {
   consume: vi.fn().mockResolvedValue({ count: 1, limit: 10, unlimited: false, upgradeAvailable: false }),
 } as { consume: ReturnType<typeof vi.fn> };
 
+// Recruiter notification producer — fire-and-log side effect on apply().
+const fakeNotifications = {
+  notifyNewApplication: vi.fn().mockResolvedValue(undefined),
+} as { notifyNewApplication: ReturnType<typeof vi.fn> };
+
 describe('ApplicationsService.apply', () => {
   let service: ApplicationsService;
 
@@ -57,7 +62,12 @@ describe('ApplicationsService.apply', () => {
       unlimited: false,
       upgradeAvailable: false,
     });
-    service = new ApplicationsService(fakeEmail as unknown as never, fakeQuota as unknown as never);
+    fakeNotifications.notifyNewApplication.mockResolvedValue(undefined);
+    service = new ApplicationsService(
+      fakeEmail as unknown as never,
+      fakeQuota as unknown as never,
+      fakeNotifications as unknown as never,
+    );
   });
 
   it('creates an Application for a verified user on an ACTIVE job', async () => {
@@ -158,6 +168,64 @@ describe('ApplicationsService.apply', () => {
     expect(fakeQuota.consume).toHaveBeenCalledWith(42);
   });
 
+  it('fires a recruiter new-application notification to the job owner after a successful apply', async () => {
+    mockedPrisma.user.findUnique.mockResolvedValue({
+      emailVerified: true,
+      email: 'cand@example.com',
+      name: 'Asha Rao',
+    });
+    mockedPrisma.job.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      title: 'Backend Engineer',
+      canonicalSlug: 'be-1',
+      postedById: 7,
+      company: { name: 'Acme' },
+    });
+    mockedPrisma.application.create.mockResolvedValue({
+      id: 3,
+      userId: 42,
+      jobId: 9,
+      status: 'APPLIED',
+      appliedAt: new Date(),
+    });
+
+    await service.apply(42, 9);
+    expect(fakeNotifications.notifyNewApplication).toHaveBeenCalledWith({
+      recruiterUserId: 7,
+      jobId: 9,
+      jobTitle: 'Backend Engineer',
+      candidateName: 'Asha Rao',
+    });
+  });
+
+  it('still succeeds when the recruiter notification producer rejects (fire-and-log)', async () => {
+    mockedPrisma.user.findUnique.mockResolvedValue({
+      emailVerified: true,
+      email: 'cand@example.com',
+      name: 'Asha Rao',
+    });
+    mockedPrisma.job.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      title: 'Backend Engineer',
+      canonicalSlug: 'be-1',
+      postedById: 7,
+      company: { name: 'Acme' },
+    });
+    mockedPrisma.application.create.mockResolvedValue({
+      id: 5,
+      userId: 42,
+      jobId: 9,
+      status: 'APPLIED',
+      appliedAt: new Date(),
+    });
+    // The notification write is fire-and-log; a failure must NOT turn a
+    // successful apply into a 5xx (guards against someone awaiting the producer
+    // or dropping the .catch()).
+    fakeNotifications.notifyNewApplication.mockRejectedValueOnce(new Error('db down'));
+
+    await expect(service.apply(42, 9)).resolves.toMatchObject({ id: 5 });
+  });
+
   it('does NOT call quota.consume on P2002 (re-apply does not cost a slot)', async () => {
     mockedPrisma.user.findUnique.mockResolvedValue({ emailVerified: true, email: 'cand@example.com' });
     mockedPrisma.job.findUnique.mockResolvedValue({ status: 'ACTIVE', title: 'SE', canonicalSlug: 'se-1', company: { name: 'Acme' } });
@@ -197,7 +265,12 @@ describe('ApplicationsService.list', () => {
       unlimited: false,
       upgradeAvailable: false,
     });
-    service = new ApplicationsService(fakeEmail as unknown as never, fakeQuota as unknown as never);
+    fakeNotifications.notifyNewApplication.mockResolvedValue(undefined);
+    service = new ApplicationsService(
+      fakeEmail as unknown as never,
+      fakeQuota as unknown as never,
+      fakeNotifications as unknown as never,
+    );
   });
 
   it('paginates with default page=1, status=ALL', async () => {
@@ -246,7 +319,12 @@ describe('ApplicationsService.withdraw', () => {
       unlimited: false,
       upgradeAvailable: false,
     });
-    service = new ApplicationsService(fakeEmail as unknown as never, fakeQuota as unknown as never);
+    fakeNotifications.notifyNewApplication.mockResolvedValue(undefined);
+    service = new ApplicationsService(
+      fakeEmail as unknown as never,
+      fakeQuota as unknown as never,
+      fakeNotifications as unknown as never,
+    );
   });
 
   const ownedRow = {

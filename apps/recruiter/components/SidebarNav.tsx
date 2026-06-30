@@ -9,6 +9,7 @@ const ITEMS = [
   { href: '/jobs', label: 'Jobs' },
   { href: '/profile', label: 'Profile' },
   { href: '/kyc', label: 'Verification' },
+  { href: '/notification-settings', label: 'Notification settings' },
 ] as const;
 
 // Linear-style left rail. Active state via aria-current; subtle hover row

@@ -43,6 +43,14 @@ export const FLAG = {
   // by default; an admin flipping this ON disables it without a redeploy. Being
   // a `killswitch.*` key it is auto-classified critical (Slack + confirm modal).
   KILL_RECRUITER_KYC: 'killswitch.recruiter_kyc',
+  // Recruiter notifications (the top-bar bell + the "Notification settings" tab).
+  // Emergency stop for the whole feature: when ON, producers stop writing
+  // notification rows, the bell is hidden from the recruiter shell (L2), the
+  // /notification-settings page 404s (L2), and the preference-mutation endpoints
+  // reject (L3). Seeded enabled:false, so the feature is LIVE by default; an
+  // admin flipping this ON disables it without a redeploy. As a `killswitch.*`
+  // key it is auto-classified critical (Slack + confirm modal).
+  KILL_RECRUITER_NOTIFICATIONS: 'killswitch.recruiter_notifications',
 } as const;
 
 export type FlagKey = (typeof FLAG)[keyof typeof FLAG];
