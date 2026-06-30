@@ -119,6 +119,7 @@ export class RecruiterKycService {
   async saveKyc(userId: number, input: SaveKycInput): Promise<KycView> {
     await this.assertKycEnabled();
     const companyId = await this.resolveCompanyId(userId);
+    await this.assertEditable(companyId);
 
     const data = emptyToNull(stripUndefined({ ...input }));
     await prisma.companyKyc.upsert({
@@ -137,6 +138,7 @@ export class RecruiterKycService {
   ): Promise<KycView> {
     await this.assertKycEnabled();
     const companyId = await this.resolveCompanyId(userId);
+    await this.assertEditable(companyId);
 
     const validation = validateKycDocument(file.originalname, file.mimetype, file.size);
     if (!validation.ok) throw new BadRequestException(kycFailureMessage(validation));
@@ -149,25 +151,30 @@ export class RecruiterKycService {
     }
 
     const kycId = await this.getOrCreateKycId(companyId);
-
-    // Supersede the previous active document of the same type (one current per
-    // type). The old row is soft-deleted (audit trail) and its R2 object removed
-    // best-effort after the new row is committed.
-    const previous = await prisma.kycDocument.findFirst({
-      where: { companyKycId: kycId, docType, deletedAt: null },
-      select: { id: true, r2Key: true },
-    });
-
     const key = buildKycKey(companyId, docType, validation.ext, randomBytes(8).toString('hex'));
     await this.storage.putObject(key, file.buffer, validation.mimeType);
 
+    // Supersede the previous active document of the same type (one current per
+    // type). The find + soft-delete + create run in ONE transaction that first
+    // takes a row lock on the parent CompanyKyc (SELECT … FOR UPDATE) — this
+    // serialises concurrent same-type uploads for a company so two of them can't
+    // both end up active (the invariant can't be a Prisma @@unique because it's
+    // partial: WHERE deletedAt IS NULL). The superseded R2 object is removed
+    // best-effort after the new row commits.
+    let supersededKey: string | null = null;
     try {
       await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "CompanyKyc" WHERE id = ${kycId} FOR UPDATE`;
+        const previous = await tx.kycDocument.findFirst({
+          where: { companyKycId: kycId, docType, deletedAt: null },
+          select: { id: true, r2Key: true },
+        });
         if (previous) {
           await tx.kycDocument.update({
             where: { id: previous.id },
             data: { deletedAt: new Date() },
           });
+          supersededKey = previous.r2Key;
         }
         const doc = await tx.kycDocument.create({
           data: {
@@ -204,13 +211,14 @@ export class RecruiterKycService {
       throw err;
     }
 
-    if (previous) this.bestEffortDelete(previous.r2Key);
+    if (supersededKey) this.bestEffortDelete(supersededKey);
     return this.getKyc(userId);
   }
 
   async deleteDocument(userId: number, documentId: number): Promise<KycView> {
     await this.assertKycEnabled();
     const companyId = await this.resolveCompanyId(userId);
+    await this.assertEditable(companyId);
 
     const doc = await prisma.kycDocument.findUnique({
       where: { id: documentId },
@@ -319,22 +327,41 @@ export class RecruiterKycService {
     return recruiter.companyId;
   }
 
+  // Atomic find-or-create so two concurrent first-touches can't both try to
+  // INSERT (companyId is @unique). upsert with an empty update returns the row.
   private async getOrCreateKycId(companyId: number): Promise<number> {
-    const existing = await prisma.companyKyc.findUnique({
+    const kyc = await prisma.companyKyc.upsert({
       where: { companyId },
+      create: { companyId },
+      update: {},
       select: { id: true },
     });
-    if (existing) return existing.id;
-    const created = await prisma.companyKyc.create({
-      data: { companyId },
-      select: { id: true },
-    });
-    return created.id;
+    return kyc.id;
   }
 
   private async assertKycEnabled(): Promise<void> {
     if (await isFlagEnabled(KYC_KILLSWITCH_FLAG)) {
       throw new ServiceUnavailableException('Company verification is temporarily unavailable');
+    }
+  }
+
+  // Identifiers and documents are frozen while a submission is under review
+  // (PENDING) or already approved (VERIFIED) — matches the recruiter-portal UI
+  // lock, but enforced here because the API is the only trusted boundary
+  // (CLAUDE.md §4). NOT_SUBMITTED and REJECTED stay editable (so a rejected
+  // company can fix and resubmit).
+  private async assertEditable(companyId: number): Promise<void> {
+    const kyc = await prisma.companyKyc.findUnique({
+      where: { companyId },
+      select: { status: true },
+    });
+    if (kyc?.status === 'PENDING') {
+      throw new BadRequestException(
+        'Your verification is under review and can’t be edited until a decision is made.',
+      );
+    }
+    if (kyc?.status === 'VERIFIED') {
+      throw new BadRequestException('Your company is already verified.');
     }
   }
 

@@ -13,6 +13,7 @@ vi.mock('@jobportal/db', () => ({
     kycDocument: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     profileAuditLog: { create: vi.fn() },
     $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
   },
   Prisma: {},
 }));
@@ -38,6 +39,7 @@ const m = prisma as unknown as {
   };
   profileAuditLog: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
+  $queryRaw: ReturnType<typeof vi.fn>;
 };
 
 const fakeStorage = {
@@ -79,7 +81,9 @@ describe('RecruiterKycService', () => {
     fakeStorage.getSignedDownloadUrl.mockResolvedValue('https://signed.example/doc');
     fakeStorage.deleteObject.mockResolvedValue(undefined);
     m.recruiter.findUnique.mockResolvedValue({ companyId: 7 });
+    m.companyKyc.upsert.mockResolvedValue({ id: 5 });
     m.profileAuditLog.create.mockResolvedValue({});
+    m.$queryRaw.mockResolvedValue([]);
     m.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) => fn(prisma));
     service = new RecruiterKycService(fakeStorage as never, fakeClamav as never);
   });
@@ -150,6 +154,30 @@ describe('RecruiterKycService', () => {
       expect(arg.create.companyId).toBe(7);
       expect(arg.update.legalName).toBe('Acme');
       expect(arg.update.gstNumber).toBeNull();
+    });
+  });
+
+  describe('assertEditable guard', () => {
+    it('blocks saveKyc while the submission is PENDING (under review)', async () => {
+      m.companyKyc.findUnique.mockResolvedValue({ status: 'PENDING' });
+      await expect(service.saveKyc(42, { legalName: 'X' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(m.companyKyc.upsert).not.toHaveBeenCalled();
+    });
+
+    it('blocks uploadDocument once the company is VERIFIED', async () => {
+      m.companyKyc.findUnique.mockResolvedValue({ status: 'VERIFIED' });
+      await expect(
+        service.uploadDocument(42, 'BUSINESS_REGISTRATION', PDF),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(fakeStorage.putObject).not.toHaveBeenCalled();
+    });
+
+    it('blocks deleteDocument while PENDING', async () => {
+      m.companyKyc.findUnique.mockResolvedValue({ status: 'PENDING' });
+      await expect(service.deleteDocument(42, 9)).rejects.toBeInstanceOf(BadRequestException);
+      expect(m.kycDocument.update).not.toHaveBeenCalled();
     });
   });
 

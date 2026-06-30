@@ -543,9 +543,11 @@ model CompanyKyc {
 // A single uploaded KYC file. Mirrors the private Resume pattern: the bytes live
 // in R2 keyed by r2Key, the row carries the bookkeeping. Soft-delete via
 // deletedAt so supersede-on-reupload keeps an audit trail. scanStatus reuses the
-// generic malware tristate. Only one active (deletedAt IS NULL) doc per docType
-// per company is expected (enforced in the service, not a DB constraint, so old
-// versions can coexist as soft-deleted rows).
+// generic malware tristate. The "one active (deletedAt IS NULL) doc per docType
+// per company" invariant is enforced in the service: uploadDocument supersedes
+// the prior active doc inside a transaction that holds a FOR UPDATE row lock on
+// the parent CompanyKyc, serialising concurrent same-type uploads. (It can't be
+// a Prisma @@unique — the constraint is partial: WHERE deletedAt IS NULL.)
 model KycDocument {
   id               Int              @id @default(autoincrement())
   companyKycId     Int
