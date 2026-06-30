@@ -33,12 +33,12 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | rat145 (Claude) | `feature/recruiter-company-verification` | 2026-06-30 | Adding `CompanyKyc` + `KycDocument` models, `KycStatus`/`KycDocumentType` enums, `ProfileAuditAction` values. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | rat145 (Claude) | `feature/recruiter-company-verification` | 2026-06-30 | Adding `killswitch.recruiter_kyc` key. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -51,6 +51,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
 | _example — delete me_ | `feature/saved-searches` | Saved-search feature: new `SavedSearch` Prisma model, `/me/saved-searches` API, `<SavedSearchList>` web component | DB schema (lock held) | 2026-06-22 |
+| rat145 (Claude) | `feature/recruiter-company-verification` | Recruiter Company Verification (KYC): models `CompanyKyc` + `KycDocument`; API `recruiter-kyc` (`/recruiter/kyc*`) + `admin-kyc` (`/admin/kyc*`); recruiter `/kyc` page + nav + status badge; admin `/admin/kyc-review` UI; flag `killswitch.recruiter_kyc` | DB schema (lock held), Feature flags (lock held) | 2026-06-30 |
 
 ---
 
