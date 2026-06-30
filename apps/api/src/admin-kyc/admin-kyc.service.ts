@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { prisma, Prisma, type KycDocumentType, type KycStatus } from '@jobportal/db';
+import { NotificationsProducerService } from '../recruiter-notifications/notifications-producer.service';
 import { StorageService } from '../storage/storage.service';
 import type { ListKycQueryInput, ReviewKycInput } from './dto';
 
@@ -79,7 +80,10 @@ export interface KycReviewDetail {
 export class AdminKycService {
   private readonly logger = new Logger(AdminKycService.name);
 
-  constructor(private readonly storage: StorageService) {}
+  constructor(
+    private readonly storage: StorageService,
+    private readonly notifications: NotificationsProducerService,
+  ) {}
 
   // Review queue. Defaults to every submitted record (anything past
   // NOT_SUBMITTED); a status filter narrows it (e.g. PENDING for the queue).
@@ -219,6 +223,22 @@ export class AdminKycService {
     });
 
     this.logger.log(`admin=${adminUserId} ${input.decision} KYC for company=${companyId}`);
+
+    // Recruiter-side in-app notification (the bell) for every recruiter on the
+    // company. Fire-and-log after the decision commits so a notification write
+    // can never roll back or 5xx the admin's review action.
+    this.notifications
+      .notifyKycDecision({
+        companyId,
+        decision: input.decision === 'APPROVE' ? 'VERIFIED' : 'REJECTED',
+        rejectionReason: reason,
+      })
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `kyc-decision notification failed for company=${companyId}: ${(err as Error).message}`,
+        );
+      });
+
     return this.getKycDetail(companyId);
   }
 }

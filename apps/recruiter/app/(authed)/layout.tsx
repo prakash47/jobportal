@@ -1,17 +1,61 @@
 import Link from 'next/link';
+import { prisma } from '@jobportal/db';
+import { isFlagEnabled } from '@jobportal/feature-flags';
 import { requireRecruiter } from '../../lib/auth/require-recruiter';
 import { SidebarNav } from '../../components/SidebarNav';
 import { SignOutButton } from '../../components/SignOutButton';
 import { Logo } from '../../components/brand/Logo';
+import {
+  NotificationBell,
+  type NotificationItem,
+} from '../../components/notifications/NotificationBell';
 
 // Linear-app-shell: fixed 240px sidebar + main pane. Sidebar holds the nav
-// and a sign-out at the bottom; header strip mirrors the (auth) layout for
-// visual continuity.
+// and a sign-out at the bottom; a sticky top bar in the main pane carries the
+// notification bell so it shows on every authed page.
 
 export const dynamic = 'force-dynamic';
 
+const BELL_FEED_LIMIT = 10;
+
 export default async function AuthedLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRecruiter();
+
+  // Reads-direct topology: server-render the bell's initial unread count + feed
+  // via Prisma (the client island then polls + refreshes through the BFF). When
+  // killswitch.recruiter_notifications is ON the bell is hidden entirely (L2).
+  const notificationsEnabled = !(await isFlagEnabled('killswitch.recruiter_notifications'));
+  let initialUnreadCount = 0;
+  let initialItems: NotificationItem[] = [];
+  if (notificationsEnabled) {
+    const [unread, rows] = await Promise.all([
+      prisma.notification.count({ where: { userId: user.sub, readAt: null } }),
+      prisma.notification.findMany({
+        where: { userId: user.sub },
+        orderBy: { createdAt: 'desc' },
+        take: BELL_FEED_LIMIT,
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          body: true,
+          linkUrl: true,
+          readAt: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+    initialUnreadCount = unread;
+    initialItems = rows.map((n) => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      body: n.body,
+      linkUrl: n.linkUrl,
+      read: n.readAt !== null,
+      createdAt: n.createdAt.toISOString(),
+    }));
+  }
 
   // App-shell scroll model: the viewport is locked (h-screen + overflow-hidden)
   // and each pane scrolls independently. The sidebar stays fixed while the main
@@ -37,6 +81,14 @@ export default async function AuthedLayout({ children }: { children: React.React
           </div>
         </aside>
         <main className="h-screen min-w-0 overflow-y-auto">
+          <header className="sticky top-0 z-10 flex h-14 items-center justify-end gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)] px-6">
+            {notificationsEnabled && (
+              <NotificationBell
+                initialUnreadCount={initialUnreadCount}
+                initialItems={initialItems}
+              />
+            )}
+          </header>
           <div className="mx-auto max-w-3xl px-6 py-10">{children}</div>
         </main>
       </div>

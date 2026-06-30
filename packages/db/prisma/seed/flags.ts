@@ -68,6 +68,12 @@ const flags: FlagSeed[] = [
   // the feature is LIVE by default; flipping it ON disables it without a
   // redeploy. Enforced at the API (L3) and the recruiter /kyc page (L2).
   { key: 'killswitch.recruiter_kyc', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter company verification / KYC (kill)' },
+  // Recruiter notifications (the top-bar bell + the "Notification settings" tab).
+  // Emergency stop for the whole feature: producers stop writing notification
+  // rows, the bell is hidden, the settings page 404s, and preference mutations
+  // reject. Seeded OFF so the feature is LIVE by default; flipping it ON disables
+  // it without a redeploy. Enforced at the API (L3) and the recruiter shell (L2).
+  { key: 'killswitch.recruiter_notifications', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter notifications + settings (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {

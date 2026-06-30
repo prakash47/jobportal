@@ -17,6 +17,7 @@ import { RecruiterApplicantsModule } from './recruiter-applicants/recruiter-appl
 import { RecruiterAuthModule } from './recruiter-auth/recruiter-auth.module';
 import { RecruiterJobsModule } from './recruiter-jobs/recruiter-jobs.module';
 import { RecruiterKycModule } from './recruiter-kyc/recruiter-kyc.module';
+import { RecruiterNotificationsModule } from './recruiter-notifications/recruiter-notifications.module';
 import { RecruiterProfileModule } from './recruiter-profile/recruiter-profile.module';
 import { RecruiterPostQuotaModule } from './recruiter-post-quota/quota.module';
 import { RedisModule } from './redis/redis.module';
@@ -48,6 +49,7 @@ import { StorageModule } from './storage/storage.module';
     RecruiterApplicantsModule,
     RecruiterProfileModule,
     RecruiterKycModule,
+    RecruiterNotificationsModule,
     AdminKycModule,
     JobLifecycleModule,
     NotificationsPreferencesModule,

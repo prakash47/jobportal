@@ -213,6 +213,17 @@ enum KycDocumentType {
   AUTHORIZED_PERSON_ID
 }
 
+// Recruiter in-app notification kinds (the bell). Phase-1 set covers the events
+// with a real producer today: a new application on one of the recruiter's jobs,
+// and an admin decision on the company's verification (KYC). "Message" is
+// deliberately omitted — there is no recruiter↔candidate messaging feature yet,
+// so it would be a dead type. Add new values here behind a migration.
+enum NotificationType {
+  NEW_APPLICATION
+  KYC_VERIFIED
+  KYC_REJECTED
+}
+
 // ============================================================
 // User & profile (SRS §8.2)
 // ============================================================
@@ -245,6 +256,11 @@ model User {
   emailPreference     EmailPreference?
   companyReviews      CompanyReview[]
   postedJobs          Job[]                @relation("PostedJobs")
+  // Recruiter notifications (the bell feed) + recruiter-scoped channel toggles.
+  // Both keyed by User id (a recruiter is a User with role RECRUITER); the
+  // candidate-shared EmailPreference above is left untouched.
+  notifications                   Notification[]
+  recruiterNotificationPreference RecruiterNotificationPreference?
 
   @@index([role])
 }
@@ -704,6 +720,47 @@ model EmailPreference {
   productNewsEnabled       Boolean  @default(false)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
+}
+
+// Recruiter-portal in-app notifications (the top-bar bell). One row per alert
+// addressed to a recruiter User. Reads (list + unread count) happen in the
+// recruiter RSC / a small client poll; mark-read is a BFF mutation. Producers
+// write rows fire-and-log at the source events (new application, KYC decision).
+// linkUrl is an in-portal relative path the bell links to (e.g.
+// /jobs/123/applicants). Kept generic (userId, not recruiterId) so the same
+// table can serve any role later — but only recruiter producers + UI exist now.
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String?
+  linkUrl   String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  // Unread-count badge query: WHERE userId = ? AND readAt IS NULL.
+  @@index([userId, readAt])
+  // Feed query: WHERE userId = ? ORDER BY createdAt DESC.
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+// Recruiter-scoped notification channel toggles (email on/off, SMS on/off).
+// DELIBERATELY separate from the candidate-shared EmailPreference so the
+// job-seeker portal's GET/PATCH /me/notifications contract is byte-untouched.
+// Lazily provisioned like EmailPreference: a default read returns the schema
+// defaults without inserting a row; the first PATCH upserts. SMS delivery is
+// deferred (no SMS provider configured yet — Resend is email-only) — the toggle
+// is persisted now as the control surface, gating outbound SMS when that lands.
+model RecruiterNotificationPreference {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailEnabled Boolean  @default(true)
+  smsEnabled   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // ============================================================
