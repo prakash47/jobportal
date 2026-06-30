@@ -63,6 +63,11 @@ const flags: FlagSeed[] = [
   // events stop leaving the process. SDK init still runs (cheap, not
   // gated) so flipping back ON is instant — no redeploy needed.
   { key: 'killswitch.telemetry', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable Sentry + PostHog telemetry (kill)' },
+  // Recruiter Company Verification (KYC) — emergency stop for the whole KYC
+  // flow (submission + document upload + admin review actions). Seeded OFF so
+  // the feature is LIVE by default; flipping it ON disables it without a
+  // redeploy. Enforced at the API (L3) and the recruiter /kyc page (L2).
+  { key: 'killswitch.recruiter_kyc', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter company verification / KYC (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {
