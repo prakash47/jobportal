@@ -51,7 +51,6 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
 | _example — delete me_ | `feature/saved-searches` | Saved-search feature: new `SavedSearch` Prisma model, `/me/saved-searches` API, `<SavedSearchList>` web component | DB schema (lock held) | 2026-06-22 |
-| Prakash | `feature/recruiter-topbar-and-toggle-fix` | Recruiter UI follow-up: fix invisible notification toggle (missing `@source` in recruiter `globals.css`); move company logo + name + `KycStatusBadge` from the dashboard header into the `(authed)` layout top bar. Recruiter-only; no shared-surface locks. | — none — | 2026-06-30 |
 
 ---
 
@@ -69,6 +68,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Date | Branch | What shipped |
 |---|---|---|
+| 2026-06-30 | `feature/recruiter-topbar-and-toggle-fix` | Recruiter UI follow-up: fixed invisible notification toggles (added missing `@source` for `@jobportal/ui` in recruiter `globals.css`); moved company logo + name + `KycStatusBadge` from the dashboard header into the `(authed)` top bar (shows on every page). Browser-verified. |
 | 2026-06-30 | `feature/recruiter-notifications` | Recruiter notification settings + top-bar bell: `Notification`+`RecruiterNotificationPreference` models + `NotificationType` enum, `recruiter-notifications` API (list/unread-count/read/read-all + prefs), producers in `applications.apply()`+`admin-kyc.review()`, `/notification-settings` page + `NotificationBell` (polling), `killswitch.recruiter_notifications`. apps/web untouched |
 | 2026-06-30 | `feature/recruiter-company-verification` | Recruiter Company Verification (KYC): `CompanyKyc`+`KycDocument`, `recruiter-kyc`+`admin-kyc` API, `/kyc` tab + status badge, `/admin/kyc-review`, `killswitch.recruiter_kyc` |
 | 2026-06-21 | `feature/recruiter-profile-editing` | Recruiter profile + company editing + logo upload |

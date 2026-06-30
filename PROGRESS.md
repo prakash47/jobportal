@@ -52,6 +52,17 @@
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/recruiter-topbar-and-toggle-fix` · 2026-06-30
+
+Two recruiter-portal UI follow-ups from owner feedback on the notifications work. CLI merge (no PR). Recruiter-only; **`apps/web` untouched**, no schema/flag/test changes.
+
+- **Fixed invisible notification toggles** (the reported bug): `apps/recruiter/app/globals.css` was **missing the `@source "../../../packages/ui/src"` directive** that `apps/web` has. Tailwind 4 ignores `node_modules` (the workspace UI package resolves via a symlink), so utility classes used **only** inside `@jobportal/ui` were never generated for the recruiter bundle. The `Switch`'s `data-[state=checked]:bg-[var(--color-primary-600)]` / `data-[state=unchecked]:bg-[var(--color-border-strong)]` track classes were absent → transparent track + white thumb = invisible toggle. (Button/Badge looked fine only because their classes also appear in recruiter source; the Switch's `data-[state=*]` variants are unique to it.) Adding `@source` regenerates them — and also repaired the bell **Popover** styling, which used the same ungenerated classes. A latent recruiter-app bug since the app was scaffolded; the Switch was just the first component to expose it.
+- **Moved company identity to the top bar**: the company logo + name + `KycStatusBadge` moved from the `/dashboard` header into the `(authed)` layout top bar (left of the bell), so they show on **every** dashboard page; the now-unused company fields were trimmed from the dashboard query.
+
+**Browser-verified** against the running stack (demo recruiter `priya.sharma`): the toggles render (Email ON = navy, SMS OFF = gray, with the "coming soon" note; computed switch `background-color` is a real non-transparent colour, 36×20px, `aria-checked` correct); the top bar shows logo + name + "Not started" KYC badge + bell with the live unread count on both `/dashboard` and `/notification-settings`; the bell popover lists the alerts with unread dots + relative time + "Mark all as read". (Note: in local dev one demo company's `logoUrl` points to an ephemeral `/media` object lost on API restart, so its image 404s locally — environmental stale data, not a code issue; companies with a null logo show the initials fallback.)
+
+**Gate:** workspace typecheck **11/11** · tests **5/5 packages green** (no test inputs changed) · `pnpm build` **4/4** apps.
+
 ### `feature/recruiter-notifications` · 2026-06-30
 
 Recruiter **Notification settings + a top-bar notification bell** — a new "Notification settings" tab where a recruiter toggles email on/off and SMS on/off, plus a bell in a new sticky top bar (on every dashboard page) showing in-app alerts. CLI merge (no PR). Scoped to recruiter code paths + shared `apps/api` + `packages/db`/`feature-flags` — the **`apps/web` job-seeker surface is byte-untouched** (web test suite unchanged at 181; the only shared-service edits are additive, non-blocking notification writes in `applications.service` + `admin-kyc.service` that don't alter candidate behavior).
