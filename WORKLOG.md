@@ -33,12 +33,12 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Prakash | `feature/recruiter-notifications` | 2026-06-30 | Adding `Notification` + `RecruiterNotificationPreference` models + `NotificationType` enum (additive only). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | Prakash | `feature/recruiter-notifications` | 2026-06-30 | New key `killswitch.recruiter_notifications`. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| Prakash | `feature/recruiter-notifications` | Recruiter notifications: new `Notification` + `RecruiterNotificationPreference` models + `NotificationType` enum; `apps/api` `recruiter-notifications` module (`/recruiter/notifications` list/unread-count/:id/read/read-all + `/recruiter/notification-preferences` GET/PATCH); fire-and-log producers in `applications.service.apply()` + `admin-kyc.service.review()`; recruiter UI — 5th "Notification settings" sidebar item, `/notification-settings` page, new top-bar header + `NotificationBell` (polling) in the `(authed)` layout; flag `killswitch.recruiter_notifications`. **apps/web untouched.** | DB schema (lock held), feature-flags keys (lock held) | 2026-06-30 |
+| _example — delete me_ | `feature/saved-searches` | Saved-search feature: new `SavedSearch` Prisma model, `/me/saved-searches` API, `<SavedSearchList>` web component | DB schema (lock held) | 2026-06-22 |
 
 ---
 
@@ -68,6 +68,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Date | Branch | What shipped |
 |---|---|---|
+| 2026-06-30 | `feature/recruiter-notifications` | Recruiter notification settings + top-bar bell: `Notification`+`RecruiterNotificationPreference` models + `NotificationType` enum, `recruiter-notifications` API (list/unread-count/read/read-all + prefs), producers in `applications.apply()`+`admin-kyc.review()`, `/notification-settings` page + `NotificationBell` (polling), `killswitch.recruiter_notifications`. apps/web untouched |
 | 2026-06-30 | `feature/recruiter-company-verification` | Recruiter Company Verification (KYC): `CompanyKyc`+`KycDocument`, `recruiter-kyc`+`admin-kyc` API, `/kyc` tab + status badge, `/admin/kyc-review`, `killswitch.recruiter_kyc` |
 | 2026-06-21 | `feature/recruiter-profile-editing` | Recruiter profile + company editing + logo upload |
 | 2026-06-21 | `feature/recruiter-single-email` | Recruiter single-email migration |
