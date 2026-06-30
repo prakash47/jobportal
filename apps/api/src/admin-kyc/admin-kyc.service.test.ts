@@ -179,6 +179,18 @@ describe('AdminKycService', () => {
       });
     });
 
+    it('still resolves when the recruiter notification producer rejects (fire-and-log)', async () => {
+      m.companyKyc.findUnique
+        .mockResolvedValueOnce({ status: 'PENDING' })
+        .mockResolvedValueOnce(detailRow({ status: 'VERIFIED' }));
+      m.companyKyc.update.mockResolvedValue({});
+      // Notification is fire-and-log after the decision commits — a failure must
+      // NOT roll back or 5xx the admin's review.
+      fakeNotifications.notifyKycDecision.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(service.review(1, 7, { decision: 'APPROVE' })).resolves.toBeDefined();
+    });
+
     it('refuses to review a non-PENDING submission', async () => {
       m.companyKyc.findUnique.mockResolvedValue({ status: 'VERIFIED' });
       await expect(service.review(1, 7, { decision: 'APPROVE' })).rejects.toBeInstanceOf(

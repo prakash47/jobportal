@@ -198,6 +198,34 @@ describe('ApplicationsService.apply', () => {
     });
   });
 
+  it('still succeeds when the recruiter notification producer rejects (fire-and-log)', async () => {
+    mockedPrisma.user.findUnique.mockResolvedValue({
+      emailVerified: true,
+      email: 'cand@example.com',
+      name: 'Asha Rao',
+    });
+    mockedPrisma.job.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      title: 'Backend Engineer',
+      canonicalSlug: 'be-1',
+      postedById: 7,
+      company: { name: 'Acme' },
+    });
+    mockedPrisma.application.create.mockResolvedValue({
+      id: 5,
+      userId: 42,
+      jobId: 9,
+      status: 'APPLIED',
+      appliedAt: new Date(),
+    });
+    // The notification write is fire-and-log; a failure must NOT turn a
+    // successful apply into a 5xx (guards against someone awaiting the producer
+    // or dropping the .catch()).
+    fakeNotifications.notifyNewApplication.mockRejectedValueOnce(new Error('db down'));
+
+    await expect(service.apply(42, 9)).resolves.toMatchObject({ id: 5 });
+  });
+
   it('does NOT call quota.consume on P2002 (re-apply does not cost a slot)', async () => {
     mockedPrisma.user.findUnique.mockResolvedValue({ emailVerified: true, email: 'cand@example.com' });
     mockedPrisma.job.findUnique.mockResolvedValue({ status: 'ACTIVE', title: 'SE', canonicalSlug: 'se-1', company: { name: 'Acme' } });

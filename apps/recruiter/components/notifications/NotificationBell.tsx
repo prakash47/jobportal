@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Popover,
@@ -55,13 +55,21 @@ export function NotificationBell({
   const [items, setItems] = useState<NotificationItem[]>(initialItems);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Bumped on every optimistic mutation so an in-flight poll that started before
+  // the mutation can't clobber the just-applied count when it resolves.
+  const mutationStamp = useRef(0);
 
   // Poll the unread count so the badge stays current while the recruiter works.
   useEffect(() => {
     let cancelled = false;
     async function poll() {
+      const stampAtStart = mutationStamp.current;
       const res = await api<{ unreadCount: number }>('/recruiter/notifications/unread-count');
-      if (!cancelled && res.ok) setUnread(res.data.unreadCount);
+      // Drop the result if an optimistic mark-read happened while this request
+      // was in flight — its (now-stale) count would otherwise flicker the badge.
+      if (!cancelled && res.ok && mutationStamp.current === stampAtStart) {
+        setUnread(res.data.unreadCount);
+      }
     }
     const id = setInterval(poll, POLL_MS);
     return () => {
@@ -88,21 +96,37 @@ export function NotificationBell({
   }
 
   async function markAllRead() {
-    // Optimistic; the endpoint is idempotent so a failure just leaves the
-    // server state for the next poll to reconcile.
+    // Optimistic, with rollback on failure so the badge and the per-row read
+    // dots can't drift apart (e.g. if the killswitch is flipped ON mid-session
+    // and the POST 503s).
+    const prevItems = items;
+    const prevUnread = unread;
+    mutationStamp.current += 1;
     setUnread(0);
     setItems((prev) => prev.map((i) => ({ ...i, read: true })));
-    await api('/recruiter/notifications/read-all', { method: 'POST' });
+    const res = await api('/recruiter/notifications/read-all', { method: 'POST' });
+    if (!res.ok) {
+      setItems(prevItems);
+      setUnread(prevUnread);
+    }
   }
 
   function handleItemClick(item: NotificationItem) {
-    if (!item.read) {
-      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, read: true } : i)));
-      setUnread((u) => Math.max(0, u - 1));
-      void api(`/recruiter/notifications/${item.id}/read`, { method: 'PATCH' });
-    }
     setOpen(false);
     if (item.linkUrl) router.push(item.linkUrl);
+    if (item.read) return;
+    // Optimistic mark-read with rollback if the PATCH fails. Runs in the
+    // background — the bell lives in the (authed) layout, so it stays mounted
+    // across the navigation above.
+    mutationStamp.current += 1;
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, read: true } : i)));
+    setUnread((u) => Math.max(0, u - 1));
+    void api(`/recruiter/notifications/${item.id}/read`, { method: 'PATCH' }).then((res) => {
+      if (!res.ok) {
+        setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, read: false } : i)));
+        setUnread((u) => u + 1);
+      }
+    });
   }
 
   const badgeLabel = unread > 9 ? '9+' : String(unread);
@@ -119,7 +143,7 @@ export function NotificationBell({
         {unread > 0 && (
           <span
             aria-hidden
-            className="pointer-events-none absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--color-danger)] px-1 text-[10px] font-semibold leading-none text-white"
+            className="pointer-events-none absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--color-danger),black_18%)] px-1 text-[10px] font-semibold leading-none text-white"
           >
             {badgeLabel}
           </span>

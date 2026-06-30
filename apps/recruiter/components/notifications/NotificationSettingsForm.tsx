@@ -24,7 +24,7 @@ export function NotificationSettingsForm({ initial }: { initial: NotificationPre
   const emailId = useId();
   const smsId = useId();
 
-  async function persist(channel: Channel, next: boolean, revert: (v: boolean) => void, prev: boolean) {
+  async function persist(channel: Channel, next: boolean) {
     setError(null);
     setSavedChannel(null);
     const body = channel === 'email' ? { emailEnabled: next } : { smsEnabled: next };
@@ -33,23 +33,28 @@ export function NotificationSettingsForm({ initial }: { initial: NotificationPre
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      revert(prev); // roll the toggle back to its last-known-good value
       setError(res.message);
+      // Re-sync both toggles from server truth rather than reverting to a
+      // captured value — correct even if several toggles were fired in quick
+      // succession (a stale captured value could otherwise clobber a newer one).
+      const fresh = await api<NotificationPrefsInitial>('/recruiter/notification-preferences');
+      if (fresh.ok) {
+        setEmailEnabled(fresh.data.emailEnabled);
+        setSmsEnabled(fresh.data.smsEnabled);
+      }
       return;
     }
     setSavedChannel(channel);
   }
 
   function toggleEmail(next: boolean) {
-    const prev = emailEnabled;
     setEmailEnabled(next);
-    void persist('email', next, setEmailEnabled, prev);
+    void persist('email', next);
   }
 
   function toggleSms(next: boolean) {
-    const prev = smsEnabled;
     setSmsEnabled(next);
-    void persist('sms', next, setSmsEnabled, prev);
+    void persist('sms', next);
   }
 
   return (
@@ -98,14 +103,23 @@ function ToggleRow({
   saved: boolean;
   note?: string;
 }) {
+  const descId = useId();
+  const noteId = useId();
+  const describedBy = note ? `${descId} ${noteId}` : descId;
   return (
     <div className="flex items-start justify-between gap-4 px-5 py-4">
       <div className="min-w-0">
         <label htmlFor={id} className="block text-sm font-medium text-[var(--color-fg)]">
           {title}
         </label>
-        <p className="mt-0.5 text-sm text-[var(--color-fg-muted)]">{description}</p>
-        {note && <p className="mt-1 text-xs text-[var(--color-fg-subtle)]">{note}</p>}
+        <p id={descId} className="mt-0.5 text-sm text-[var(--color-fg-muted)]">
+          {description}
+        </p>
+        {note && (
+          <p id={noteId} className="mt-1 text-xs text-[var(--color-fg-subtle)]">
+            {note}
+          </p>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-2 pt-0.5">
         {saved && (
@@ -113,7 +127,12 @@ function ToggleRow({
             Saved
           </span>
         )}
-        <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+        <Switch
+          id={id}
+          checked={checked}
+          onCheckedChange={onCheckedChange}
+          aria-describedby={describedBy}
+        />
       </div>
     </div>
   );

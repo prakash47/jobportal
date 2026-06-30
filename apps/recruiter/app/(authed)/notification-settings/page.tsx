@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@jobportal/db';
 import { isFlagEnabled } from '@jobportal/feature-flags';
-import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { requireRecruiter } from '../../../lib/auth/require-recruiter';
 import {
   NotificationSettingsForm,
   type NotificationPrefsInitial,
@@ -18,7 +18,9 @@ export const dynamic = 'force-dynamic';
 export default async function NotificationSettingsPage() {
   if (await isFlagEnabled('killswitch.recruiter_notifications')) notFound();
 
-  const session = (await readUserFromCookie())!;
+  // requireRecruiter() returns the role-validated claims (no cross-file non-null
+  // assumption); the (authed) layout already gated, this re-resolves safely.
+  const session = await requireRecruiter();
   const prefs = await prisma.recruiterNotificationPreference.findUnique({
     where: { userId: session.sub },
     select: { emailEnabled: true, smsEnabled: true },

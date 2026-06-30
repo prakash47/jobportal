@@ -16,7 +16,9 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-const BELL_FEED_LIMIT = 10;
+// Matches the BFF list page size (RecruiterNotificationsService.PAGE_SIZE) so the
+// server-rendered feed and the client's first refresh show the same set.
+const BELL_FEED_LIMIT = 20;
 
 export default async function AuthedLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRecruiter();
