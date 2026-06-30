@@ -51,6 +51,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
 | _example — delete me_ | `feature/saved-searches` | Saved-search feature: new `SavedSearch` Prisma model, `/me/saved-searches` API, `<SavedSearchList>` web component | DB schema (lock held) | 2026-06-22 |
+| Prakash | `feature/recruiter-topbar-and-toggle-fix` | Recruiter UI follow-up: fix invisible notification toggle (missing `@source` in recruiter `globals.css`); move company logo + name + `KycStatusBadge` from the dashboard header into the `(authed)` layout top bar. Recruiter-only; no shared-surface locks. | — none — | 2026-06-30 |
 
 ---
 

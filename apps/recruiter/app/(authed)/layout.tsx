@@ -5,6 +5,8 @@ import { requireRecruiter } from '../../lib/auth/require-recruiter';
 import { SidebarNav } from '../../components/SidebarNav';
 import { SignOutButton } from '../../components/SignOutButton';
 import { Logo } from '../../components/brand/Logo';
+import { CompanyLogo } from '../../components/CompanyLogo';
+import { KycStatusBadge } from '../../components/kyc/KycStatusBadge';
 import {
   NotificationBell,
   type NotificationItem,
@@ -12,7 +14,8 @@ import {
 
 // Linear-app-shell: fixed 240px sidebar + main pane. Sidebar holds the nav
 // and a sign-out at the bottom; a sticky top bar in the main pane carries the
-// notification bell so it shows on every authed page.
+// company identity (logo + name + KYC status) on the left and the notification
+// bell on the right, so both show on every authed page.
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +25,19 @@ const BELL_FEED_LIMIT = 20;
 
 export default async function AuthedLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRecruiter();
+
+  // Company identity for the top bar (logo + name + KYC status), shown on every
+  // authed page. Reads-direct via Prisma. Null only for a just-registered
+  // recruiter whose row isn't ready yet — the cluster is simply omitted then.
+  const recruiter = await prisma.recruiter.findUnique({
+    where: { userId: user.sub },
+    select: {
+      company: {
+        select: { id: true, name: true, logoUrl: true, kyc: { select: { status: true } } },
+      },
+    },
+  });
+  const company = recruiter?.company ?? null;
 
   // Reads-direct topology: server-render the bell's initial unread count + feed
   // via Prisma (the client island then polls + refreshes through the BFF). When
@@ -83,7 +99,24 @@ export default async function AuthedLayout({ children }: { children: React.React
           </div>
         </aside>
         <main className="h-screen min-w-0 overflow-y-auto">
-          <header className="sticky top-0 z-10 flex h-14 items-center justify-end gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)] px-6">
+          <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)] px-6">
+            {company ? (
+              <div className="flex min-w-0 items-center gap-2.5">
+                <CompanyLogo
+                  companyId={company.id}
+                  name={company.name}
+                  logoUrl={company.logoUrl}
+                  size={28}
+                />
+                <span className="truncate text-sm font-medium text-[var(--color-fg)]">
+                  {company.name}
+                </span>
+                <KycStatusBadge status={company.kyc?.status ?? 'NOT_SUBMITTED'} />
+              </div>
+            ) : (
+              // Keep the bell pinned right (justify-between) even with no company.
+              <span aria-hidden />
+            )}
             {notificationsEnabled && (
               <NotificationBell
                 initialUnreadCount={initialUnreadCount}
