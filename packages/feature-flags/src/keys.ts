@@ -51,6 +51,13 @@ export const FLAG = {
   // admin flipping this ON disables it without a redeploy. As a `killswitch.*`
   // key it is auto-classified critical (Slack + confirm modal).
   KILL_RECRUITER_NOTIFICATIONS: 'killswitch.recruiter_notifications',
+  // Recruiter self-service password change (Settings → Change Password).
+  // Emergency stop for the feature: when ON, the /settings/change-password page
+  // 404s (L2) and the POST /auth/recruiter/change-password endpoint rejects with
+  // 503 (L3). Seeded enabled:false, so the feature is LIVE by default; an admin
+  // flipping this ON disables it without a redeploy. As a `killswitch.*` key it
+  // is auto-classified critical (Slack + confirm modal).
+  KILL_RECRUITER_CHANGE_PASSWORD: 'killswitch.recruiter_change_password',
 } as const;
 
 export type FlagKey = (typeof FLAG)[keyof typeof FLAG];
