@@ -19,3 +19,18 @@ export const RegisterRecruiterDto = z.object({
   companyName: z.string().min(1).max(200),
 });
 export type RegisterRecruiterInput = z.infer<typeof RegisterRecruiterDto>;
+
+// Recruiter self-service password change (Settings → Change Password). The
+// current password gates the change; the new one must clear the same strength
+// bar as registration and differ from the current one. The service re-checks
+// strength + verifies the current password (the DTO is UX, the API is trust).
+export const ChangePasswordDto = z
+  .object({
+    currentPassword: z.string().min(1, 'Current password is required'),
+    newPassword: passwordSchema,
+  })
+  .refine((d) => d.newPassword !== d.currentPassword, {
+    message: 'New password must be different from the current password',
+    path: ['newPassword'],
+  });
+export type ChangePasswordInput = z.infer<typeof ChangePasswordDto>;
