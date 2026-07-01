@@ -74,6 +74,12 @@ const flags: FlagSeed[] = [
   // reject. Seeded OFF so the feature is LIVE by default; flipping it ON disables
   // it without a redeploy. Enforced at the API (L3) and the recruiter shell (L2).
   { key: 'killswitch.recruiter_notifications', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter notifications + settings (kill)' },
+  // Recruiter self-service password change (Settings → Change Password).
+  // Emergency stop: when ON the /settings/change-password page 404s (L2) and the
+  // POST /auth/recruiter/change-password endpoint rejects with 503 (L3). Seeded
+  // OFF so the feature is LIVE by default; flipping it ON disables it without a
+  // redeploy.
+  { key: 'killswitch.recruiter_change_password', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter password change (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {
