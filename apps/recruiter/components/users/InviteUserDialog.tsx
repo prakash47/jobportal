@@ -39,7 +39,11 @@ export function InviteUserDialog({
   assignableRoles: RecruiterRole[];
   onInvited: () => void;
 }) {
-  const defaultRole = assignableRoles[0] ?? 'MEMBER';
+  // Default to the LEAST-privileged assignable role so the common "invite" action
+  // never silently grants OWNER/ADMIN — elevating is a deliberate dropdown choice.
+  const defaultRole: RecruiterRole = assignableRoles.includes('MEMBER')
+    ? 'MEMBER'
+    : (assignableRoles[assignableRoles.length - 1] ?? 'MEMBER');
   const emailId = useId();
   const customizeId = useId();
   const [email, setEmail] = useState('');

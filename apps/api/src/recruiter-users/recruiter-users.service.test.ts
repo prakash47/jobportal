@@ -27,6 +27,7 @@ vi.mock('@jobportal/db', () => ({
     session: { updateMany: vi.fn() },
     profileAuditLog: { create: vi.fn() },
     $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
   },
   Prisma: { DbNull: { __dbNull: true } },
 }));
@@ -45,6 +46,7 @@ const db = prisma as unknown as {
   session: { updateMany: Mock };
   profileAuditLog: { create: Mock };
   $transaction: Mock;
+  $queryRaw: Mock;
 };
 const flag = isFlagEnabled as Mock;
 const mockedHash = hashPassword as Mock;
@@ -70,6 +72,7 @@ describe('RecruiterUsersService', () => {
     mockedHash.mockResolvedValue('hash');
     mockedStrong.mockReturnValue(true);
     db.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) => fn(prisma));
+    db.$queryRaw.mockResolvedValue([]); // FOR UPDATE lock in assertNotLastOwner
     db.profileAuditLog.create.mockResolvedValue({});
     email.enqueueRecruiterInvite.mockResolvedValue(undefined);
     auth.issueSession.mockResolvedValue({ accessToken: 'access', refreshToken: 'refresh' });
@@ -133,8 +136,8 @@ describe('RecruiterUsersService', () => {
   // --- invite --------------------------------------------------------------
 
   describe('invite', () => {
-    it('OWNER invites a MEMBER: supersedes prior pending, creates, audits, emails', async () => {
-      db.recruiter.findFirst.mockResolvedValue(null);
+    it('OWNER invites a new email: supersedes prior pending, creates, audits, emails', async () => {
+      db.user.findUnique.mockResolvedValue(null); // no existing account
       db.recruiterInvite.updateMany.mockResolvedValue({ count: 1 });
       db.recruiterInvite.create.mockResolvedValue({
         id: 5,
@@ -146,7 +149,8 @@ describe('RecruiterUsersService', () => {
 
       const out = await service.invite(1, { email: 'new@acme.com', companyRole: 'MEMBER' });
 
-      expect(out.id).toBe(5);
+      expect(out).toMatchObject({ status: 'invited' });
+      if (out.status === 'invited') expect(out.invite.id).toBe(5);
       expect(db.recruiterInvite.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ companyId: 100, email: 'new@acme.com', acceptedAt: null, revokedAt: null }),
@@ -179,15 +183,57 @@ describe('RecruiterUsersService', () => {
     });
 
     it('rejects inviting an existing active team member (409)', async () => {
-      db.recruiter.findFirst.mockResolvedValue({ id: 9 });
+      db.user.findUnique.mockResolvedValue({
+        id: 5,
+        recruiter: { id: 9, companyId: 100, deactivatedAt: null },
+      });
       await expect(
         service.invite(1, { email: 'dup@acme.com', companyRole: 'MEMBER' }),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(db.recruiterInvite.create).not.toHaveBeenCalled();
     });
 
+    it('reactivates a previously-removed teammate (no new invite / email)', async () => {
+      db.user.findUnique.mockResolvedValue({
+        id: 5,
+        recruiter: { id: 9, companyId: 100, deactivatedAt: new Date('2026-06-01') },
+      });
+      db.recruiter.update.mockResolvedValue({});
+
+      const out = await service.invite(1, { email: 'back@acme.com', companyRole: 'MEMBER' });
+
+      expect(out).toEqual({ status: 'reactivated', recruiterId: 9, email: 'back@acme.com' });
+      expect(db.recruiter.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 9 },
+          data: expect.objectContaining({ deactivatedAt: null, companyRole: 'MEMBER' }),
+        }),
+      );
+      expect(db.recruiterInvite.create).not.toHaveBeenCalled();
+      expect(email.enqueueRecruiterInvite).not.toHaveBeenCalled();
+    });
+
+    it('rejects an email that belongs to another company (409, no dead invite)', async () => {
+      db.user.findUnique.mockResolvedValue({
+        id: 5,
+        recruiter: { id: 9, companyId: 999, deactivatedAt: null },
+      });
+      await expect(
+        service.invite(1, { email: 'other@co.com', companyRole: 'MEMBER' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(db.recruiterInvite.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects an email that belongs to a candidate account (409)', async () => {
+      db.user.findUnique.mockResolvedValue({ id: 5, recruiter: null });
+      await expect(
+        service.invite(1, { email: 'seeker@x.com', companyRole: 'MEMBER' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(db.recruiterInvite.create).not.toHaveBeenCalled();
+    });
+
     it('does not fail the invite when the email backend throws (fire-and-log)', async () => {
-      db.recruiter.findFirst.mockResolvedValue(null);
+      db.user.findUnique.mockResolvedValue(null);
       db.recruiterInvite.updateMany.mockResolvedValue({ count: 0 });
       db.recruiterInvite.create.mockResolvedValue({
         id: 6,
@@ -199,7 +245,7 @@ describe('RecruiterUsersService', () => {
       email.enqueueRecruiterInvite.mockRejectedValue(new Error('Resend down'));
       await expect(
         service.invite(1, { email: 'x@acme.com', companyRole: 'MEMBER' }),
-      ).resolves.toMatchObject({ id: 6 });
+      ).resolves.toMatchObject({ status: 'invited' });
     });
   });
 

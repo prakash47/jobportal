@@ -39,6 +39,12 @@ export interface PendingInviteSummary {
   createdAt: Date;
 }
 
+// invite() either emails a fresh invite (new email) or directly reactivates a
+// previously-removed teammate of the same company (their account already exists).
+export type InviteResult =
+  | { status: 'invited'; invite: PendingInviteSummary }
+  | { status: 'reactivated'; recruiterId: number; email: string };
+
 export interface MemberPermissionResult {
   id: number;
   companyRole: RecruiterRole;
@@ -75,7 +81,7 @@ export class RecruiterUsersService {
 
   // --- Mutations (authenticated, L3-trusted) -------------------------------
 
-  async invite(userId: number, input: InviteUserInput): Promise<PendingInviteSummary> {
+  async invite(userId: number, input: InviteUserInput): Promise<InviteResult> {
     await this.assertEnabled();
     const caller = await this.getCaller(userId);
     this.assertCanManageTeam(caller.companyRole);
@@ -83,14 +89,62 @@ export class RecruiterUsersService {
 
     const email = input.email; // already lowercased by the DTO
 
-    // Cannot invite someone who is already an active member of THIS company.
-    // Scoped to the caller's company so we never leak cross-tenant membership.
-    const existingMember = await prisma.recruiter.findFirst({
-      where: { companyId: caller.companyId, deactivatedAt: null, user: { email } },
-      select: { id: true },
+    // Does an account already exist for this email? A Recruiter is 1:1 with a
+    // User, so a user is in at most one company. Consult the User table up front
+    // so we never create-and-email an invite that acceptInvite() could only 409
+    // on (accept creates a NEW account; it can't link an existing one).
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        recruiter: { select: { id: true, companyId: true, deactivatedAt: true } },
+      },
     });
-    if (existingMember) {
-      throw new ConflictException('That email is already a member of your team');
+
+    if (existingUser) {
+      const rec = existingUser.recruiter;
+      if (rec && rec.companyId === caller.companyId) {
+        if (rec.deactivatedAt === null) {
+          throw new ConflictException('That email is already a member of your team');
+        }
+        // A previously-removed teammate → reactivate their existing account
+        // directly (no email round-trip), applying the invited role/permissions.
+        // This is how removal is reversible (schema.prisma Recruiter.deactivatedAt).
+        const permissions = input.permissions
+          ? resolvePermissions(input.companyRole, input.permissions)
+          : null;
+        await prisma.$transaction(async (tx) => {
+          await tx.recruiter.update({
+            where: { id: rec.id },
+            data: {
+              deactivatedAt: null,
+              companyRole: input.companyRole,
+              permissions:
+                permissions === null
+                  ? Prisma.DbNull
+                  : (permissions as unknown as Prisma.InputJsonValue),
+            },
+          });
+          await tx.profileAuditLog.create({
+            data: {
+              userId,
+              action: 'RECRUITER_USER_INVITED',
+              diff: {
+                email,
+                companyRole: input.companyRole,
+                reactivated: true,
+              } as unknown as Prisma.InputJsonValue,
+            },
+          });
+        });
+        return { status: 'reactivated', recruiterId: rec.id, email };
+      }
+      // The email belongs to a candidate, or a recruiter at another company —
+      // accept can't link it, so reject at invite time rather than send a dead
+      // link. (Linking an existing account to a company is a Phase-2 follow-up.)
+      throw new ConflictException(
+        'An account with this email already exists and can’t be invited. Ask them to sign in, or use a different email.',
+      );
     }
 
     const raw = randomBytes(32).toString('hex');
@@ -134,7 +188,7 @@ export class RecruiterUsersService {
       return created;
     });
 
-    // Fire-and-log the invite email AFTER the commit — a Resend hiccup must never
+    // Fire-and-log the invite email AFTER the commit (only for a brand-new email) — a Resend hiccup must never
     // roll back or 5xx the invite creation (the raw token lives only in the URL).
     const base = process.env.RECRUITER_URL ?? 'http://localhost:3001';
     const inviteUrl = `${base}/accept-invite/${encodeURIComponent(raw)}`;
@@ -151,7 +205,7 @@ export class RecruiterUsersService {
         );
       });
 
-    return invite;
+    return { status: 'invited', invite };
   }
 
   async revokeInvite(userId: number, inviteId: number): Promise<void> {
@@ -215,11 +269,8 @@ export class RecruiterUsersService {
 
     if (roleChanged) {
       this.assertCanGrantRole(caller.companyRole, newRole);
-      // Never demote the final remaining owner into a lockout.
-      if (target.companyRole === 'OWNER' && newRole !== 'OWNER') {
-        await this.assertNotLastOwner(target.companyId, target.id);
-      }
     }
+    const demotingOwner = roleChanged && target.companyRole === 'OWNER' && newRole !== 'OWNER';
 
     // Effective before/after maps for the audit diff + the response.
     const beforePerms = resolvePermissions(target.companyRole, target.permissions);
@@ -249,6 +300,11 @@ export class RecruiterUsersService {
       : 'RECRUITER_USER_PERMISSIONS_CHANGED';
 
     await prisma.$transaction(async (tx) => {
+      // Never demote the final remaining owner into a lockout. Checked inside the
+      // tx under a row lock so two concurrent demotions/removals can't both pass.
+      if (demotingOwner) {
+        await this.assertNotLastOwner(tx, target.companyId, target.id);
+      }
       await tx.recruiter.update({ where: { id: target.id }, data });
       if (!isDiffEmpty(diff)) {
         await tx.profileAuditLog.create({
@@ -293,11 +349,13 @@ export class RecruiterUsersService {
     }
     this.assertCanManageTarget(caller.companyRole, target.companyRole);
     if (target.deactivatedAt) return; // idempotent
-    if (target.companyRole === 'OWNER') {
-      await this.assertNotLastOwner(target.companyId, target.id);
-    }
 
     await prisma.$transaction(async (tx) => {
+      // Never remove the final remaining owner. Checked inside the tx under a row
+      // lock so two concurrent owner removals can't both pass (TOCTOU).
+      if (target.companyRole === 'OWNER') {
+        await this.assertNotLastOwner(tx, target.companyId, target.id);
+      }
       await tx.recruiter.update({
         where: { id: target.id },
         data: { deactivatedAt: new Date() },
@@ -498,8 +556,22 @@ export class RecruiterUsersService {
     throw new ForbiddenException('You do not have permission to manage this team member');
   }
 
-  private async assertNotLastOwner(companyId: number, excludingRecruiterId: number): Promise<void> {
-    const otherOwners = await prisma.recruiter.count({
+  // Guards against stranding a company with zero owners. Runs INSIDE the caller's
+  // transaction and takes a FOR UPDATE lock on the company's active owner rows, so
+  // two concurrent owner removals/demotions serialise instead of both passing the
+  // check (a TOCTOU that would otherwise leave the company permanently ownerless).
+  private async assertNotLastOwner(
+    tx: Prisma.TransactionClient,
+    companyId: number,
+    excludingRecruiterId: number,
+  ): Promise<void> {
+    await tx.$queryRaw`
+      SELECT id FROM "Recruiter"
+      WHERE "companyId" = ${companyId}
+        AND "companyRole" = 'OWNER'::"RecruiterRole"
+        AND "deactivatedAt" IS NULL
+      FOR UPDATE`;
+    const otherOwners = await tx.recruiter.count({
       where: {
         companyId,
         companyRole: 'OWNER',
