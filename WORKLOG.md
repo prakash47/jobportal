@@ -33,12 +33,12 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | rat145 | `feature/recruiter-change-password` | 2026-07-01 | Additive: one `ProfileAuditAction` enum value (`RECRUITER_PASSWORD_CHANGE`). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | rat145 | `feature/recruiter-change-password` | 2026-07-01 | New key `killswitch.recruiter_change_password`. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -50,7 +50,6 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| rat145 | `feature/recruiter-change-password` | Recruiter **Settings** menu (collapsible sidebar group) + **Change Password**: new `recruiter-password.service` + `POST /auth/recruiter/change-password`, `ChangePasswordDto`, `settings/change-password` page + `ChangePasswordForm`; moves `/notification-settings` → `/settings/notification-settings`; new `killswitch.recruiter_change_password` + `RECRUITER_PASSWORD_CHANGE` audit action | DB schema lock + feature-flags lock (both held) | 2026-07-01 |
 | _example — delete me_ | `feature/saved-searches` | Saved-search feature: new `SavedSearch` Prisma model, `/me/saved-searches` API, `<SavedSearchList>` web component | DB schema (lock held) | 2026-06-22 |
 
 ---
@@ -69,6 +68,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Date | Branch | What shipped |
 |---|---|---|
+| 2026-07-01 | `feature/recruiter-change-password` | Recruiter **Settings** sidebar group + **Change Password**: `POST /auth/recruiter/change-password` (verify current → new Argon2id hash → revoke all sessions + `RECRUITER_PASSWORD_CHANGE` audit in one txn → re-mint current device), `ChangePasswordDto` + `RecruiterPasswordService`, `/settings/change-password` page + `ChangePasswordForm`; moved `/notification-settings` → `/settings/notification-settings` (old path redirects); `killswitch.recruiter_change_password`. apps/web untouched |
 | 2026-06-30 | `feature/recruiter-topbar-and-toggle-fix` | Recruiter UI follow-up: fixed invisible notification toggles (added missing `@source` for `@jobportal/ui` in recruiter `globals.css`); moved company logo + name + `KycStatusBadge` from the dashboard header into the `(authed)` top bar (shows on every page). Browser-verified. |
 | 2026-06-30 | `feature/recruiter-notifications` | Recruiter notification settings + top-bar bell: `Notification`+`RecruiterNotificationPreference` models + `NotificationType` enum, `recruiter-notifications` API (list/unread-count/read/read-all + prefs), producers in `applications.apply()`+`admin-kyc.review()`, `/notification-settings` page + `NotificationBell` (polling), `killswitch.recruiter_notifications`. apps/web untouched |
 | 2026-06-30 | `feature/recruiter-company-verification` | Recruiter Company Verification (KYC): `CompanyKyc`+`KycDocument`, `recruiter-kyc`+`admin-kyc` API, `/kyc` tab + status badge, `/admin/kyc-review`, `killswitch.recruiter_kyc` |
