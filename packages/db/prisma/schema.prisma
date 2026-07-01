@@ -178,6 +178,17 @@ enum ProfileAuditAction {
   // with the recruiter's own User id. The raw/old/new passwords are never stored
   // in the audit metadata — only the fact of the change.
   RECRUITER_PASSWORD_CHANGE
+  // Recruiter Team / User management (SRS §4.9). INVITED/REVOKED/ROLE_CHANGED/
+  // PERMISSIONS_CHANGED/REMOVED are written with the ACTING owner/admin's User
+  // id; INVITE_ACCEPTED with the accepting user's id. The raw invite token and
+  // any password material are never written to the diff — only the role /
+  // permission deltas and the target's identity.
+  RECRUITER_USER_INVITED
+  RECRUITER_INVITE_REVOKED
+  RECRUITER_INVITE_ACCEPTED
+  RECRUITER_USER_ROLE_CHANGED
+  RECRUITER_USER_PERMISSIONS_CHANGED
+  RECRUITER_USER_REMOVED
 }
 
 // SRS §4.9 — legal / organisational classification of an employer, shown on the
@@ -226,6 +237,21 @@ enum NotificationType {
   NEW_APPLICATION
   KYC_VERIFIED
   KYC_REJECTED
+}
+
+// SRS §4.9 — recruiter Team / User-management in-company role (RBAC). This is
+// the WITHIN-a-company role and is DELIBERATELY separate from the platform-wide
+// UserRole (CANDIDATE/RECRUITER/ADMIN): every teammate is still a
+// User{role:RECRUITER}; companyRole distinguishes who may manage the team.
+// OWNER = full control incl. the team + billing (sole role that can't be removed
+// while it's the last one); ADMIN = manage Members (invite/edit/remove) but not
+// Owners/other Admins and can't grant OWNER; MEMBER = no team-management rights,
+// module access driven by their permission map. Do NOT overload UserRole for
+// this — conflating them would break candidate/admin auth.
+enum RecruiterRole {
+  OWNER
+  ADMIN
+  MEMBER
 }
 
 // ============================================================
@@ -475,11 +501,56 @@ model Recruiter {
   // (Task 16 + Task 17). Kept the `workEmailVerified` name to avoid colliding
   // with User.emailVerified (which feeds the candidate flow + JWT claims).
   workEmailVerified Boolean  @default(false)
+  // SRS §4.9 — Team / User management (in-company RBAC). companyRole is the
+  // within-company role (see RecruiterRole); DISTINCT from the platform User.role.
+  // Defaulted MEMBER; the add_recruiter_team_roles_and_invites migration backfills
+  // the earliest recruiter per company to OWNER so every existing team has exactly
+  // one owner. permissions is a per-module access map
+  // { jobs | applicants | company_profile | verification | notifications | team ->
+  // EDIT | READ_ONLY | NONE }; null means "derive from the companyRole defaults".
+  companyRole       RecruiterRole @default(MEMBER)
+  permissions       Json?
+  // Soft-remove for the "Remove user" action: set instead of deleting the row so
+  // FK'd data (posted jobs, audit rows) survives. A deactivated recruiter has
+  // their sessions revoked and is blocked from re-authenticating until an
+  // owner/admin reactivates them.
+  deactivatedAt     DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   @@index([companyId])
+  @@index([companyId, deactivatedAt])
   @@index([workEmailVerified])
+}
+
+// SRS §4.9 — recruiter Team invitations. An owner/admin invites a teammate by
+// email; the token mirrors PasswordResetToken (sha256(raw) stored here, the raw
+// token lives only in the email link) and is single-use, revocable, and listable
+// as "Pending" in the Users panel — which a stateless JWT could not be. On accept
+// the invitee joins THIS company with the pre-assigned companyRole + permissions.
+// Company-scoped; invitedByUserId is the acting recruiter's User id (loose actor,
+// no FK — the CompanyKyc.reviewedById pattern). The pending/accepted/revoked/
+// expired status is DERIVED from the timestamp columns, not stored. "One active
+// invite per (company,email)" is enforced in the service (supersede-on-reinvite),
+// not as a Prisma @@unique (the constraint is partial: WHERE accepted/revoked IS
+// NULL). Raw tokens/PII are never logged or written to audit JSON.
+model RecruiterInvite {
+  id              Int           @id @default(autoincrement())
+  companyId       Int
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  email           String
+  companyRole     RecruiterRole @default(MEMBER)
+  permissions     Json?
+  tokenHash       String        @unique
+  invitedByUserId Int?
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([companyId])
+  @@index([companyId, email])
 }
 
 // ============================================================
@@ -518,6 +589,7 @@ model Company {
   candidates Candidate[]
   reviews    CompanyReview[]
   kyc        CompanyKyc?
+  invites    RecruiterInvite[]
 
   @@index([industryId])
   @@index([headquartersCityId])

@@ -80,6 +80,13 @@ const flags: FlagSeed[] = [
   // OFF so the feature is LIVE by default; flipping it ON disables it without a
   // redeploy.
   { key: 'killswitch.recruiter_change_password', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter password change (kill)' },
+  // Recruiter Team / User management (SRS §4.9 — the "Users" panel: invite
+  // teammates, edit in-company roles, set per-module permissions, remove users).
+  // Emergency stop: when ON the /users + /accept-invite pages 404 (L2) and every
+  // /recruiter/users mutation + the invite email producer reject with 503 (L3).
+  // Seeded OFF so the feature is LIVE by default; flipping it ON disables it
+  // without a redeploy.
+  { key: 'killswitch.recruiter_user_management', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter user/team management (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {
