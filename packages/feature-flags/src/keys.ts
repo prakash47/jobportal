@@ -58,6 +58,15 @@ export const FLAG = {
   // flipping this ON disables it without a redeploy. As a `killswitch.*` key it
   // is auto-classified critical (Slack + confirm modal).
   KILL_RECRUITER_CHANGE_PASSWORD: 'killswitch.recruiter_change_password',
+  // Recruiter Team / User management (SRS §4.9 — the "Users" panel: invite
+  // teammates, edit in-company roles Owner/Admin/Member, set per-module
+  // permissions, remove users). Emergency stop for the whole feature: when ON,
+  // the /users page + /accept-invite/[token] page 404 (L2) and every
+  // /recruiter/users mutation + the invite email producer reject with 503 (L3).
+  // Seeded enabled:false, so the feature is LIVE by default; an admin flipping
+  // this ON disables it without a redeploy. As a `killswitch.*` key it is
+  // auto-classified critical (Slack + confirm modal).
+  KILL_RECRUITER_USER_MANAGEMENT: 'killswitch.recruiter_user_management',
 } as const;
 
 export type FlagKey = (typeof FLAG)[keyof typeof FLAG];

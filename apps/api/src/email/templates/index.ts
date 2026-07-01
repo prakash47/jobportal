@@ -13,6 +13,7 @@ import { renderApplicationSubmitted } from './application-submitted';
 import { renderApplicationStatusChange } from './application-status-change';
 import { renderJobPostedConfirmation } from './job-posted-confirmation';
 import { renderPaymentReceipt } from './payment-receipt';
+import { renderRecruiterInvite } from './recruiter-invite';
 
 export type { Rendered };
 
@@ -49,6 +50,12 @@ export interface PaymentReceiptPayload {
   invoiceUrl: string;
   planName: string;
 }
+export interface RecruiterInvitePayload {
+  inviteUrl: string;
+  companyName: string;
+  inviterName?: string;
+  expiresInHours: number;
+}
 
 export interface TemplateMap {
   registration_confirmation: RegistrationConfirmationPayload;
@@ -58,6 +65,7 @@ export interface TemplateMap {
   application_status_change: ApplicationStatusChangePayload;
   job_posted_confirmation: JobPostedConfirmationPayload;
   payment_receipt: PaymentReceiptPayload;
+  recruiter_invite: RecruiterInvitePayload;
 }
 
 export type TemplateKind = keyof TemplateMap;
@@ -88,6 +96,8 @@ export function renderTemplate<K extends TemplateKind>(
       );
     case 'payment_receipt':
       return renderPaymentReceipt(payload as PaymentReceiptPayload);
+    case 'recruiter_invite':
+      return renderRecruiterInvite(payload as RecruiterInvitePayload);
     default: {
       const _exhaustive: never = kind;
       throw new Error(`unknown template kind: ${String(_exhaustive)}`);

@@ -8,6 +8,7 @@ import type {
   JobPostedConfirmationPayload,
   PasswordResetPayload,
   PaymentReceiptPayload,
+  RecruiterInvitePayload,
   RegistrationConfirmationPayload,
 } from './templates';
 
@@ -108,6 +109,21 @@ export class EmailService {
   ): Promise<void> {
     return this.queue.enqueue({
       kind: 'payment_receipt',
+      to,
+      userId,
+      payload,
+    });
+  }
+
+  // SRS §4.9 — recruiter Team invitation. userId is null (the invitee has no
+  // account yet); the email is transactional-mandatory (no preference gating).
+  enqueueRecruiterInvite(
+    to: string,
+    userId: number | null,
+    payload: RecruiterInvitePayload,
+  ): Promise<void> {
+    return this.queue.enqueue({
+      kind: 'recruiter_invite',
       to,
       userId,
       payload,

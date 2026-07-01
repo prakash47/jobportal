@@ -87,6 +87,12 @@ const fixtures = {
     invoiceUrl: 'https://jobportal.com/billing/invoice/INV-001',
     planName: 'Premium',
   },
+  recruiter_invite: {
+    inviteUrl: 'https://recruit.jobportal.com/accept-invite/tok',
+    companyName: 'Acme Corp',
+    inviterName: 'Anjali',
+    expiresInHours: 72,
+  },
 } as const;
 
 describe.each(ALL_KINDS)('renderTemplate(%s)', (kind) => {

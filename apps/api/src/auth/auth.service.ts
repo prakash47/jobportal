@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -71,6 +72,22 @@ export class AuthService {
         : await verifyPassword(input.password, await dummyHash()).then(() => false);
 
     if (!user || !ok) throw new UnauthorizedException('Invalid email or password');
+
+    // A recruiter removed from their team (soft-deactivated) is blocked from
+    // re-authenticating — their existing sessions were already revoked at
+    // removal (SRS §4.9). Scoped strictly to RECRUITER so candidate/admin login
+    // is byte-unchanged; runs only after credentials verify, so it leaks nothing.
+    if (user.role === 'RECRUITER') {
+      const rec = await prisma.recruiter.findUnique({
+        where: { userId: user.id },
+        select: { deactivatedAt: true },
+      });
+      if (rec?.deactivatedAt) {
+        throw new ForbiddenException(
+          'This recruiter account has been deactivated. Contact your team administrator.',
+        );
+      }
+    }
 
     return this.issueSession(user, deviceInfo, ipAddress);
   }

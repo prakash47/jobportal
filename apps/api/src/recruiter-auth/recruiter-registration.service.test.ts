@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@jobportal/db', () => ({
   prisma: {
     user: { findUnique: vi.fn(), create: vi.fn() },
-    company: { upsert: vi.fn() },
+    company: { findUnique: vi.fn(), create: vi.fn() },
     recruiter: { create: vi.fn() },
     session: { create: vi.fn() },
     $transaction: vi.fn(),
@@ -24,7 +24,7 @@ import { RecruiterRegistrationService } from './recruiter-registration.service';
 
 const mocked = prisma as unknown as {
   user: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
-  company: { upsert: ReturnType<typeof vi.fn> };
+  company: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
   recruiter: { create: ReturnType<typeof vi.fn> };
   session: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
@@ -92,8 +92,9 @@ describe('RecruiterRegistrationService.register', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('happy path creates User + upserts Company + creates Recruiter + sends verification', async () => {
+  it('happy path creates User + a new Company (registrant = OWNER) + Recruiter + sends verification', async () => {
     mocked.user.findUnique.mockResolvedValue(null);
+    mocked.company.findUnique.mockResolvedValue(null); // slug is free
     mocked.user.create.mockResolvedValue({
       id: 42,
       email: validInput.email,
@@ -101,7 +102,7 @@ describe('RecruiterRegistrationService.register', () => {
       role: 'RECRUITER',
       emailVerified: false,
     });
-    mocked.company.upsert.mockResolvedValue({ id: 7, slug: 'acme-inc' });
+    mocked.company.create.mockResolvedValue({ id: 7, slug: 'acme-inc' });
     mocked.recruiter.create.mockResolvedValue({ id: 99, userId: 42, companyId: 7 });
 
     const out = await service.register(validInput, 'ua/1.0', '127.0.0.1');
@@ -117,17 +118,18 @@ describe('RecruiterRegistrationService.register', () => {
         data: expect.objectContaining({ email: validInput.email, role: 'RECRUITER' }),
       }),
     );
-    expect(mocked.company.upsert).toHaveBeenCalledWith(
+    expect(mocked.company.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { slug: 'acme-inc' },
-        create: { slug: 'acme-inc', name: 'Acme Inc' },
+        data: { slug: 'acme-inc', name: 'Acme Inc' },
       }),
     );
+    // The registrant becomes the company OWNER (SRS §4.9 team RBAC).
     expect(mocked.recruiter.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           userId: 42,
           companyId: 7,
+          companyRole: 'OWNER',
           workEmailVerified: false,
         }),
       }),
@@ -146,29 +148,22 @@ describe('RecruiterRegistrationService.register', () => {
     expect(fakeWorkEmail.issueAndSend).toHaveBeenCalledWith(99, 'me@example.com');
   });
 
-  it('slug-collision links the recruiter to the existing Company', async () => {
+  it('rejects self-registration against an EXISTING company slug (invite-only join)', async () => {
     mocked.user.findUnique.mockResolvedValue(null);
-    mocked.user.create.mockResolvedValue({
-      id: 43,
-      email: 'two@example.com',
-      name: 'Bobby',
-      role: 'RECRUITER',
-      emailVerified: false,
-    });
-    // upsert returns the EXISTING row (id=1) for the same slug — no create
-    // is performed inside Prisma, but the service does not differentiate.
-    mocked.company.upsert.mockResolvedValue({ id: 1, slug: 'acme-inc' });
-    mocked.recruiter.create.mockResolvedValue({ id: 100, userId: 43, companyId: 1 });
+    // A company already exists at this slug — joining it is invite-only now.
+    mocked.company.findUnique.mockResolvedValue({ id: 1 });
 
-    const out = await service.register({ ...validInput, email: 'two@example.com' }, undefined, undefined);
-    expect(out.recruiterId).toBe(100);
-    expect(mocked.recruiter.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ companyId: 1 }) }),
-    );
+    await expect(
+      service.register({ ...validInput, email: 'two@example.com' }, undefined, undefined),
+    ).rejects.toBeInstanceOf(ConflictException);
+    // No account is created — the tx rolls back before user.create.
+    expect(mocked.user.create).not.toHaveBeenCalled();
+    expect(mocked.recruiter.create).not.toHaveBeenCalled();
   });
 
   it('does NOT block on a slow / failing email backend', async () => {
     mocked.user.findUnique.mockResolvedValue(null);
+    mocked.company.findUnique.mockResolvedValue(null);
     mocked.user.create.mockResolvedValue({
       id: 50,
       email: validInput.email,
@@ -176,7 +171,7 @@ describe('RecruiterRegistrationService.register', () => {
       role: 'RECRUITER',
       emailVerified: false,
     });
-    mocked.company.upsert.mockResolvedValue({ id: 7, slug: 'acme-inc' });
+    mocked.company.create.mockResolvedValue({ id: 7, slug: 'acme-inc' });
     mocked.recruiter.create.mockResolvedValue({ id: 200, userId: 50, companyId: 7 });
     fakeWorkEmail.issueAndSend.mockRejectedValue(new Error('SMTP down'));
 
