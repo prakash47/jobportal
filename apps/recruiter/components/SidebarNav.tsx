@@ -12,6 +12,7 @@ const TOP_ITEMS = [
   { href: '/jobs', label: 'Jobs' },
   { href: '/profile', label: 'Profile' },
   { href: '/kyc', label: 'Verification' },
+  { href: '/users', label: 'Users' },
 ] as const;
 
 // "Settings" is a collapsible group; its children are real routes under
