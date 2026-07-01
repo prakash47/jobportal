@@ -20,6 +20,7 @@ import { RecruiterKycModule } from './recruiter-kyc/recruiter-kyc.module';
 import { RecruiterNotificationsModule } from './recruiter-notifications/recruiter-notifications.module';
 import { RecruiterProfileModule } from './recruiter-profile/recruiter-profile.module';
 import { RecruiterPostQuotaModule } from './recruiter-post-quota/quota.module';
+import { RecruiterUsersModule } from './recruiter-users/recruiter-users.module';
 import { RedisModule } from './redis/redis.module';
 import { ResumeModule } from './resume/resume.module';
 import { SavedJobsModule } from './saved-jobs/saved-jobs.module';
@@ -50,6 +51,7 @@ import { StorageModule } from './storage/storage.module';
     RecruiterProfileModule,
     RecruiterKycModule,
     RecruiterNotificationsModule,
+    RecruiterUsersModule,
     AdminKycModule,
     JobLifecycleModule,
     NotificationsPreferencesModule,

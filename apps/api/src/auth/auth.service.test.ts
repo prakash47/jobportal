@@ -1,9 +1,10 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@jobportal/db', () => ({
   prisma: {
     user: { findUnique: vi.fn(), create: vi.fn() },
+    recruiter: { findUnique: vi.fn() },
     session: { create: vi.fn() },
   },
 }));
@@ -18,16 +19,18 @@ vi.mock('@jobportal/auth', () => ({
 }));
 
 import { prisma } from '@jobportal/db';
-import { hashPassword, isStrongPassword, issueTokenPair } from '@jobportal/auth';
+import { hashPassword, isStrongPassword, issueTokenPair, verifyPassword } from '@jobportal/auth';
 import { AuthService } from './auth.service';
 
 const mocked = prisma as unknown as {
   user: { findUnique: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> };
+  recruiter: { findUnique: ReturnType<typeof vi.fn> };
   session: { create: ReturnType<typeof vi.fn> };
 };
 const mockedStrong = isStrongPassword as ReturnType<typeof vi.fn>;
 const mockedHash = hashPassword as ReturnType<typeof vi.fn>;
 const mockedIssue = issueTokenPair as ReturnType<typeof vi.fn>;
+const mockedVerify = verifyPassword as ReturnType<typeof vi.fn>;
 
 const validInput = {
   email: 'seeker@example.com',
@@ -109,5 +112,80 @@ describe('AuthService.register (auto-login on sign-up)', () => {
     );
     expect(mocked.user.create).not.toHaveBeenCalled();
     expect(mocked.session.create).not.toHaveBeenCalled();
+  });
+});
+
+// SRS §4.9 — a recruiter soft-removed from their team is blocked from
+// re-authenticating. The check is scoped strictly to role === RECRUITER, so
+// candidate/admin login is unaffected (byte-for-byte the old behavior).
+describe('AuthService.login (deactivated-recruiter block)', () => {
+  let service: AuthService;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockedIssue.mockReturnValue({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      refreshJti: 'jti',
+      refreshExpiresAt: new Date('2099-01-01T00:00:00Z'),
+    });
+    mockedVerify.mockResolvedValue(true);
+    mocked.session.create.mockResolvedValue({ id: 1 });
+    service = new AuthService();
+  });
+
+  it('a CANDIDATE login never queries the recruiter table', async () => {
+    mocked.user.findUnique.mockResolvedValue({
+      id: 7,
+      email: 'seeker@example.com',
+      passwordHash: 'hash',
+      role: 'CANDIDATE',
+      emailVerified: true,
+    });
+
+    const out = await service.login(
+      { email: 'seeker@example.com', password: 'x' },
+      undefined,
+      undefined,
+    );
+
+    expect(out.accessToken).toBe('access');
+    expect(mocked.recruiter.findUnique).not.toHaveBeenCalled();
+    expect(mocked.session.create).toHaveBeenCalled();
+  });
+
+  it('blocks a deactivated recruiter with 403 and mints no session', async () => {
+    mocked.user.findUnique.mockResolvedValue({
+      id: 9,
+      email: 'ex@acme.com',
+      passwordHash: 'hash',
+      role: 'RECRUITER',
+      emailVerified: true,
+    });
+    mocked.recruiter.findUnique.mockResolvedValue({ deactivatedAt: new Date('2026-07-01') });
+
+    await expect(
+      service.login({ email: 'ex@acme.com', password: 'x' }, undefined, undefined),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(mocked.session.create).not.toHaveBeenCalled();
+  });
+
+  it('lets an active recruiter (deactivatedAt null) sign in', async () => {
+    mocked.user.findUnique.mockResolvedValue({
+      id: 10,
+      email: 'ok@acme.com',
+      passwordHash: 'hash',
+      role: 'RECRUITER',
+      emailVerified: true,
+    });
+    mocked.recruiter.findUnique.mockResolvedValue({ deactivatedAt: null });
+
+    const out = await service.login(
+      { email: 'ok@acme.com', password: 'x' },
+      undefined,
+      undefined,
+    );
+    expect(out.accessToken).toBe('access');
+    expect(mocked.session.create).toHaveBeenCalled();
   });
 });

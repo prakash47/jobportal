@@ -54,6 +54,12 @@ export type TransactionalEmailJob =
       to: string;
       userId: number | null;
       payload: TemplatePayload<'payment_receipt'>;
+    }
+  | {
+      kind: 'recruiter_invite';
+      to: string;
+      userId: number | null;
+      payload: TemplatePayload<'recruiter_invite'>;
     };
 
 // Which user-preference toggle (if any) gates each template. null means the
@@ -68,6 +74,10 @@ const PREFERENCE_GATE: Record<TemplateKind, keyof PrefRow | null> = {
   application_status_change: 'applicationStatusEnabled',
   job_posted_confirmation: null,
   payment_receipt: null,
+  // Team invitation is a direct, one-off action email (like a password reset) —
+  // transactional-mandatory, no preference gating. The invitee has no account /
+  // preference row yet anyway (userId is null at enqueue time).
+  recruiter_invite: null,
 };
 
 interface PrefRow {

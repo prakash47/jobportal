@@ -502,11 +502,16 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
         companyId,
         designation: r.designation,
         workEmailVerified: true,
+        // One recruiter per demo company → they are that company's OWNER, so the
+        // Team/User-management panel has a valid owner on a fresh reseed (the
+        // add_recruiter_team_roles_and_invites migration only backfills once).
+        companyRole: 'OWNER',
       },
       update: {
         companyId,
         designation: r.designation,
         workEmailVerified: true,
+        companyRole: 'OWNER',
       },
     });
     recruiterUserByCompanySlug.set(r.companySlug, user.id);

@@ -58,12 +58,23 @@ export class RecruiterRegistrationService {
     const slug = slugify(input.companyName);
     if (!slug) throw new BadRequestException('Company name has no slug-safe characters');
 
-    // Create User + Company + Recruiter atomically. Company is upserted by
-    // slug — if a row already exists at that slug we link the recruiter to
-    // it (admin verifies the association before any job-post can land per
-    // Task 17). Token pair is created post-tx; the cookies get set by the
-    // controller.
+    // Create User + Company + Recruiter atomically. Registration creates a NEW
+    // company and makes the registrant its OWNER (SRS §4.9 Team management).
+    // Joining an EXISTING company is invite-only now — self-registering against a
+    // taken slug is rejected so team membership stays controlled (an admin on
+    // that team invites you instead). Token pair is created post-tx; the cookies
+    // get set by the controller.
     const created = await prisma.$transaction(async (tx) => {
+      const existingCompany = await tx.company.findUnique({
+        where: { slug },
+        select: { id: true },
+      });
+      if (existingCompany) {
+        throw new ConflictException(
+          'A company with this name is already registered. Ask an admin on that team to invite you.',
+        );
+      }
+
       const user = await tx.user.create({
         data: {
           email: input.email,
@@ -73,16 +84,15 @@ export class RecruiterRegistrationService {
         },
       });
 
-      const company = await tx.company.upsert({
-        where: { slug },
-        update: {},
-        create: { slug, name: input.companyName },
+      const company = await tx.company.create({
+        data: { slug, name: input.companyName },
       });
 
       const recruiter = await tx.recruiter.create({
         data: {
           userId: user.id,
           companyId: company.id,
+          companyRole: 'OWNER',
           workEmailVerified: false,
         },
       });
