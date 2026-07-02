@@ -33,12 +33,12 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | rat145 | `feature/recruiter-help-support` | 2026-07-02 | The #1 conflict source. See COLLABORATION.md §3. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | rat145 | `feature/recruiter-help-support` | 2026-07-02 | New flag keys. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| rat145 | `feature/recruiter-help-support` | Recruiter **Help & Support** sidebar group: FAQ (static, searchable) + Contact Us + Raise a Ticket. Models: `SupportTicket`, `SupportTicketMessage`, `SupportContactMessage` (+ enums `SupportTicketStatus`, `SupportTicketCategory`; `NotificationType.SUPPORT_TICKET_UPDATED`; `ProfileAuditAction.SUPPORT_TICKET_STATUS_CHANGED`). API: `recruiter-support` (`POST /recruiter/support/{contact,tickets,tickets/:id/messages,tickets/:id/close}`) + `admin-support` (`/admin/support/*`). Recruiter pages `/support/{faq,contact,tickets,tickets/[id]}` + SidebarNav group; admin `/admin/support` queue (isolated subtree). Flag `killswitch.recruiter_help_support`. Email kinds `support_contact_message`, `support_ticket_opened`. | schema.prisma + 1 migration; feature-flags `keys.ts`; `seed/flags.ts` | 2026-07-02 |
 
 ---
 
