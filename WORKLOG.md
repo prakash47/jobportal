@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _example — delete me_ | `feature/saved-searches` | Saved-search feature: new `SavedSearch` Prisma model, `/me/saved-searches` API, `<SavedSearchList>` web component | DB schema (lock held) | 2026-06-22 |
+| Jayesh | `bugfix/signin-popup-redirect` | Fix: navbar sign-in popup doesn't redirect to the seeker dashboard after login (stays on home). `AuthModal.handleLoginSuccess` → push `/profile`; `/login` page bare-`/` fallback → `/profile` (matches the Google OAuth fallback). Files: `apps/web/components/auth/{AuthModal,LoginForm}.tsx`, `apps/web/app/(auth)/login/LoginPageForm.tsx` | none | 2026-07-02 |
 
 ---
 
