@@ -1,6 +1,6 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { isFlagEnabled } from '@jobportal/feature-flags';
-import { resolveUserTier } from '../common/tier-resolver';
+import { resolveRecruiterTier } from '../common/tier-resolver';
 import { RedisService } from '../redis/redis.service';
 
 // SRS §4.9.7 — recruiter post quota. Two windows enforced together: daily
@@ -73,7 +73,7 @@ export class RecruiterPostQuotaService {
 
   // Read-only state for the wizard's L2 UI hint and the L1 preflight guard.
   async readState(userId: number): Promise<RecruiterQuotaState> {
-    const tier = await resolveUserTier(userId);
+    const tier = await resolveRecruiterTier(userId);
     const unlimited = await isFlagEnabled(UNLIMITED_FLAG, { userId, tier });
     const upgradeAvailable = await isFlagEnabled(SUBSCRIPTION_FLAG);
     if (unlimited) {
@@ -122,7 +122,7 @@ export class RecruiterPostQuotaService {
   // Layer 3 — atomic. INCR both keys; if either now exceeds the limit, DECR
   // both back and throw 429. EXPIRE-on-first ensures stale keys roll over.
   async consume(userId: number): Promise<RecruiterQuotaState> {
-    const tier = await resolveUserTier(userId);
+    const tier = await resolveRecruiterTier(userId);
     const unlimited = await isFlagEnabled(UNLIMITED_FLAG, { userId, tier });
     const upgradeAvailable = await isFlagEnabled(SUBSCRIPTION_FLAG);
     if (unlimited) {

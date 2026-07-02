@@ -15,6 +15,7 @@ import { NotificationsPreferencesModule } from './notifications-preferences/noti
 import { ProfileModule } from './profile/profile.module';
 import { RecruiterApplicantsModule } from './recruiter-applicants/recruiter-applicants.module';
 import { RecruiterAuthModule } from './recruiter-auth/recruiter-auth.module';
+import { RecruiterBillingModule } from './recruiter-billing/recruiter-billing.module';
 import { RecruiterJobsModule } from './recruiter-jobs/recruiter-jobs.module';
 import { RecruiterKycModule } from './recruiter-kyc/recruiter-kyc.module';
 import { RecruiterNotificationsModule } from './recruiter-notifications/recruiter-notifications.module';
@@ -52,6 +53,7 @@ import { StorageModule } from './storage/storage.module';
     RecruiterKycModule,
     RecruiterNotificationsModule,
     RecruiterUsersModule,
+    RecruiterBillingModule,
     AdminKycModule,
     JobLifecycleModule,
     NotificationsPreferencesModule,
