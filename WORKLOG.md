@@ -33,7 +33,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | rat145 | `feature/recruiter-billing` | 2026-07-02 | Additive: PaymentOrder/PaymentWebhookEvent/CompanyBillingProfile + Subscription.companyId + SubscriptionInvoice GST fields + PlanAudience. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _example — delete me_ | `feature/saved-searches` | Saved-search feature: new `SavedSearch` Prisma model, `/me/saved-searches` API, `<SavedSearchList>` web component | DB schema (lock held) | 2026-06-22 |
+| rat145 | `feature/recruiter-billing` | Recruiter **Plans & Billing** (Razorpay prepaid plans): new `PaymentOrder` + `PaymentWebhookEvent` + `CompanyBillingProfile` models, `Subscription.companyId`, `SubscriptionPlan.audience`, `SubscriptionInvoice` GST/invoice-number fields; API `recruiter-billing` (`/recruiter/billing/*`) + `POST /webhooks/razorpay`; recruiter pages `/plans` + `/billing`, sidebar "Billing" group, middleware L1 on `subscription.system.enabled`. apps/web untouched. | DB schema (lock held); packages/ui `icons.ts` append-only | 2026-07-02 |
 
 ---
 
