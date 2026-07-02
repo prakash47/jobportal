@@ -1,6 +1,8 @@
 import { prisma } from '@jobportal/db';
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { PageHeader } from '../../../components/dashboard/PageHeader';
+import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { ResumeManager } from '../../../components/profile/ResumeManager';
 
 const RESUME_DOWNLOAD_FLAG = 'feature.resume_download_pdf';
@@ -30,14 +32,14 @@ export default async function ResumePage() {
       : null;
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Resume</h1>
-        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          PDF or DOCX, up to 5 MB. Recruiters can view your resume after you apply to their jobs.
-        </p>
-      </header>
-      <ResumeManager active={active} downloadEnabled={downloadEnabled} />
+    <div className="max-w-3xl space-y-6">
+      <PageHeader
+        title="Resume"
+        description="PDF or DOCX, up to 5 MB. Recruiters can view your resume after you apply to their jobs."
+      />
+      <ContentCard className="p-5 sm:p-6">
+        <ResumeManager active={active} downloadEnabled={downloadEnabled} />
+      </ContentCard>
     </div>
   );
 }

@@ -214,7 +214,7 @@ export function ProfileForm({ initial }: ProfileFormProps) {
         </div>
       )}
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 border-t border-[var(--color-border)] pt-6">
         <Button type="submit" loading={busy}>
           Save changes
         </Button>

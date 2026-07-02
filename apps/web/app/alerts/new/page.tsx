@@ -1,5 +1,7 @@
 import { prisma } from '@jobportal/db';
 import { requireUser } from '../../../lib/auth/require-user';
+import { PageHeader } from '../../../components/dashboard/PageHeader';
+import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { AlertForm } from '../../../components/alerts';
 
 export default async function NewAlertPage() {
@@ -17,26 +19,26 @@ export default async function NewAlertPage() {
   ]);
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-          New alert
-        </h1>
-        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          Pick keywords, skills, and cities. We&rsquo;ll email you when matches go live.
-        </p>
-      </header>
-      <AlertForm
-        initial={{
-          id: null,
-          name: '',
-          query: {},
-          frequency: 'daily',
-          isActive: true,
-        }}
-        skillCatalogue={skills}
-        cityCatalogue={cities}
+    <div className="max-w-3xl space-y-6">
+      <PageHeader
+        title="New alert"
+        description="Pick keywords, skills, and cities. We'll email you when matches go live."
+        backHref="/alerts"
+        backLabel="Job alerts"
       />
+      <ContentCard className="p-5 sm:p-6">
+        <AlertForm
+          initial={{
+            id: null,
+            name: '',
+            query: {},
+            frequency: 'daily',
+            isActive: true,
+          }}
+          skillCatalogue={skills}
+          cityCatalogue={cities}
+        />
+      </ContentCard>
     </div>
   );
 }

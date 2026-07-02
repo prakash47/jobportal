@@ -1,11 +1,14 @@
-import Link from 'next/link';
 import { prisma, type ApplicationStatus, type Prisma } from '@jobportal/db';
 import { readUserFromCookie } from '../../lib/auth/server-session';
+import { PageHeader } from '../../components/dashboard/PageHeader';
+import { ContentCard } from '../../components/dashboard/ContentCard';
+import { Pagination } from '../../components/dashboard/Pagination';
 import {
   ApplicationRow,
   ApplicationsEmpty,
   StatusFilter,
 } from '../../components/applications';
+import type { HistoryEntry } from '../../components/applications/StatusTimeline';
 
 const PAGE_SIZE = 20;
 
@@ -37,6 +40,28 @@ function readStatus(sp: Record<string, string | string[] | undefined>): Applicat
   return null;
 }
 
+// statusHistory is a Prisma JSON column; narrow it to the entry shape the API
+// writes ({from,to,at,by} appended per transition) and drop anything else.
+// The guard takes `unknown` (not JsonValue) because HistoryEntry has no index
+// signature and so is not assignable to Prisma's JsonObject.
+function isHistoryEntry(e: unknown): e is HistoryEntry {
+  return (
+    typeof e === 'object' &&
+    e !== null &&
+    typeof (e as Record<string, unknown>)['to'] === 'string' &&
+    typeof (e as Record<string, unknown>)['at'] === 'string'
+  );
+}
+
+function parseHistory(raw: Prisma.JsonValue | null): HistoryEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: HistoryEntry[] = [];
+  for (const e of raw) {
+    if (isHistoryEntry(e)) out.push(e);
+  }
+  return out;
+}
+
 export default async function ApplicationsPage({ searchParams }: PageProps) {
   const session = (await readUserFromCookie())!;
   const sp = await searchParams;
@@ -46,7 +71,7 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
   const where: Prisma.ApplicationWhereInput = { userId: session.sub };
   if (status) where.status = status;
 
-  const [rows, total] = await Promise.all([
+  const [rows, total, grouped] = await Promise.all([
     prisma.application.findMany({
       where,
       orderBy: { appliedAt: 'desc' },
@@ -56,6 +81,7 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
         id: true,
         status: true,
         appliedAt: true,
+        statusHistory: true,
         job: {
           select: {
             title: true,
@@ -66,92 +92,63 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
       },
     }),
     prisma.application.count({ where }),
+    // Per-status chip counts are always the unfiltered totals.
+    prisma.application.groupBy({
+      by: ['status'],
+      where: { userId: session.sub },
+      _count: { _all: true },
+    }),
   ]);
+
+  const counts: Record<string, number> = {};
+  let all = 0;
+  for (const g of grouped) {
+    counts[g.status] = g._count._all;
+    all += g._count._all;
+  }
+  counts['ALL'] = all;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const filtered = status !== null;
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-          Applications
-        </h1>
-        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          {total === 0
+      <PageHeader
+        title="Applications"
+        description={
+          total === 0
             ? filtered
               ? 'Nothing matches this filter.'
               : 'You have not applied to anything yet.'
-            : `${total} ${total === 1 ? 'application' : 'applications'}.`}
-        </p>
-      </header>
+            : `${total} ${total === 1 ? 'application' : 'applications'}.`
+        }
+      />
 
-      <StatusFilter />
+      <StatusFilter counts={counts} />
 
       {rows.length === 0 ? (
         <ApplicationsEmpty filtered={filtered} />
       ) : (
-        <div className="rounded-md border border-[var(--color-border)] px-4">
+        <ContentCard className="divide-y divide-[var(--color-border)]">
           {rows.map((r) => (
             <ApplicationRow
               key={r.id}
               id={r.id}
               status={r.status}
-              appliedAt={r.appliedAt}
+              appliedAtIso={r.appliedAt.toISOString()}
+              history={parseHistory(r.statusHistory)}
               job={r.job}
             />
           ))}
-        </div>
+        </ContentCard>
       )}
 
-      {totalPages > 1 && (
-        <nav aria-label="Pagination" className="flex items-center justify-between text-sm">
-          <PageLink
-            page={page - 1}
-            disabled={page <= 1}
-            status={status}
-          >
-            ← Newer
-          </PageLink>
-          <span className="text-[var(--color-fg-muted)]">
-            Page {page} of {totalPages}
-          </span>
-          <PageLink
-            page={page + 1}
-            disabled={page >= totalPages}
-            status={status}
-          >
-            Older →
-          </PageLink>
-        </nav>
-      )}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        baseHref="/applications"
+        {...(status ? { params: { status } } : {})}
+      />
     </div>
-  );
-}
-
-function PageLink({
-  page,
-  disabled,
-  status,
-  children,
-}: {
-  page: number;
-  disabled: boolean;
-  status: ApplicationStatus | null;
-  children: React.ReactNode;
-}) {
-  if (disabled) {
-    return <span className="text-[var(--color-fg-subtle)]">{children}</span>;
-  }
-  const params = new URLSearchParams();
-  params.set('page', String(page));
-  if (status) params.set('status', status);
-  return (
-    <Link
-      href={`/applications?${params.toString()}`}
-      className="text-[var(--color-fg)] hover:text-[var(--color-primary-600)] hover:underline"
-    >
-      {children}
-    </Link>
   );
 }

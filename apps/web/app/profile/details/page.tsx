@@ -1,5 +1,7 @@
 import { prisma } from '@jobportal/db';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { PageHeader } from '../../../components/dashboard/PageHeader';
+import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { ProfileForm } from '../../../components/profile/ProfileForm';
 
 // Lazily ensures the Candidate row exists, then loads the profile fields the
@@ -29,31 +31,29 @@ export default async function ProfileDetailsPage() {
   const { user, candidate } = await loadProfile(session.sub);
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-          Personal details
-        </h1>
-        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          Recruiters see this when you apply. Keep it current.
-        </p>
-      </header>
-
-      <ProfileForm
-        initial={{
-          name: user.name,
-          phone: user.phone,
-          headline: candidate.headline,
-          summary: candidate.summary,
-          workStatus: candidate.workStatus,
-          experienceMonths: candidate.experienceMonths,
-          currentTitle: candidate.currentTitle,
-          currentSalaryPaise: candidate.currentSalaryPaise,
-          expectedSalaryMinPaise: candidate.expectedSalaryMinPaise,
-          expectedSalaryMaxPaise: candidate.expectedSalaryMaxPaise,
-          noticePeriodDays: candidate.noticePeriodDays,
-        }}
+    <div className="max-w-3xl space-y-6">
+      <PageHeader
+        title="Personal details"
+        description="Recruiters see this when you apply. Keep it current."
       />
+
+      <ContentCard className="p-5 sm:p-6">
+        <ProfileForm
+          initial={{
+            name: user.name,
+            phone: user.phone,
+            headline: candidate.headline,
+            summary: candidate.summary,
+            workStatus: candidate.workStatus,
+            experienceMonths: candidate.experienceMonths,
+            currentTitle: candidate.currentTitle,
+            currentSalaryPaise: candidate.currentSalaryPaise,
+            expectedSalaryMinPaise: candidate.expectedSalaryMinPaise,
+            expectedSalaryMaxPaise: candidate.expectedSalaryMaxPaise,
+            noticePeriodDays: candidate.noticePeriodDays,
+          }}
+        />
+      </ContentCard>
     </div>
   );
 }
