@@ -22,6 +22,15 @@ const SETTINGS_ITEMS = [
   { href: '/settings/change-password', label: 'Change password' },
 ] as const;
 
+// "Billing" is the paid Plans & Billing surface. The group only renders when
+// the (authed) layout says subscription.system.enabled is ON — a Day-0
+// recruiter must not see a dead nav entry (CLAUDE.md §0: paid features are
+// invisible until launched). Cosmetic gate only; L1/L2/L3 do the real work.
+const BILLING_ITEMS = [
+  { href: '/plans', label: 'Plans & pricing' },
+  { href: '/billing', label: 'Subscription & invoices' },
+] as const;
+
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -32,15 +41,18 @@ const ROW_IDLE =
   'text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]';
 
 // Linear-style left rail. Active state via aria-current; subtle hover row rather
-// than a heavy fill (CLAUDE.md §2 — restraint). "Settings" is a disclosure: the
-// parent button toggles, the sub-items are the real destinations.
-export function SidebarNav() {
+// than a heavy fill (CLAUDE.md §2 — restraint). "Settings" and "Billing" are
+// disclosures: the parent button toggles, the sub-items are the real destinations.
+export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
   const pathname = usePathname();
   const submenuId = useId();
+  const billingMenuId = useId();
   // /settings and every /settings/* child (incl. the redirect stub pages) belong
   // to the group — used to auto-expand on first load and to highlight the parent.
   const settingsActive = pathname === '/settings' || pathname.startsWith('/settings/');
   const [open, setOpen] = useState(settingsActive);
+  const billingActive = BILLING_ITEMS.some((item) => isActive(pathname, item.href));
+  const [billingOpen, setBillingOpen] = useState(billingActive);
 
   return (
     <nav aria-label="Recruiter portal" className="flex flex-col gap-0.5 text-sm">
@@ -57,6 +69,50 @@ export function SidebarNav() {
           </Link>
         );
       })}
+
+      {showBilling && (
+        <>
+          <button
+            type="button"
+            aria-expanded={billingOpen}
+            aria-controls={billingMenuId}
+            onClick={() => setBillingOpen((v) => !v)}
+            className={cn(
+              ROW,
+              'flex items-center justify-between gap-2 text-left',
+              billingActive ? ROW_ACTIVE : ROW_IDLE,
+            )}
+          >
+            <span>Billing</span>
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                'size-4 shrink-0 transition-transform duration-200',
+                billingOpen ? 'rotate-0' : '-rotate-90',
+              )}
+            />
+          </button>
+          <ul
+            id={billingMenuId}
+            className={cn('mt-0.5 flex-col gap-0.5 pl-3', billingOpen ? 'flex' : 'hidden')}
+          >
+            {BILLING_ITEMS.map((item) => {
+              const active = isActive(pathname, item.href);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(ROW, 'block', active ? ROW_ACTIVE : ROW_IDLE)}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
 
       {/* Settings — collapsible. Parent is highlighted (not aria-current) when a
           child is active, so the active page stays the sub-item. */}

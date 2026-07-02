@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@jobportal/feature-flags', () => ({ isFlagEnabled: vi.fn() }));
 vi.mock('@jobportal/db', () => ({
-  prisma: { subscription: { findMany: vi.fn() } },
+  // recruiter.findUnique backs resolveRecruiterTier (company-scoped billing);
+  // null → falls back to the plain user-tier path these tests exercise.
+  prisma: { subscription: { findMany: vi.fn() }, recruiter: { findUnique: vi.fn() } },
 }));
 
 import { isFlagEnabled } from '@jobportal/feature-flags';
@@ -13,6 +15,7 @@ import { RecruiterPostQuotaService } from './quota.service';
 const mockedFlag = isFlagEnabled as ReturnType<typeof vi.fn>;
 const mockedPrisma = prisma as unknown as {
   subscription: { findMany: ReturnType<typeof vi.fn> };
+  recruiter: { findUnique: ReturnType<typeof vi.fn> };
 };
 
 function makeRedisStub() {
@@ -92,6 +95,7 @@ describe('RecruiterPostQuotaService.preflight + consume', () => {
     redis = makeRedisStub();
     svc = new RecruiterPostQuotaService(redis as never);
     mockedPrisma.subscription.findMany.mockResolvedValue([]);
+    mockedPrisma.recruiter.findUnique.mockResolvedValue(null);
   });
 
   it('preflight allows under both limits', async () => {

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { prisma } from '@jobportal/db';
-import { isFlagEnabled } from '@jobportal/feature-flags';
+import { FLAG, isFlagEnabled } from '@jobportal/feature-flags';
 import { requireRecruiter } from '../../lib/auth/require-recruiter';
 import { SidebarNav } from '../../components/SidebarNav';
 import { SignOutButton } from '../../components/SignOutButton';
@@ -38,6 +38,11 @@ export default async function AuthedLayout({ children }: { children: React.React
     },
   });
   const company = recruiter?.company ?? null;
+
+  // Paid Plans & Billing surface (Pattern B, seeded OFF ⇒ hidden): the nav
+  // group only renders once the admin launches billing. Cosmetic — the
+  // middleware (L1), pages (L2), and API (L3) enforce the flag for real.
+  const billingEnabled = await isFlagEnabled(FLAG.SUBSCRIPTION_SYSTEM);
 
   // Reads-direct topology: server-render the bell's initial unread count + feed
   // via Prisma (the client island then polls + refreshes through the BFF). When
@@ -91,7 +96,7 @@ export default async function AuthedLayout({ children }: { children: React.React
               <Logo variant="mark" priority className="h-7 w-auto" />
               <span className="text-sm font-medium text-[var(--color-fg-muted)]">Recruiter</span>
             </Link>
-            <SidebarNav />
+            <SidebarNav showBilling={billingEnabled} />
           </div>
           <div className="space-y-2 border-t border-[var(--color-border)] pt-4">
             <p className="truncate px-3 text-xs text-[var(--color-fg-muted)]">{user.email}</p>

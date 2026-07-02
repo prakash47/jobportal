@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { FLAG, isFlagEnabled } from '@jobportal/feature-flags';
 
 // SRS §4.9.2 — recruiter portal pages are private; never indexed. Each
 // authed page also sets metadata.robots = noindex,nofollow defensively.
@@ -6,8 +7,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 // We also forward the canonical pathname/search to layouts via a header so
 // requireRecruiter() can compose ?next= back to where the user was headed.
 //
-// Same Node runtime as apps/web's middleware; no canonicalisation pipeline
-// needed here (recruiter portal isn't SEO-bound).
+// Same Node runtime as apps/web's middleware (required by the feature-flags
+// Redis client, ADR 0005); no canonicalisation pipeline needed here (recruiter
+// portal isn't SEO-bound).
 
 export const config = {
   runtime: 'nodejs',
@@ -16,7 +18,18 @@ export const config = {
   ],
 };
 
-export function middleware(request: NextRequest): NextResponse {
+export async function middleware(request: NextRequest): Promise<NextResponse> {
+  const { pathname } = request.nextUrl;
+
+  // CLAUDE.md §4 — Layer 1 gate for the paid Plans & Billing surface (Pattern
+  // B: subscription.system.enabled seeded OFF ⇒ pages don't exist). Layer 2 is
+  // each page's notFound(); Layer 3 is the API (the only trusted boundary).
+  if (pathname === '/plans' || pathname === '/billing' || pathname.startsWith('/billing/')) {
+    if (!(await isFlagEnabled(FLAG.SUBSCRIPTION_SYSTEM))) {
+      return new NextResponse(null, { status: 404 });
+    }
+  }
+
   const res = NextResponse.next({
     request: {
       headers: new Headers({
