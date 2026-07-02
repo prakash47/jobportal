@@ -128,6 +128,35 @@ enum EntitlementSource {
   REFERRAL
 }
 
+// Which storefront a plan belongs to: candidate-facing (apps/web) or
+// recruiter-facing (recruiter portal /plans). Audience was previously implied
+// only by each plan's featureKeys; the recruiter billing feature needs it
+// explicit so /plans lists exactly the recruiter catalogue.
+enum PlanAudience {
+  CANDIDATE
+  RECRUITER
+}
+
+// Razorpay Checkout order lifecycle. CREATED → PAID on signature-verified
+// capture (webhook or the browser verify callback — both funnel into one
+// idempotent activation); CREATED → FAILED on payment.failed. Abandoned
+// checkouts stay CREATED and render as "Pending" in the billing history.
+enum PaymentOrderStatus {
+  CREATED
+  PAID
+  FAILED
+}
+
+// Formalises SubscriptionInvoice.status (previously an untyped String with
+// zero runtime consumers). The MVP purchase flow writes PAID rows only —
+// the invoice is issued at capture time.
+enum InvoiceStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
 // SRS §4.8 — career-advice article state machine. PUBLISHED articles render
 // at /career-advice; DRAFT and ARCHIVED are admin-only. The ?status filter
 // on the admin index will use this enum once the authoring tool lands
@@ -189,6 +218,15 @@ enum ProfileAuditAction {
   RECRUITER_USER_ROLE_CHANGED
   RECRUITER_USER_PERMISSIONS_CHANGED
   RECRUITER_USER_REMOVED
+  // Recruiter Plans & Billing (SRS §4.11 / §7). PROFILE_UPDATE / ORDER_CREATED
+  // are written with the acting owner/admin's User id; SUBSCRIPTION_ACTIVATED
+  // and PAYMENT_FAILED with the order's createdBy id (webhook deliveries have
+  // no session). No card / payment-instrument data is ever written to the
+  // diff — only plan identity, order ids, and amounts.
+  BILLING_PROFILE_UPDATE
+  BILLING_ORDER_CREATED
+  BILLING_SUBSCRIPTION_ACTIVATED
+  BILLING_PAYMENT_FAILED
 }
 
 // SRS §4.9 — legal / organisational classification of an employer, shown on the
@@ -291,6 +329,8 @@ model User {
   // candidate-shared EmailPreference above is left untouched.
   notifications                   Notification[]
   recruiterNotificationPreference RecruiterNotificationPreference?
+  // Recruiter billing — orders this user initiated (owner/admin on the company).
+  paymentOrders                   PaymentOrder[]
 
   @@index([role])
 }
@@ -590,6 +630,12 @@ model Company {
   reviews    CompanyReview[]
   kyc        CompanyKyc?
   invites    RecruiterInvite[]
+  // Recruiter Plans & Billing — company-scoped subscription state. A plan
+  // bought by an owner/admin entitles the whole recruiter team.
+  subscriptions  Subscription[]
+  paymentOrders  PaymentOrder[]
+  invoices       SubscriptionInvoice[]
+  billingProfile CompanyBillingProfile?
 
   @@index([industryId])
   @@index([headquartersCityId])
@@ -967,6 +1013,10 @@ model SubscriptionPlan {
   name           String
   description    String?
   tier           SubscriptionTier
+  // Storefront audience. Default CANDIDATE matches the original seeded plans;
+  // the add_recruiter_billing migration backfills enterprise-yearly (a
+  // recruiter-team plan) to RECRUITER.
+  audience       PlanAudience     @default(CANDIDATE)
   priceInPaise   Int
   currency       String           @default("INR")
   intervalDays   Int
@@ -981,12 +1031,20 @@ model SubscriptionPlan {
   updatedAt      DateTime         @updatedAt
 
   subscriptions Subscription[]
+  paymentOrders PaymentOrder[]
+
+  @@index([audience, isActive, isPublic])
 }
 
 model Subscription {
   id                     Int                @id @default(autoincrement())
   userId                 Int
   user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Recruiter subscriptions are company-scoped: a plan bought by an owner/
+  // admin entitles the whole team (see resolveRecruiterTier in apps/api).
+  // Null for candidate subscriptions — userId stays the sole scope there.
+  companyId              Int?
+  company                Company?           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   planId                 Int
   plan                   SubscriptionPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
   status                 SubscriptionStatus @default(TRIALING)
@@ -1004,21 +1062,109 @@ model Subscription {
   invoices SubscriptionInvoice[]
 
   @@index([userId, status])
+  @@index([companyId, status])
   @@index([planId])
 }
 
+// Recruiter billing extended this from the original bare skeleton into a
+// GST-compliant invoice record (CGST Rule 46): consecutive FY-scoped invoice
+// number, taxable/CGST/SGST/IGST breakup, a frozen buyer snapshot, and the
+// private R2 key of the rendered PDF (signed-URL served, never public).
+// companyId/paymentOrderId stay nullable so the model can still serve future
+// candidate-side invoicing.
 model SubscriptionInvoice {
-  id                Int          @id @default(autoincrement())
+  id                Int           @id @default(autoincrement())
   subscriptionId    Int
-  subscription      Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  amountInPaise     Int
-  currency          String       @default("INR")
-  status            String
+  subscription      Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  companyId         Int?
+  company           Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  paymentOrderId    Int?          @unique
+  paymentOrder      PaymentOrder? @relation(fields: [paymentOrderId], references: [id], onDelete: SetNull)
+  invoiceNumber     String?       @unique // consecutive per Indian FY, e.g. INV-2627-000001
+  amountInPaise     Int // grand total actually charged (GST-inclusive)
+  taxableInPaise    Int? // pre-tax value (amount − GST)
+  cgstInPaise       Int?
+  sgstInPaise       Int?
+  igstInPaise       Int?
+  gstRateBps        Int? // 1800 = 18%
+  placeOfSupply     String? // buyer state (GST place of supply)
+  buyerSnapshot     Json? // frozen { legalName, gstin?, address, state, ... } at issue time
+  pdfKey            String? // private R2 key of the rendered PDF
+  currency          String        @default("INR")
+  status            InvoiceStatus
   providerInvoiceId String?
   paidAt            DateTime?
-  createdAt         DateTime     @default(now())
+  createdAt         DateTime      @default(now())
 
   @@index([subscriptionId])
+  @@index([companyId, createdAt(sort: Desc)])
+}
+
+// One row per Razorpay Checkout attempt (Orders API). The order is created
+// server-side with the plan's DB price — never a client-supplied amount. The
+// webhook (payment.captured / order.paid) is the activation source of truth,
+// with the browser verify callback as a faster duplicate path — both funnel
+// into one idempotent activation keyed on this row (FOR UPDATE lock).
+// razorpayOrderId is "order_stub_*" when the gateway runs in the keyless
+// local-dev stub mode (RAZORPAY_KEY_ID blank).
+model PaymentOrder {
+  id                Int                @id @default(autoincrement())
+  companyId         Int
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdByUserId   Int
+  createdBy         User               @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  planId            Int
+  plan              SubscriptionPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  amountInPaise     Int
+  currency          String             @default("INR")
+  status            PaymentOrderStatus @default(CREATED)
+  razorpayOrderId   String             @unique
+  razorpayPaymentId String?            @unique
+  failureReason     String?
+  paidAt            DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  invoice SubscriptionInvoice?
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([status])
+}
+
+// Idempotency ledger for provider webhooks (CLAUDE.md §3.2: signature-verified,
+// idempotent). One row per delivered event id; the unique constraint turns
+// replayed / duplicate deliveries into no-ops. Payload kept for audit and
+// debugging — Razorpay events carry payment metadata only, never card data.
+model PaymentWebhookEvent {
+  id          Int       @id @default(autoincrement())
+  provider    String    @default("razorpay")
+  eventId     String    @unique
+  eventType   String
+  payload     Json
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([eventType, createdAt(sort: Desc)])
+}
+
+// Billing identity for GST-compliant invoices — one per company, collected
+// before the first purchase and editable from /billing. Deliberately separate
+// from CompanyKyc (verification evidence) though the form prefills from it.
+// state drives the CGST+SGST vs IGST split against BILLING_SELLER_STATE.
+model CompanyBillingProfile {
+  id           Int      @id @default(autoincrement())
+  companyId    Int      @unique
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  legalName    String
+  gstin        String? // buyer GSTIN — printed on the invoice when registered (B2B)
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String // Indian state/UT from the shared constant list
+  pincode      String
+  billingEmail String? // invoice recipient override; falls back to the purchaser's email
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model UserEntitlement {
