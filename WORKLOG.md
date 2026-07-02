@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh | `feature/seeker-dashboard-polish` | Seeker dashboard UI overhaul (all 10 pages): new shared primitives `apps/web/components/dashboard/{PageHeader,ContentCard,Pagination,EmptyState}.tsx`; card-based restyle of `/applications` (+ scrollable status tabs w/ counts + expandable **status timeline** from `Application.statusHistory` — read-only, no schema), `/saved-jobs`, `/alerts` (+new/edit), `/profile/{details,education,experience,skills,resume}`, `/settings/notifications`; mobile row stacking. apps/web only — no schema, no flags, no locks | none | 2026-07-02 |
 
 ---
 
