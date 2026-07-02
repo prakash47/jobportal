@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| Jayesh | `bugfix/signin-popup-redirect` | Fix: navbar sign-in popup doesn't redirect to the seeker dashboard after login (stays on home). `AuthModal.handleLoginSuccess` → push `/profile`; `/login` page bare-`/` fallback → `/profile` (matches the Google OAuth fallback). Files: `apps/web/components/auth/{AuthModal,LoginForm}.tsx`, `apps/web/app/(auth)/login/LoginPageForm.tsx` | none | 2026-07-02 |
+| _(none in progress)_ | | | | |
 
 ---
 
@@ -68,6 +68,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Date | Branch | What shipped |
 |---|---|---|
+| 2026-07-02 | `bugfix/signin-popup-redirect` | Seeker sign-in now lands on the dashboard: navbar `AuthModal` pushes `/profile` after login (was close+refresh-in-place, which also raced and swallowed navigation); `/login` bare-`/` fallback → `/profile` (matches Google OAuth fallback); `?next=` deep links unchanged. Browser-verified all 3 paths. apps/web auth components only |
 | 2026-07-02 | `feature/recruiter-billing` | Recruiter **Plans & Billing** (Razorpay prepaid, company-scoped): `PaymentOrder`/`PaymentWebhookEvent`/`CompanyBillingProfile` + `Subscription.companyId` + `SubscriptionPlan.audience` + GST-extended `SubscriptionInvoice`; API `recruiter-billing` + `POST /webhooks/razorpay`; `/plans` + `/billing` pages + sidebar Billing group; middleware L1 on `subscription.system.enabled` (reused, no new key). Adversarial review: 14 findings fixed. apps/web untouched |
 | 2026-07-01 | `feature/recruiter-user-management` | Recruiter **Users / Team management**: `RecruiterRole` (Owner/Admin/Member) + per-module permissions + `RecruiterInvite`; `recruiter-users` API (invite/revoke/role+perms/remove/accept/preview), `/users` panel + public `/accept-invite/[token]`; soft-remove + re-login block + reactivate-on-reinvite; `killswitch.recruiter_user_management`; registration now new-company-only (creator = Owner), join is invite-only. Adversarial review: 5 findings fixed. apps/web untouched |
 | 2026-07-01 | `feature/recruiter-change-password` | Recruiter **Settings** sidebar group + **Change Password**: `POST /auth/recruiter/change-password` (verify current → new Argon2id hash → revoke all sessions + `RECRUITER_PASSWORD_CHANGE` audit in one txn → re-mint current device), `ChangePasswordDto` + `RecruiterPasswordService`, `/settings/change-password` page + `ChangePasswordForm`; moved `/notification-settings` → `/settings/notification-settings` (old path redirects); `killswitch.recruiter_change_password`. apps/web untouched |
