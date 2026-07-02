@@ -9,10 +9,22 @@ import type { Prisma } from '@jobportal/db';
 
 export const INVOICE_PREFIX = 'INV';
 
-// Indian FY: April 2026 – March 2027 → "2627".
+// IST-shifted calendar fields. Indian FY membership and the printed invoice
+// date are defined in IST for GST; production hosts (Render) default to UTC, so
+// a naive getMonth()/getFullYear() would misfile every capture between 00:00
+// and 05:30 IST — and roll a 1-April-early-morning payment into the prior FY's
+// serial sequence. Shift by +05:30 and read the UTC fields of the shifted date.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+function istParts(date: Date): { year: number; month: number } {
+  const shifted = new Date(date.getTime() + IST_OFFSET_MS);
+  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() }; // month 0-based
+}
+
+// Indian FY: April 2026 – March 2027 → "2627" (computed in IST).
 export function fyCode(date: Date): string {
-  const y = date.getFullYear();
-  const startYear = date.getMonth() >= 3 ? y : y - 1; // months are 0-based; April = 3
+  const { year, month } = istParts(date);
+  const startYear = month >= 3 ? year : year - 1; // April = 3
   return `${String(startYear % 100).padStart(2, '0')}${String((startYear + 1) % 100).padStart(2, '0')}`;
 }
 

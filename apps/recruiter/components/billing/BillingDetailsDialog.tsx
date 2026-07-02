@@ -92,28 +92,33 @@ export function BillingDetailsDialog({ open, onOpenChange, initial, prefill, onS
     }
 
     setLoading(true);
-    const res = await api<BillingProfileData>('/recruiter/billing/profile', {
-      method: 'PUT',
-      body: JSON.stringify({
-        legalName: legalName.trim(),
-        gstin: gstin.trim().toUpperCase(),
-        addressLine1: addressLine1.trim(),
-        addressLine2: addressLine2.trim(),
-        city: city.trim(),
-        state,
-        pincode: pincode.trim(),
-        billingEmail: billingEmail.trim(),
-      }),
-    });
-    setLoading(false);
-
-    if (!res.ok) {
-      setError(
-        typeof res.message === 'string' ? res.message : 'Could not save your billing details.',
-      );
-      return;
+    try {
+      const res = await api<BillingProfileData>('/recruiter/billing/profile', {
+        method: 'PUT',
+        body: JSON.stringify({
+          legalName: legalName.trim(),
+          gstin: gstin.trim().toUpperCase(),
+          addressLine1: addressLine1.trim(),
+          addressLine2: addressLine2.trim(),
+          city: city.trim(),
+          state,
+          pincode: pincode.trim(),
+          billingEmail: billingEmail.trim(),
+        }),
+      });
+      if (!res.ok) {
+        setError(
+          typeof res.message === 'string' ? res.message : 'Could not save your billing details.',
+        );
+        return;
+      }
+      onSaved(res.data);
+    } catch {
+      // Network-level rejection — never leave the Save button stuck spinning.
+      setError('Could not reach the server. Check your connection and try again.');
+    } finally {
+      setLoading(false);
     }
-    onSaved(res.data);
   }
 
   return (

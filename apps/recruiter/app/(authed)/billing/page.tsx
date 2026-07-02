@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@jobportal/db';
 import { FLAG, isFlagEnabled } from '@jobportal/feature-flags';
+import { Check } from '@jobportal/ui/icons';
 import { requireRecruiter } from '../../../lib/auth/require-recruiter';
 import {
   PaymentHistoryTable,
@@ -10,6 +11,7 @@ import {
   SubscriptionStatusCard,
   type SubscriptionSummary,
 } from '../../../components/billing/SubscriptionStatusCard';
+import { BillingProfileCard } from '../../../components/billing/BillingProfileCard';
 
 // SRS §4.11 / §7 — Subscription & invoices. Current plan + expiry, the
 // payment/transaction history (incl. pending + failed attempts), and invoice
@@ -35,8 +37,10 @@ export default async function BillingPage({
   });
   if (!caller || caller.deactivatedAt) notFound();
 
+  const canManage = caller.companyRole === 'OWNER' || caller.companyRole === 'ADMIN';
+
   const now = new Date();
-  const [active, latest, orderRows] = await Promise.all([
+  const [active, latest, orderRows, profileRow, kycRow] = await Promise.all([
     prisma.subscription.findFirst({
       where: {
         companyId: caller.companyId,
@@ -65,6 +69,11 @@ export default async function BillingPage({
         plan: { select: { name: true } },
         invoice: { select: { id: true, invoiceNumber: true } },
       },
+    }),
+    prisma.companyBillingProfile.findUnique({ where: { companyId: caller.companyId } }),
+    prisma.companyKyc.findUnique({
+      where: { companyId: caller.companyId },
+      select: { legalName: true, gstNumber: true },
     }),
   ]);
 
@@ -109,8 +118,6 @@ export default async function BillingPage({
     invoiceNumber: o.invoice?.invoiceNumber ?? null,
   }));
 
-  const canManage = caller.companyRole === 'OWNER' || caller.companyRole === 'ADMIN';
-
   return (
     <div className="space-y-8">
       <header>
@@ -123,15 +130,39 @@ export default async function BillingPage({
       </header>
 
       {purchase === 'success' && (
+        // fg text on the muted surface (not semantic-green-on-pale-green, which
+        // fails WCAG AA and has no dark-mode token) — a green check carries the
+        // success meaning without relying on colour for the copy.
         <p
           role="status"
-          className="rounded-md border border-[var(--color-border)] bg-[oklch(0.95_0.05_145)] px-4 py-3 text-sm font-medium text-[var(--color-success)]"
+          className="flex items-center gap-2 rounded-md border border-[var(--color-success)] bg-[var(--color-bg-muted)] px-4 py-3 text-sm font-medium text-[var(--color-fg)]"
         >
+          <Check aria-hidden className="size-4 shrink-0 text-[var(--color-success)]" />
           Payment successful — your plan is active. The invoice appears below once generated.
         </p>
       )}
 
       <SubscriptionStatusCard summary={summary} canManage={canManage} />
+
+      {canManage && (
+        <BillingProfileCard
+          profile={
+            profileRow
+              ? {
+                  legalName: profileRow.legalName,
+                  gstin: profileRow.gstin,
+                  addressLine1: profileRow.addressLine1,
+                  addressLine2: profileRow.addressLine2,
+                  city: profileRow.city,
+                  state: profileRow.state,
+                  pincode: profileRow.pincode,
+                  billingEmail: profileRow.billingEmail,
+                }
+              : null
+          }
+          kycPrefill={kycRow ? { legalName: kycRow.legalName, gstin: kycRow.gstNumber } : null}
+        />
+      )}
 
       <section className="space-y-3">
         <div>

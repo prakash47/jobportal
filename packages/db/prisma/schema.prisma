@@ -1089,6 +1089,13 @@ model SubscriptionInvoice {
   gstRateBps        Int? // 1800 = 18%
   placeOfSupply     String? // buyer state (GST place of supply)
   buyerSnapshot     Json? // frozen { legalName, gstin?, address, state, ... } at issue time
+  // Line-item facts frozen at issuance so the statutory document never drifts:
+  // the plan name survives a later admin rename, and the period is the window
+  // THIS payment bought (a renewal stores the extension window, not the live
+  // subscription span). Rendered in preference to the live subscription rows.
+  planNameSnapshot  String?
+  periodStart       DateTime?
+  periodEnd         DateTime?
   pdfKey            String? // private R2 key of the rendered PDF
   currency          String        @default("INR")
   status            InvoiceStatus

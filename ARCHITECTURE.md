@@ -166,7 +166,9 @@ The schema lives at **`packages/db/prisma/schema.prisma`**. Core entities:
 | `Article` | Career-advice CMS content (status: draft/published). |
 | `Industry`, `City`, `Skill` | Reference taxonomies used across search + filters. |
 | `FeatureFlag`, `FlagAuditLog` | Flag definitions + an audit row per change. |
-| `Subscription*`, `UserEntitlement`, `UsageRecord` | Phase-2 monetization scaffolding (built, dormant). |
+| `SubscriptionPlan`, `Subscription` | Sellable plans (audience: CANDIDATE / RECRUITER) + enrolments. Recruiter subscriptions are **company-scoped** (`Subscription.companyId`): one purchase entitles the whole team via `resolveRecruiterTier`. Candidate side remains dormant. |
+| `SubscriptionInvoice`, `PaymentOrder`, `PaymentWebhookEvent`, `CompanyBillingProfile` | Recruiter billing: GST invoice records (FY-sequential number, CGST/SGST/IGST breakup, private PDF), one row per Razorpay Checkout attempt, the webhook idempotency ledger, and the company's GST billing identity. |
+| `UserEntitlement`, `UsageRecord` | Phase-2 monetization scaffolding (built, dormant). |
 | `Session` | Stores `sha256(jti)` for refresh-token rotation (raw token never stored). |
 
 **Migration discipline:** `prisma migrate dev` for local development only; all other environments use `prisma migrate deploy`. Breaking changes follow expand → backfill → contract. Never run destructive migrations against a shared DB.
@@ -219,6 +221,12 @@ SEO is a first-class requirement; structure is locked in [CLAUDE.md §5–§6].
 | `job-lifecycle` | Daily cron (02:00 Asia/Kolkata) that expires stale jobs. |
 
 When email/R2/Sentry/PostHog secrets are blank (the local default), those features **no-op gracefully** — emails log to the console instead of sending.
+
+### Payments (recruiter billing — Razorpay)
+- **Model:** prepaid fixed-duration recruiter plans via the **Orders API + hosted Checkout** (no auto-renew/e-mandates at MVP; Stripe is invite-only for Indian businesses in 2026, so Razorpay is the primary gateway — inverting CLAUDE.md §1's original "Stripe primary" note).
+- **Flow:** `POST /recruiter/billing/orders` creates the Razorpay order at the **plan's DB price** → browser opens Checkout → `POST /recruiter/billing/orders/:id/verify` checks the checkout HMAC → **the webhook is the source of truth**: `POST /webhooks/razorpay` (unauthenticated by design; HMAC of the **raw body** against `RAZORPAY_WEBHOOK_SECRET` is the control — `main.ts` boots Nest with `rawBody: true`). Both paths funnel into one idempotent, `FOR UPDATE`-locked activation that marks the order PAID, upserts the company subscription, and issues the GST invoice (pdfkit PDF → private storage → streamed, authenticated download).
+- **Idempotency:** `PaymentWebhookEvent.eventId` is unique — replays/duplicates are no-ops; an event that failed mid-processing (no `processedAt`) is reprocessed on Razorpay's retry.
+- **Keyless local dev:** blank `RAZORPAY_*` env = stub mode (fake `order_stub_*` ids + a dev-only simulate endpoint that 404s whenever real keys or production are detected).
 
 ---
 

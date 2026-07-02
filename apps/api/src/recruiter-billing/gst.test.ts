@@ -58,11 +58,18 @@ describe('amountInWords', () => {
 });
 
 describe('invoice numbering', () => {
-  it('fyCode follows the Indian financial year (Apr–Mar)', () => {
+  it('fyCode follows the Indian financial year (Apr–Mar), computed in IST', () => {
     expect(fyCode(new Date('2026-07-02T00:00:00Z'))).toBe('2627');
     expect(fyCode(new Date('2026-03-31T00:00:00Z'))).toBe('2526');
     expect(fyCode(new Date('2026-04-01T12:00:00Z'))).toBe('2627');
     expect(fyCode(new Date('2027-01-15T00:00:00Z'))).toBe('2627');
+  });
+
+  it('fyCode uses IST, not UTC, at the year boundary (a UTC server must not misfile)', () => {
+    // 2027-03-31T20:30Z == 2027-04-01T02:00 IST → new FY 2728, not 2627.
+    expect(fyCode(new Date('2027-03-31T20:30:00Z'))).toBe('2728');
+    // 2027-03-31T18:00Z == 2027-03-31T23:30 IST → still FY 2627.
+    expect(fyCode(new Date('2027-03-31T18:00:00Z'))).toBe('2627');
   });
 
   it('formatInvoiceNumber zero-pads to a fixed, Rule-46-legal width', () => {

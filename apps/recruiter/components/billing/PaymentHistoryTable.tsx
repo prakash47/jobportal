@@ -1,9 +1,10 @@
 import { Badge, type BadgeVariant } from '@jobportal/ui';
-import { Download } from '@jobportal/ui/icons';
+import { InvoiceDownloadButton } from './InvoiceDownloadButton';
 
-// Payment / transaction history for /billing. Server-renderable — the invoice
-// download is a plain link to the BFF's streaming endpoint (the auth cookie
-// rides along; guards + the owner/admin check run on every download).
+// Payment / transaction history for /billing. Server-renderable; the download
+// is a client island (InvoiceDownloadButton) that fetches the PDF as a blob so
+// an expired session degrades in-place instead of navigating the tab to raw
+// JSON. Guards + the owner/admin check run on every download at the API.
 
 export interface PaymentHistoryRow {
   id: number;
@@ -15,8 +16,6 @@ export interface PaymentHistoryRow {
   invoiceId: number | null;
   invoiceNumber: string | null;
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 const STATUS: Record<PaymentHistoryRow['status'], { variant: BadgeVariant; label: string }> = {
   CREATED: { variant: 'neutral', label: 'Pending' },
@@ -69,25 +68,21 @@ export function PaymentHistoryTable({
                 <td className="px-4 py-3 font-medium text-[var(--color-fg)]">{row.planName}</td>
                 <td className="px-4 py-3 text-[var(--color-fg)]">{fmtAmount(row.amountInPaise)}</td>
                 <td className="px-4 py-3">
-                  <Badge
-                    variant={status.variant}
-                    title={row.status === 'FAILED' ? (row.failureReason ?? undefined) : undefined}
-                  >
-                    {status.label}
-                  </Badge>
+                  <Badge variant={status.variant}>{status.label}</Badge>
+                  {row.status === 'FAILED' && row.failureReason && (
+                    // Visible (not a hover-only title) so keyboard/touch/screen-
+                    // reader users can read WHY a payment failed.
+                    <span className="mt-0.5 block text-xs text-[var(--color-fg-muted)]">
+                      {row.failureReason}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right">
                   {row.invoiceId !== null && canDownload ? (
-                    // Anchor styled like the ghost IconButton (which renders a
-                    // <button> only) — a real link so the PDF streams with the
-                    // browser's normal download UX.
-                    <a
-                      href={`${API_URL}/recruiter/billing/invoices/${row.invoiceId}/download`}
-                      aria-label={`Download invoice ${row.invoiceNumber ?? row.invoiceId}`}
-                      className="inline-flex size-8 items-center justify-center rounded-md text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-                    >
-                      <Download aria-hidden className="size-4" />
-                    </a>
+                    <InvoiceDownloadButton
+                      invoiceId={row.invoiceId}
+                      invoiceLabel={row.invoiceNumber ?? `invoice-${row.invoiceId}`}
+                    />
                   ) : (
                     <span className="text-xs text-[var(--color-fg-subtle)]">—</span>
                   )}

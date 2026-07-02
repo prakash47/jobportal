@@ -13,9 +13,13 @@ import { PlansPanel, type PlanCardData } from '../../../components/billing/Plans
 export const dynamic = 'force-dynamic';
 
 // Human copy for the feature-flag keys a plan carries; unknown keys are
-// simply not rendered as bullets.
+// simply not rendered as bullets. NOTE: the post-quota label is deliberately
+// "Higher job-posting limits" (accurate for every tier that carries the key) —
+// whether a given tier is actually UNLIMITED is set by the admin on the
+// TIER_GATED flag's requiredTiers, which the label can't know, so it must not
+// promise "unlimited" on, e.g., the Starter card.
 const FEATURE_LABELS: Record<string, string> = {
-  'feature.recruiter_post_quota': 'Unlimited job posts',
+  'feature.recruiter_post_quota': 'Higher job-posting limits',
   'recruiter.resdex.enabled': 'ResDex candidate database',
   'recruiter.bulk_messaging.enabled': 'Bulk candidate messaging',
 };
@@ -34,7 +38,10 @@ export default async function PlansPage() {
   const [planRows, subscription, profile, kyc] = await Promise.all([
     prisma.subscriptionPlan.findMany({
       where: { audience: 'RECRUITER', isActive: true, isPublic: true },
-      orderBy: { sortOrder: 'asc' },
+      // Price tiebreaker so card order is deterministic even if two plans share
+      // a sortOrder (e.g. a pre-branch DB where enterprise-yearly wasn't
+      // renumbered by the seed's update:{}); the migration also backfills it.
+      orderBy: [{ sortOrder: 'asc' }, { priceInPaise: 'asc' }],
     }),
     prisma.subscription.findFirst({
       where: {

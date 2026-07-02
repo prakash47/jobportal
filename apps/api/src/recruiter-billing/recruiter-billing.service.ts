@@ -375,7 +375,7 @@ export class RecruiterBillingService {
           this.logger.log(`webhook ${eventType} for unknown order ${orderId} — ignored`);
           break;
         }
-        await this.activatePaidOrder(order.id, paymentId ?? 'unknown');
+        await this.activatePaidOrder(order.id, paymentId);
         break;
       }
       case 'payment.failed': {
@@ -385,28 +385,31 @@ export class RecruiterBillingService {
         const order = await prisma.paymentOrder.findUnique({
           where: { razorpayOrderId: orderId },
         });
-        // Only a not-yet-paid order can fail; a late/ordering-skewed failure
-        // event after capture must not clobber a PAID order.
-        if (order && order.status === 'CREATED') {
-          const reason = entity?.error_description ?? entity?.error_code ?? 'Payment failed';
-          await prisma.$transaction(async (tx) => {
-            await tx.paymentOrder.update({
-              where: { id: order.id },
-              data: { status: 'FAILED', failureReason: reason },
-            });
-            await tx.profileAuditLog.create({
-              data: {
-                userId: order.createdByUserId,
-                action: 'BILLING_PAYMENT_FAILED',
-                diff: {
-                  paymentOrderId: order.id,
-                  razorpayOrderId: orderId,
-                  reason,
-                } as unknown as Prisma.InputJsonValue,
-              },
-            });
+        // Cheap skip for the common late-after-capture case.
+        if (!order || order.status !== 'CREATED') break;
+        // Only a not-yet-paid order can fail. The transition is CONDITIONAL on
+        // status=CREATED inside the write (updateMany), so a capture that
+        // commits PAID concurrently — between this read and the write — is not
+        // clobbered (count === 0 ⇒ the order is already PAID/FAILED, skip).
+        const reason = entity?.error_description ?? entity?.error_code ?? 'Payment failed';
+        await prisma.$transaction(async (tx) => {
+          const updated = await tx.paymentOrder.updateMany({
+            where: { id: order.id, status: 'CREATED' },
+            data: { status: 'FAILED', failureReason: reason },
           });
-        }
+          if (updated.count === 0) return; // already captured or failed — no audit
+          await tx.profileAuditLog.create({
+            data: {
+              userId: order.createdByUserId,
+              action: 'BILLING_PAYMENT_FAILED',
+              diff: {
+                paymentOrderId: order.id,
+                razorpayOrderId: orderId,
+                reason,
+              } as unknown as Prisma.InputJsonValue,
+            },
+          });
+        });
         break;
       }
       default:
@@ -455,12 +458,16 @@ export class RecruiterBillingService {
 
   // --- Activation core (idempotent) ---------------------------------------------
 
-  // Both capture paths (webhook + browser verify) land here. The FOR UPDATE
-  // row lock serializes concurrent captures of the same order; the re-read
-  // inside the transaction makes the second caller a no-op.
+  // Both capture paths (webhook + browser verify) land here. Idempotent and
+  // serialized on two axes: a FOR UPDATE lock on THIS order (the re-read makes
+  // a duplicate capture of the same order a no-op) AND a per-COMPANY advisory
+  // lock taken before the subscription read/write, so two different orders of
+  // the same company can't both read the same stale subscription and race the
+  // extend/upgrade decision (double-charge → single period, or two ACTIVE subs).
+  // razorpayPaymentId is null only when a webhook omits the payment entity id.
   private async activatePaidOrder(
     paymentOrderId: number,
-    razorpayPaymentId: string,
+    razorpayPaymentId: string | null,
   ): Promise<ActivationResult> {
     const now = new Date();
     const result = await prisma.$transaction(async (tx) => {
@@ -483,6 +490,11 @@ export class RecruiterBillingService {
         };
       }
 
+      // Serialize all activations for this company (see method comment). Held
+      // until the transaction ends; consistent lock order (order row → company)
+      // avoids deadlocks.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:company:${order.companyId}`}))`;
+
       await tx.paymentOrder.update({
         where: { id: paymentOrderId },
         data: { status: 'PAID', razorpayPaymentId, paidAt: now, failureReason: null },
@@ -504,11 +516,16 @@ export class RecruiterBillingService {
       });
 
       let subscriptionId: number;
-      let periodStart: Date;
       let periodEnd: Date;
+      // The service window THIS payment paid for — frozen on the invoice so the
+      // statutory document never drifts. A renewal bills the extension window
+      // (old end → new end), not the whole subscription span.
+      let invoicePeriodStart: Date;
+      let invoicePeriodEnd: Date;
       if (existing && existing.planId === order.planId) {
-        periodStart = existing.currentPeriodStart;
         periodEnd = addDays(existing.currentPeriodEnd, order.plan.intervalDays);
+        invoicePeriodStart = existing.currentPeriodEnd;
+        invoicePeriodEnd = periodEnd;
         await tx.subscription.update({
           where: { id: existing.id },
           data: { status: 'ACTIVE', currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false },
@@ -521,8 +538,9 @@ export class RecruiterBillingService {
             data: { status: 'CANCELLED', cancelledAt: now, cancelReason: 'upgraded' },
           });
         }
-        periodStart = now;
         periodEnd = addDays(now, order.plan.intervalDays);
+        invoicePeriodStart = now;
+        invoicePeriodEnd = periodEnd;
         const created = await tx.subscription.create({
           data: {
             userId: order.createdByUserId,
@@ -530,7 +548,7 @@ export class RecruiterBillingService {
             planId: order.planId,
             status: 'ACTIVE',
             startedAt: now,
-            currentPeriodStart: periodStart,
+            currentPeriodStart: now,
             currentPeriodEnd: periodEnd,
           },
           select: { id: true },
@@ -560,6 +578,10 @@ export class RecruiterBillingService {
           buyerSnapshot: profile
             ? (buyerSnapshotOf(profile) as unknown as Prisma.InputJsonValue)
             : Prisma.DbNull,
+          // Line-item facts frozen at issuance (see schema) — renders never drift.
+          planNameSnapshot: order.plan.name,
+          periodStart: invoicePeriodStart,
+          periodEnd: invoicePeriodEnd,
           currency: order.currency,
           status: 'PAID',
           providerInvoiceId: razorpayPaymentId,
@@ -650,9 +672,13 @@ export class RecruiterBillingService {
         pincode: snapshot?.pincode ?? '',
         gstin: snapshot?.gstin ?? null,
       },
-      planName: invoice.subscription.plan.name,
-      periodStart: invoice.subscription.currentPeriodStart,
-      periodEnd: invoice.subscription.currentPeriodEnd,
+      // Render from the frozen snapshot, NOT the live subscription rows, so a
+      // later renewal (which extends currentPeriodEnd) or plan rename can never
+      // change an already-issued invoice. Live values are a defensive fallback
+      // for any pre-snapshot legacy row (there are none in practice).
+      planName: invoice.planNameSnapshot ?? invoice.subscription.plan.name,
+      periodStart: invoice.periodStart ?? invoice.subscription.currentPeriodStart,
+      periodEnd: invoice.periodEnd ?? invoice.subscription.currentPeriodEnd,
       taxableInPaise: invoice.taxableInPaise ?? invoice.amountInPaise,
       cgstInPaise: invoice.cgstInPaise ?? 0,
       sgstInPaise: invoice.sgstInPaise ?? 0,

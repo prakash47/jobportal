@@ -95,73 +95,93 @@ export function PlansPanel({
 
   async function purchase(planId: number) {
     setBusyPlanId(planId);
-    const res = await api<CreateOrderResponse>('/recruiter/billing/orders', {
-      method: 'POST',
-      body: JSON.stringify({ planId }),
-    });
-    if (!res.ok) {
-      setBusyPlanId(null);
-      setError(typeof res.message === 'string' ? res.message : 'Could not start the purchase.');
-      return;
-    }
-    const order = res.data;
-
-    if (order.isStub) {
-      // Keyless local dev: no gateway — complete via the dev-only simulator.
-      const sim = await api(`/recruiter/billing/orders/${order.paymentOrderId}/simulate`, {
+    // try/catch/finally so a network-level fetch rejection (API down, dropped
+    // connection, blocked Razorpay script) can never leave the button stuck
+    // spinning with every card disabled. `handedOff` is set only once the
+    // Razorpay modal has actually opened — that path keeps busy set (cleared by
+    // verify()/ondismiss); every other terminal path clears it in finally.
+    let handedOff = false;
+    try {
+      const res = await api<CreateOrderResponse>('/recruiter/billing/orders', {
         method: 'POST',
+        body: JSON.stringify({ planId }),
       });
-      setBusyPlanId(null);
-      if (!sim.ok) {
-        setError(typeof sim.message === 'string' ? sim.message : 'Simulated payment failed.');
+      if (!res.ok) {
+        setError(typeof res.message === 'string' ? res.message : 'Could not start the purchase.');
         return;
       }
-      onPurchased();
-      return;
-    }
+      const order = res.data;
 
-    const loaded = await loadRazorpayScript();
-    if (!loaded || !window.Razorpay) {
-      setBusyPlanId(null);
-      setError('Could not load the payment window. Check your connection and try again.');
-      return;
-    }
+      if (order.isStub) {
+        // Keyless local dev: no gateway — complete via the dev-only simulator.
+        const sim = await api(`/recruiter/billing/orders/${order.paymentOrderId}/simulate`, {
+          method: 'POST',
+        });
+        if (!sim.ok) {
+          setError(typeof sim.message === 'string' ? sim.message : 'Simulated payment failed.');
+          return;
+        }
+        onPurchased();
+        return;
+      }
 
-    new window.Razorpay({
-      key: order.keyId,
-      order_id: order.razorpayOrderId,
-      amount: order.amountInPaise,
-      currency: order.currency,
-      name: 'Career Queue',
-      description: `${order.planName} plan`,
-      prefill: { name: order.prefill.name, email: order.prefill.email },
-      theme: { color: '#192249' },
-      modal: { ondismiss: () => setBusyPlanId(null) },
-      handler: (response: RazorpayCheckoutResponse) => {
-        void verify(order.paymentOrderId, response);
-      },
-    }).open();
+      const loaded = await loadRazorpayScript();
+      if (!loaded || !window.Razorpay) {
+        setError('Could not load the payment window. Check your connection and try again.');
+        return;
+      }
+
+      // Hand off to the hosted modal. Busy stays set until the modal resolves
+      // (handler → verify) or is dismissed (ondismiss). Do NOT clear it here.
+      new window.Razorpay({
+        key: order.keyId,
+        order_id: order.razorpayOrderId,
+        amount: order.amountInPaise,
+        currency: order.currency,
+        name: 'Career Queue',
+        description: `${order.planName} plan`,
+        prefill: { name: order.prefill.name, email: order.prefill.email },
+        theme: { color: '#192249' },
+        modal: { ondismiss: () => setBusyPlanId(null) },
+        handler: (response: RazorpayCheckoutResponse) => {
+          void verify(order.paymentOrderId, response);
+        },
+      }).open();
+      handedOff = true; // modal owns the busy state from here (set only after open() succeeds)
+      return;
+    } catch {
+      setError('Something went wrong starting the purchase. Please try again.');
+    } finally {
+      if (!handedOff) setBusyPlanId((current) => (current === planId ? null : current));
+    }
   }
 
   async function verify(paymentOrderId: number, response: RazorpayCheckoutResponse) {
-    const res = await api(`/recruiter/billing/orders/${paymentOrderId}/verify`, {
-      method: 'POST',
-      body: JSON.stringify({
-        razorpayOrderId: response.razorpay_order_id,
-        razorpayPaymentId: response.razorpay_payment_id,
-        razorpaySignature: response.razorpay_signature,
-      }),
-    });
-    setBusyPlanId(null);
-    if (!res.ok) {
-      // The webhook is the source of truth — a verify blip does not lose money.
+    try {
+      const res = await api(`/recruiter/billing/orders/${paymentOrderId}/verify`, {
+        method: 'POST',
+        body: JSON.stringify({
+          razorpayOrderId: response.razorpay_order_id,
+          razorpayPaymentId: response.razorpay_payment_id,
+          razorpaySignature: response.razorpay_signature,
+        }),
+      });
+      if (!res.ok) {
+        // The webhook is the source of truth — a verify blip does not lose money.
+        setError(
+          (typeof res.message === 'string' ? res.message : 'Payment verification failed.') +
+            ' If you were charged, your plan activates automatically within a few minutes.',
+        );
+        return;
+      }
+      onPurchased();
+    } catch {
       setError(
-        (typeof res.message === 'string' ? res.message : 'Payment verification failed.') +
-          ' If you were charged, your plan activates automatically within a few minutes.',
+        'We could not confirm the payment from here. If you were charged, your plan activates automatically within a few minutes — refresh this page shortly.',
       );
-      return;
+    } finally {
+      setBusyPlanId(null);
     }
-    onPurchased();
   }
 
   function onPurchased() {

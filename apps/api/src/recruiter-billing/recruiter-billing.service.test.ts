@@ -24,7 +24,7 @@ vi.mock('@jobportal/db', () => {
       recruiter: { findUnique: vi.fn() },
       subscriptionPlan: { findFirst: vi.fn() },
       companyBillingProfile: { findUnique: vi.fn(), upsert: vi.fn() },
-      paymentOrder: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+      paymentOrder: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
       subscription: { findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
       subscriptionInvoice: {
         findUnique: vi.fn(),
@@ -53,7 +53,7 @@ const db = prisma as unknown as {
   recruiter: { findUnique: MockFn };
   subscriptionPlan: { findFirst: MockFn };
   companyBillingProfile: { findUnique: MockFn; upsert: MockFn };
-  paymentOrder: { create: MockFn; findUnique: MockFn; update: MockFn };
+  paymentOrder: { create: MockFn; findUnique: MockFn; update: MockFn; updateMany: MockFn };
   subscription: { findFirst: MockFn; update: MockFn; create: MockFn };
   subscriptionInvoice: { findUnique: MockFn; findFirst: MockFn; create: MockFn; update: MockFn };
   paymentWebhookEvent: { findUnique: MockFn; create: MockFn; update: MockFn };
@@ -381,6 +381,10 @@ describe('verifyCheckout', () => {
     expect(invData['invoiceNumber']).toBe(`INV-${fyCode(new Date())}-000001`);
     expect(invData['status']).toBe('PAID');
     expect(invData['amountInPaise']).toBe(199900);
+    // Line-item facts frozen on the invoice so the PDF never drifts after issuance.
+    expect(invData['planNameSnapshot']).toBe(PLAN.name);
+    expect(invData['periodStart']).toBeInstanceOf(Date);
+    expect(invData['periodEnd']).toBeInstanceOf(Date);
     const audit = db.profileAuditLog.create.mock.calls[0]?.[0]?.data as Record<string, unknown>;
     expect(audit['action']).toBe('BILLING_SUBSCRIPTION_ACTIVATED');
     expect(artifactsSpy).toHaveBeenCalledWith(99, true);
@@ -411,6 +415,13 @@ describe('activation semantics', () => {
     expect(update.where.id).toBe(55);
     expect(update.data.status).toBe('ACTIVE');
     expect(update.data.currentPeriodEnd.getTime()).toBe(
+      end.getTime() + PLAN.intervalDays * 24 * 60 * 60 * 1000,
+    );
+    // The renewal invoice bills the EXTENSION window (old end → new end), not
+    // the whole subscription span — no overlap with the prior invoice.
+    const inv = db.subscriptionInvoice.create.mock.calls[0]?.[0]?.data as Record<string, Date>;
+    expect(inv['periodStart']?.getTime()).toBe(end.getTime());
+    expect(inv['periodEnd']?.getTime()).toBe(
       end.getTime() + PLAN.intervalDays * 24 * 60 * 60 * 1000,
     );
   });
@@ -612,12 +623,13 @@ describe('handleWebhook', () => {
     expect(db.$transaction).not.toHaveBeenCalled();
   });
 
-  it('payment.failed marks a CREATED order FAILED with an audit row', async () => {
+  it('payment.failed conditionally marks a CREATED order FAILED with an audit row', async () => {
     const { service } = makeService();
     db.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
       fn(prisma),
     );
     db.paymentOrder.findUnique.mockResolvedValue(makeOrder());
+    db.paymentOrder.updateMany.mockResolvedValue({ count: 1 });
     const { raw, sig } = signedBody({
       event: 'payment.failed',
       payload: {
@@ -627,8 +639,11 @@ describe('handleWebhook', () => {
       },
     });
     await service.handleWebhook(raw, sig, 'evt_4');
-    expect(db.paymentOrder.update).toHaveBeenCalledWith(
+    // Conditional transition: the write is guarded by status=CREATED so a
+    // concurrent capture can't be clobbered.
+    expect(db.paymentOrder.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: { id: 501, status: 'CREATED' },
         data: expect.objectContaining({ status: 'FAILED', failureReason: 'Card declined' }),
       }),
     );
@@ -636,7 +651,22 @@ describe('handleWebhook', () => {
     expect(audit['action']).toBe('BILLING_PAYMENT_FAILED');
   });
 
-  it('a late payment.failed never clobbers a PAID order', async () => {
+  it('a payment.failed that loses the race (count 0) writes no audit row', async () => {
+    const { service } = makeService();
+    db.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn(prisma),
+    );
+    db.paymentOrder.findUnique.mockResolvedValue(makeOrder());
+    db.paymentOrder.updateMany.mockResolvedValue({ count: 0 });
+    const { raw, sig } = signedBody({
+      event: 'payment.failed',
+      payload: { payment: { entity: { id: 'pay_Y1', order_id: 'order_X1' } } },
+    });
+    await service.handleWebhook(raw, sig, 'evt_5b');
+    expect(db.profileAuditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('a late payment.failed on an already-PAID order is skipped entirely', async () => {
     const { service } = makeService();
     db.paymentOrder.findUnique.mockResolvedValue(makeOrder({ status: 'PAID' }));
     const { raw, sig } = signedBody({
@@ -645,6 +675,7 @@ describe('handleWebhook', () => {
     });
     await service.handleWebhook(raw, sig, 'evt_5');
     expect(db.paymentOrder.update).not.toHaveBeenCalled();
+    expect(db.paymentOrder.updateMany).not.toHaveBeenCalled();
   });
 
   it('derives a deterministic event id when the header is missing', async () => {

@@ -43,7 +43,13 @@ const GRAY = '#555555';
 const LINE = '#cccccc';
 
 function fmtDate(d: Date): string {
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  // Force IST — GST invoice dates are Indian-local; the API host is UTC.
+  return d.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  });
 }
 
 function inr(paise: number): string {
