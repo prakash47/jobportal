@@ -52,6 +52,10 @@
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/signin-popup-redirect` · 2026-07-02
+
+Seeker **sign-in now redirects to the dashboard** (SRS §4.12). The navbar auth popup used to close and `router.refresh()` in place after a successful login — with the header not yet auth-aware, nothing visibly changed and the user stayed on the home page. Three coordinated fixes in `apps/web` (auth components only; no schema, no flags, no shared surfaces): (1) `AuthModal.handleLoginSuccess` now pushes `/profile` — notably WITHOUT a trailing `router.refresh()`, which was verified live to race the App Router and swallow the navigation (refresh cancels the in-flight push); it's also unnecessary since `/profile` is force-dynamic and Next 16 keeps dynamic segments at staleTime 0. (2) The standalone `/login` page maps a bare `/` next-target to `/profile`, matching the Google OAuth fallback for existing accounts; real `?next=` deep links (guard bounces) are honoured unchanged. (3) `LoginForm`'s page-mode default `next` is now `/profile`. **Browser-verified all three paths**: popup login → `/profile` dashboard; bare `/login` → `/profile`; `/login?next=/saved-jobs` → `/saved-jobs`; zero console errors. Gate on the integrated state (post `feature/recruiter-billing` merge): typecheck 11/11 · tests 5/5 suites · `pnpm build` 4/4 apps.
+
 ### `feature/recruiter-billing` · 2026-07-02
 
 Recruiter **Plans & Billing** (SRS §4.11 / §7) — recruiters can view subscription plans, buy one (covering their whole team), see current subscription status + expiry, and download GST invoices from a payment/transaction history. Owner-reviewed and CLI-merged to `develop` (`--no-ff`). Scoped to recruiter code paths + shared `apps/api`/`packages/db`/`packages/ui` (2 icons); the **`apps/web` job-seeker surface + `apps/services` are byte-untouched** (`git diff --stat develop -- apps/web apps/services` empty; web tests unchanged at 181).
