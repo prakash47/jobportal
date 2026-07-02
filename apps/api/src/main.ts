@@ -11,7 +11,11 @@ import { AppModule } from './app.module';
 import { SentryGlobalFilter } from './observability/sentry.filter';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: Razorpay webhook signatures are HMACs over the exact bytes sent;
+  // the parsed-then-restringified JSON never matches. Nest keeps req.rawBody
+  // alongside the parsed body only when asked at boot (used solely by
+  // recruiter-billing's webhook controller).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.use(cookieParser());
 
