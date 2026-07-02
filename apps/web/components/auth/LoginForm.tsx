@@ -10,12 +10,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export interface LoginFormProps {
   /**
-   * Modal usage: called after a successful login INSTEAD of navigating away
-   * (the popup closes + refreshes in place). When omitted (standalone /login
-   * page), the form navigates to `next` — preserving the original behaviour.
+   * Modal usage: called after a successful login INSTEAD of navigating to
+   * `next` — the caller owns the redirect (AuthModal pushes /profile itself).
    */
   onSuccess?: () => void;
-  /** Where to send the user after login in page mode. Ignored when onSuccess is set. */
+  /**
+   * Where to send the user after login in page mode. Ignored when onSuccess is
+   * set. Defaults to the seeker dashboard.
+   */
   next?: string;
   /**
    * Prefix for element ids so the same form can coexist with the register form
@@ -27,7 +29,7 @@ export interface LoginFormProps {
 // Shared sign-in form — the exact /auth/login fetch flow from the old login
 // page, extracted so the standalone page AND the AuthModal render identical
 // logic (CLAUDE.md §4.12). Only the post-success behaviour is parameterised.
-export function LoginForm({ onSuccess, next = '/', idPrefix = 'login' }: LoginFormProps) {
+export function LoginForm({ onSuccess, next = '/profile', idPrefix = 'login' }: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

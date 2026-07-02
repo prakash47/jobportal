@@ -41,9 +41,14 @@ export function AuthModal({ open, tab, onOpenChange, onTabChange, googleEnabled 
 
   function handleLoginSuccess() {
     onOpenChange(false);
-    // Re-fetch server components so any auth-gated data reflects the new
-    // session. (The header itself isn't auth-aware yet — follow-up chip #9.)
-    router.refresh();
+    // Signed in → land on the seeker dashboard, same as the Google OAuth
+    // fallback for existing accounts. No router.refresh() here: scheduling a
+    // refresh in the same tick can cancel the in-flight push (App Router
+    // race — verified live), and it isn't needed anyway. /profile is
+    // force-dynamic so it renders fresh with the new session, and Next 16's
+    // client router cache keeps dynamic segments at staleTime 0, so back-nav
+    // to "/" re-fetches the header state too.
+    router.push('/profile');
   }
 
   function handleRegisterSuccess() {

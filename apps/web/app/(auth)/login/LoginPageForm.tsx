@@ -11,7 +11,11 @@ import { LoginForm } from '../../../components/auth/LoginForm';
 // Suspense boundary in page.tsx because useSearchParams bails out of prerender.
 export function LoginPageForm({ googleEnabled }: { googleEnabled: boolean }) {
   const searchParams = useSearchParams();
-  const next = safeNext(searchParams.get('next'));
+  // Bare "/" (no ?next= or a rejected one) means "no deep link" — land on the
+  // seeker dashboard instead, matching GoogleButton's fallback for existing
+  // accounts. A real deep link (?next=/job/... from a guard bounce) is honoured.
+  const rawNext = safeNext(searchParams.get('next'));
+  const next = rawNext === '/' ? '/profile' : rawNext;
   const googleError = searchParams.get('error') === 'google';
 
   return (
