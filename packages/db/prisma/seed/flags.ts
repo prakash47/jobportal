@@ -87,6 +87,13 @@ const flags: FlagSeed[] = [
   // Seeded OFF so the feature is LIVE by default; flipping it ON disables it
   // without a redeploy.
   { key: 'killswitch.recruiter_user_management', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter user/team management (kill)' },
+  // Recruiter Help & Support (searchable FAQ + Contact Us + Raise a Ticket).
+  // Emergency stop: when ON the recruiter /support/* pages 404 (L2) and every
+  // /recruiter/support mutation rejects with 503 (L3); the admin /admin/support
+  // console stays up so staff can keep working existing tickets. Seeded OFF so
+  // the feature is LIVE by default; flipping it ON disables it without a
+  // redeploy.
+  { key: 'killswitch.recruiter_help_support', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter help & support (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {
