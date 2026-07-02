@@ -42,25 +42,35 @@ function readStatus(sp: Record<string, string | string[] | undefined>): Applicat
 
 // statusHistory is a Prisma JSON column; narrow it to the entry shape the API
 // writes ({from,to,at,by} appended per transition) and drop anything else.
-// The guard takes `unknown` (not JsonValue) because HistoryEntry has no index
-// signature and so is not assignable to Prisma's JsonObject.
-function isHistoryEntry(e: unknown): e is HistoryEntry {
-  return (
-    typeof e === 'object' &&
-    e !== null &&
-    typeof (e as Record<string, unknown>)['to'] === 'string' &&
-    typeof (e as Record<string, unknown>)['at'] === 'string'
-  );
-}
-
+// `by` is only carried through when it is a known actor — the API's Actor
+// union also reserves SYSTEM, which must not render as "by recruiter".
 function parseHistory(raw: Prisma.JsonValue | null): HistoryEntry[] {
   if (!Array.isArray(raw)) return [];
   const out: HistoryEntry[] = [];
   for (const e of raw) {
-    if (isHistoryEntry(e)) out.push(e);
+    if (typeof e !== 'object' || e === null) continue;
+    const rec = e as Record<string, unknown>;
+    if (typeof rec['to'] !== 'string' || typeof rec['at'] !== 'string') continue;
+    const by = rec['by'];
+    out.push({
+      from: rec['from'] as HistoryEntry['from'],
+      to: rec['to'] as HistoryEntry['to'],
+      at: rec['at'],
+      ...(by === 'CANDIDATE' || by === 'RECRUITER' ? { by } : {}),
+    });
   }
   return out;
 }
+
+// Server-side date label with a fixed IST zone so the SSR pass and the client
+// hydration (this feeds a client component) can never disagree on the day.
+const formatAppliedAt = (d: Date) =>
+  d.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  });
 
 export default async function ApplicationsPage({ searchParams }: PageProps) {
   const session = (await readUserFromCookie())!;
@@ -129,13 +139,14 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
       {rows.length === 0 ? (
         <ApplicationsEmpty filtered={filtered} />
       ) : (
-        <ContentCard className="divide-y divide-[var(--color-border)]">
+        <ContentCard className="divide-y divide-[var(--color-border)] overflow-hidden">
           {rows.map((r) => (
             <ApplicationRow
               key={r.id}
               id={r.id}
               status={r.status}
               appliedAtIso={r.appliedAt.toISOString()}
+              appliedAtLabel={formatAppliedAt(r.appliedAt)}
               history={parseHistory(r.statusHistory)}
               job={r.job}
             />

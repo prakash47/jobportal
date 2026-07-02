@@ -22,7 +22,7 @@ export function EmptyState({ icon, title, body, cta }: EmptyStateProps) {
       >
         {icon}
       </span>
-      <p className="mt-4 text-sm font-medium text-[var(--color-fg)]">{title}</p>
+      <h2 className="mt-4 text-sm font-medium text-[var(--color-fg)]">{title}</h2>
       <p className="mt-1 max-w-sm text-sm text-[var(--color-fg-muted)]">{body}</p>
       {cta ? (
         <Link

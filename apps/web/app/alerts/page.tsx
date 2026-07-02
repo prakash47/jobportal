@@ -51,7 +51,7 @@ export default async function AlertsPage() {
       {rows.length === 0 ? (
         <AlertsEmpty />
       ) : (
-        <ContentCard className="divide-y divide-[var(--color-border)]">
+        <ContentCard className="divide-y divide-[var(--color-border)] overflow-hidden">
           {rows.map((r) => (
             <AlertRow
               key={r.id}

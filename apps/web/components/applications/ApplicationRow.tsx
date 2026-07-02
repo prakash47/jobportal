@@ -9,17 +9,16 @@ import { StatusPill } from './StatusPill';
 import { WithdrawButton } from './WithdrawButton';
 import { StatusTimeline, buildSteps, type HistoryEntry } from './StatusTimeline';
 
-const fmt = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-
 // SRS §4.6.2 — terminal statuses don't expose Withdraw.
 const TERMINAL = new Set<ApplicationStatus>(['HIRED', 'REJECTED', 'WITHDRAWN']);
 
 export interface ApplicationRowProps {
   id: number;
   status: ApplicationStatus;
-  /** ISO string — this row is a client component, so props must serialise. */
+  /** ISO string — feeds the timeline steps (client component, serialisable). */
   appliedAtIso: string;
+  /** Pre-formatted on the server so SSR and hydration can't disagree (ICU/TZ). */
+  appliedAtLabel: string;
   history: HistoryEntry[];
   job: {
     title: string;
@@ -31,11 +30,18 @@ export interface ApplicationRowProps {
 // One application: title / company / date, status badge + actions, and an
 // expandable status-pipeline timeline built from Application.statusHistory.
 // Stacks vertically under the sm breakpoint so actions never crush the title.
-export function ApplicationRow({ id, status, appliedAtIso, history, job }: ApplicationRowProps) {
+export function ApplicationRow({
+  id,
+  status,
+  appliedAtIso,
+  appliedAtLabel,
+  history,
+  job,
+}: ApplicationRowProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const canWithdraw = !TERMINAL.has(status);
-  const steps = buildSteps(appliedAtIso, history);
+  const steps = buildSteps(appliedAtIso, history, status);
 
   return (
     <div className="px-4 py-4 transition-colors hover:bg-[var(--color-bg)] sm:px-5">
@@ -57,7 +63,7 @@ export function ApplicationRow({ id, status, appliedAtIso, history, job }: Appli
             <span className="mx-2" aria-hidden="true">
               ·
             </span>
-            <span className="text-xs">Applied {fmt(appliedAtIso)}</span>
+            <span className="text-xs">Applied {appliedAtLabel}</span>
           </p>
         </div>
 
@@ -69,7 +75,7 @@ export function ApplicationRow({ id, status, appliedAtIso, history, job }: Appli
             onClick={() => setOpen((o) => !o)}
             aria-expanded={open}
             aria-controls={panelId}
-            aria-label={open ? 'Hide status history' : 'Show status history'}
+            aria-label="Status history"
             className="rounded-md p-1.5 text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
           >
             <ChevronDown
@@ -83,7 +89,7 @@ export function ApplicationRow({ id, status, appliedAtIso, history, job }: Appli
       {open && (
         <div
           id={panelId}
-          className="mt-4 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-4 sm:ml-0"
+          className="mt-4 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-4"
         >
           <StatusTimeline steps={steps} />
         </div>

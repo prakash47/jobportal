@@ -84,7 +84,7 @@ export default async function SavedJobsPage({ searchParams }: PageProps) {
       {rows.length === 0 ? (
         <SavedJobsEmpty />
       ) : (
-        <ContentCard className="divide-y divide-[var(--color-border)]">
+        <ContentCard className="divide-y divide-[var(--color-border)] overflow-hidden">
           {rows.map((r) => (
             <SavedJobRow
               key={r.jobId}

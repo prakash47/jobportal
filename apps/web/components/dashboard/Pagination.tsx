@@ -31,9 +31,10 @@ function PageButton({
   const base =
     'inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-sm transition-colors';
   if (disabled) {
+    // Static span — no disabled semantics needed (aria-disabled is not valid
+    // on a role-less generic element).
     return (
       <span
-        aria-disabled="true"
         className={`${base} cursor-not-allowed border-[var(--color-border)] text-[var(--color-fg-subtle)]`}
       >
         {children}

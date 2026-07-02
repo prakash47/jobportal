@@ -6,27 +6,50 @@ export interface HistoryEntry {
   from: ApplicationStatus;
   to: ApplicationStatus;
   at: string; // ISO
-  by: 'CANDIDATE' | 'RECRUITER';
+  /** Only carried through when the stored actor is a known value. */
+  by?: 'CANDIDATE' | 'RECRUITER';
 }
 
 export interface TimelineStep {
   label: string;
-  at: string; // ISO
+  /** ISO — absent on the synthetic current-status step for legacy rows. */
+  at?: string;
   by?: 'CANDIDATE' | 'RECRUITER';
 }
 
+// Fixed IST so the server-rendered row and this client-rendered panel always
+// agree on the calendar day (production servers run UTC).
 const fmt = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  new Date(iso).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  });
 
 // Builds the pipeline steps from the stored transition log: the original
 // application first, then one step per transition (SRS §4.6 — statusHistory is
-// appended on every recruiter/candidate move). Old rows may have no history at
-// all; they render as the single "Applied" step.
-export function buildSteps(appliedAtIso: string, history: HistoryEntry[]): TimelineStep[] {
-  return [
+// appended on every recruiter/candidate move). Legacy/seeded rows may have no
+// history: when their status has already moved past APPLIED, append a
+// synthetic (undated) current step so the emphasised step never contradicts
+// the status pill next to it.
+export function buildSteps(
+  appliedAtIso: string,
+  history: HistoryEntry[],
+  status: ApplicationStatus,
+): TimelineStep[] {
+  const steps: TimelineStep[] = [
     { label: STATUS_LABELS.APPLIED, at: appliedAtIso },
-    ...history.map((h) => ({ label: STATUS_LABELS[h.to] ?? h.to, at: h.at, by: h.by })),
+    ...history.map((h) => ({
+      label: STATUS_LABELS[h.to] ?? h.to,
+      at: h.at,
+      ...(h.by ? { by: h.by } : {}),
+    })),
   ];
+  if (history.length === 0 && status !== 'APPLIED') {
+    steps.push({ label: STATUS_LABELS[status] ?? status });
+  }
+  return steps;
 }
 
 // Vertical status pipeline: navy dots joined by a hairline, latest step
@@ -37,7 +60,7 @@ export function StatusTimeline({ steps }: { steps: TimelineStep[] }) {
       {steps.map((step, i) => {
         const isLast = i === steps.length - 1;
         return (
-          <li key={`${step.label}-${step.at}`} className="relative flex gap-3 pb-4 last:pb-0">
+          <li key={`${step.label}-${step.at ?? i}`} className="relative flex gap-3 pb-4 last:pb-0">
             {/* Connector line to the next step */}
             {!isLast && (
               <span
@@ -65,10 +88,12 @@ export function StatusTimeline({ steps }: { steps: TimelineStep[] }) {
               >
                 {step.label}
               </p>
-              <p className="mt-0.5 text-xs text-[var(--color-fg-muted)]">
-                {fmt(step.at)}
-                {step.by ? (step.by === 'CANDIDATE' ? ' · by you' : ' · by recruiter') : ''}
-              </p>
+              {step.at ? (
+                <p className="mt-0.5 text-xs text-[var(--color-fg-muted)]">
+                  {fmt(step.at)}
+                  {step.by ? (step.by === 'CANDIDATE' ? ' · by you' : ' · by recruiter') : ''}
+                </p>
+              ) : null}
             </div>
           </li>
         );

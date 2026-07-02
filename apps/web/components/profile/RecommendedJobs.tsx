@@ -1,7 +1,8 @@
 import Link from 'next/link';
+import { prisma } from '@jobportal/db';
 import { searchJobs, type JobDoc } from '@jobportal/search';
 import { ArrowRight, Sparkles } from '@jobportal/ui/icons';
-import { JobCard } from '../srp';
+import { RecommendedJobCard } from './RecommendedJobCard';
 import { loadSrpUserContext } from '../../lib/srp';
 
 export interface RecommendedJobsProps {
@@ -45,7 +46,30 @@ export async function RecommendedJobs({
     searchFailed = true;
   }
 
-  const userCtx = await loadSrpUserContext(hits.map((j) => j.id));
+  // Enrich the ES docs with what they don't carry: the company logo and the
+  // city's display name (docs only store slugs). Two batched lookups keyed by
+  // the visible hits — nothing per-card.
+  const companyIds = [...new Set(hits.map((j) => j.companyId))];
+  const hitCitySlugs = [
+    ...new Set(hits.flatMap((j) => (j.primaryCitySlug ? [j.primaryCitySlug] : []))),
+  ];
+  const [userCtx, companies, cities] = await Promise.all([
+    loadSrpUserContext(hits.map((j) => j.id)),
+    companyIds.length > 0
+      ? prisma.company.findMany({
+          where: { id: { in: companyIds } },
+          select: { id: true, logoUrl: true },
+        })
+      : Promise.resolve([]),
+    hitCitySlugs.length > 0
+      ? prisma.city.findMany({
+          where: { slug: { in: hitCitySlugs } },
+          select: { slug: true, name: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const logoByCompanyId = new Map(companies.map((c) => [c.id, c.logoUrl]));
+  const cityNameBySlug = new Map(cities.map((c) => [c.slug, c.name]));
 
   return (
     <section aria-labelledby="recommended-heading" className="space-y-4">
@@ -95,11 +119,15 @@ export async function RecommendedJobs({
           )}
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           {hits.map((j) => (
-            <JobCard
+            <RecommendedJobCard
               key={j.id}
               job={j}
+              logoUrl={logoByCompanyId.get(j.companyId) ?? null}
+              cityName={
+                j.primaryCitySlug ? (cityNameBySlug.get(j.primaryCitySlug) ?? null) : null
+              }
               isAuthed={userCtx.isAuthed}
               initialSaved={userCtx.savedJobIds.has(j.id)}
               returnTo="/profile"

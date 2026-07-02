@@ -37,8 +37,10 @@ export function AlertRow({ id, name, frequency, isActive, lastSentAt }: AlertRow
         </div>
         <p className="mt-0.5 text-sm text-[var(--color-fg-muted)]">
           {FREQUENCY_LABEL[frequency] ?? frequency}
-          <span className="mx-2 text-[var(--color-fg-subtle)]">·</span>
-          <span className="text-xs text-[var(--color-fg-subtle)]">Last sent {fmt(lastSentAt)}</span>
+          <span className="mx-2" aria-hidden="true">
+            ·
+          </span>
+          <span className="text-xs">Last sent {fmt(lastSentAt)}</span>
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">

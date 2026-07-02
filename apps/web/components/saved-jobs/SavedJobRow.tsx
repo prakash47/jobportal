@@ -44,10 +44,10 @@ export function SavedJobRow({ jobId, savedAt, job, applied, appliedStatus }: Sav
           >
             {job.company.name}
           </Link>
-          <span className="mx-2 text-[var(--color-fg-subtle)]">·</span>
-          <span className="text-xs text-[var(--color-fg-subtle)]">
-            Saved {fmt(savedAt)}
+          <span className="mx-2" aria-hidden="true">
+            ·
           </span>
+          <span className="text-xs">Saved {fmt(savedAt)}</span>
         </p>
       </div>
 
