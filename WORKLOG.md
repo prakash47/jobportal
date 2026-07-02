@@ -33,7 +33,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | rat145 | `feature/recruiter-billing` | 2026-07-02 | Additive: PaymentOrder/PaymentWebhookEvent/CompanyBillingProfile + Subscription.companyId + SubscriptionInvoice GST fields + PlanAudience. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| rat145 | `feature/recruiter-billing` | Recruiter **Plans & Billing** (Razorpay prepaid plans): new `PaymentOrder` + `PaymentWebhookEvent` + `CompanyBillingProfile` models, `Subscription.companyId`, `SubscriptionPlan.audience`, `SubscriptionInvoice` GST/invoice-number fields; API `recruiter-billing` (`/recruiter/billing/*`) + `POST /webhooks/razorpay`; recruiter pages `/plans` + `/billing`, sidebar "Billing" group, middleware L1 on `subscription.system.enabled`. apps/web untouched. | DB schema (lock held); packages/ui `icons.ts` append-only | 2026-07-02 |
+| _(none in progress)_ | | | | |
 
 ---
 
@@ -68,6 +68,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Date | Branch | What shipped |
 |---|---|---|
+| 2026-07-02 | `feature/recruiter-billing` | Recruiter **Plans & Billing** (Razorpay prepaid, company-scoped): `PaymentOrder`/`PaymentWebhookEvent`/`CompanyBillingProfile` + `Subscription.companyId` + `SubscriptionPlan.audience` + GST-extended `SubscriptionInvoice`; API `recruiter-billing` + `POST /webhooks/razorpay`; `/plans` + `/billing` pages + sidebar Billing group; middleware L1 on `subscription.system.enabled` (reused, no new key). Adversarial review: 14 findings fixed. apps/web untouched |
 | 2026-07-01 | `feature/recruiter-user-management` | Recruiter **Users / Team management**: `RecruiterRole` (Owner/Admin/Member) + per-module permissions + `RecruiterInvite`; `recruiter-users` API (invite/revoke/role+perms/remove/accept/preview), `/users` panel + public `/accept-invite/[token]`; soft-remove + re-login block + reactivate-on-reinvite; `killswitch.recruiter_user_management`; registration now new-company-only (creator = Owner), join is invite-only. Adversarial review: 5 findings fixed. apps/web untouched |
 | 2026-07-01 | `feature/recruiter-change-password` | Recruiter **Settings** sidebar group + **Change Password**: `POST /auth/recruiter/change-password` (verify current → new Argon2id hash → revoke all sessions + `RECRUITER_PASSWORD_CHANGE` audit in one txn → re-mint current device), `ChangePasswordDto` + `RecruiterPasswordService`, `/settings/change-password` page + `ChangePasswordForm`; moved `/notification-settings` → `/settings/notification-settings` (old path redirects); `killswitch.recruiter_change_password`. apps/web untouched |
 | 2026-06-30 | `feature/recruiter-topbar-and-toggle-fix` | Recruiter UI follow-up: fixed invisible notification toggles (added missing `@source` for `@jobportal/ui` in recruiter `globals.css`); moved company logo + name + `KycStatusBadge` from the dashboard header into the `(authed)` top bar (shows on every page). Browser-verified. |
