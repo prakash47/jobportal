@@ -422,22 +422,35 @@ export class RecruiterBillingService {
 
   // --- Invoice download --------------------------------------------------------
 
-  async getInvoiceDownload(userId: number, invoiceId: number): Promise<{ url: string }> {
+  // Streams the PDF bytes through the API (guards + role check apply on every
+  // download) instead of minting a signed URL — uniform across the in-memory
+  // dev backend and R2, and never produces a shareable link. Invoice PDFs are
+  // small; proxy bandwidth is negligible.
+  async getInvoicePdf(
+    userId: number,
+    invoiceId: number,
+  ): Promise<{ pdf: Buffer; filename: string }> {
     await this.assertBillingEnabled();
     const caller = await this.getCaller(userId);
     this.assertCanManageBilling(caller.companyRole);
 
     const invoice = await prisma.subscriptionInvoice.findUnique({
       where: { id: invoiceId },
-      select: { id: true, companyId: true, pdfKey: true },
+      select: { id: true, companyId: true, pdfKey: true, invoiceNumber: true },
     });
     if (!invoice || invoice.companyId !== caller.companyId) {
       throw new NotFoundException('Invoice not found');
     }
-    // Self-heal: if PDF generation failed at capture time, regenerate on demand.
-    const key = invoice.pdfKey ?? (await this.issueInvoiceArtifacts(invoice.id, false));
-    const url = await this.storage.getSignedDownloadUrl(key, 15 * 60);
-    return { url };
+    // Self-heal: if PDF generation failed (or the in-memory dev store was lost
+    // on an API restart), regenerate on demand.
+    let key = invoice.pdfKey;
+    let obj = key ? await this.storage.getObject(key) : null;
+    if (!obj) {
+      key = await this.issueInvoiceArtifacts(invoice.id, false);
+      obj = await this.storage.getObject(key);
+    }
+    if (!obj) throw new NotFoundException('Invoice PDF is unavailable');
+    return { pdf: obj.body, filename: `${invoice.invoiceNumber ?? `invoice-${invoice.id}`}.pdf` };
   }
 
   // --- Activation core (idempotent) ---------------------------------------------

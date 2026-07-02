@@ -17,6 +17,8 @@ export {
   ChevronUp,
   Circle,
   ClipboardList,
+  CreditCard,
+  Download,
   Eye,
   EyeOff,
   FileText,

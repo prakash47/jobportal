@@ -9,9 +9,12 @@ import {
   ParseIntPipe,
   Post,
   Put,
+  Res,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import type { Response } from 'express';
 import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser, Roles } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -72,9 +75,18 @@ export class RecruiterBillingController {
     return this.billing.upsertBillingProfile(user.sub, parsed.data);
   }
 
+  // Plain-navigation friendly (the recruiter app links straight here; the auth
+  // cookie rides along) — streams the PDF with an attachment disposition.
   @Get('invoices/:id/download')
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  async downloadInvoice(@CurrentUser() user: AccessClaims, @Param('id', ParseIntPipe) id: number) {
-    return this.billing.getInvoiceDownload(user.sub, id);
+  async downloadInvoice(
+    @CurrentUser() user: AccessClaims,
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { pdf, filename } = await this.billing.getInvoicePdf(user.sub, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(pdf);
   }
 }
