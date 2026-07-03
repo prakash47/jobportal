@@ -52,6 +52,21 @@
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/job-detail-layout` · 2026-07-02
+
+Full **redesign of the job-detail page** `/job/[slug]` (SRS §4.2). CLI merge to `develop` (`--no-ff`). `apps/web` + a one-line `packages/ui` icon append — **no schema, no migration, no flags, no shared-surface locks**.
+
+**What shipped:**
+- **Full-width hero card** (`JobHero`): company logo (56px, `object-contain` via the shared `CompanyLogo` with monogram fallback), title, company link + posted, an at-a-glance meta row (location · experience · salary · job type · work mode), skill badges, and the existing Apply / Save / Share action row.
+- **3-column grid** (`lg:grid-cols-[3fr_6fr_3fr]`, sticky rails): **left** — `JobOverviewCard` (structured facts) + `AboutCompanyCard` (logo, industry, external website, "View company profile"); **center** — the role description; **right** — the new **`RelatedRoles`** rail: **"Similar roles at other companies"**, matched by shared skills (ES `terms` = any-of, so "same kind of role"), newest first, **excluding the current job and its company**, each row showing the other company's logo + title + company + city + salary. Logos + city names are resolved in two batched Prisma lookups keyed by the visible hits. Replaces the old bottom-of-page `SimilarJobs` grid.
+- **Cleanup**: retired `JobHeader` / `JobMeta` / `SimilarJobs` (folded into `JobHero`); extracted `lib/job/format.ts` (salary/experience/employment/work-mode display) shared by the hero, overview card, and related rail. `packages/ui/src/icons.ts` gains `Clock` (append-only).
+- **Fix along the way**: the `JobPosting` JSON-LD emitted a hardcoded `employmentType: 'FULL_TIME'`; it now uses the real `job.employmentType` (Google-for-Jobs enum aligns with our `EmploymentType`).
+- **Responsive**: 3 columns from `lg`; single column below, stacking hero → overview → company → description → similar roles. Verified zero horizontal overflow at 375px; logos render at 56/44/36px with `object-contain` (real-image and monogram paths both checked).
+
+**Gate (integrated state, develop @ 3f4c662):** workspace typecheck **11/11** · tests green · `pnpm build` **4/4 apps**. Browser-verified against a seeded demo job (Sahaj Pay): hero + meta + skills + actions, left overview/company rail, sticky behaviour, and the right rail populated with 6 other-company roles + logos (same-company exclusion confirmed); mobile single-column order + no overflow; zero console warnings.
+
+**Deferred / follow-ups:** the related-roles match is skill-any-of + recency (no title-similarity scoring or salary/seniority proximity — fine for MVP); no adversarial multi-agent review was run this pass (ultracode off), only the DEVELOPMENT.md gate + full browser verification.
+
 ### `feature/seeker-dashboard-polish` · 2026-07-02
 
 Seeker **dashboard UI overhaul** across all pages (SRS §4.3-4.6). CLI merge to `develop` (`--no-ff`). `apps/web` only — **no schema, no migration, no feature flags, no shared-surface locks**; every other app byte-untouched.
