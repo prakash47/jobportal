@@ -3,16 +3,19 @@ import { permanentRedirect } from 'next/navigation';
 import { notFound } from 'next/navigation';
 import Script from 'next/script';
 import { prisma } from '@jobportal/db';
+import { Breadcrumbs } from '@jobportal/ui';
 import {
+  AboutCompanyCard,
   ApplyButton,
   ClosedJobNotice,
   JobBody,
-  JobHeader,
-  JobMeta,
+  JobHero,
+  JobOverviewCard,
   SaveButton,
   ShareButtons,
-  SimilarJobs,
 } from '../../../components/job';
+// RelatedRoles is server-only (ES + Prisma) — deep import, not via the barrel.
+import { RelatedRoles } from '../../../components/job/RelatedRoles';
 import { readApplied, readSaved, readUserFromCookie } from '../../../lib/job';
 import { readApplyQuota } from '../../../lib/applications/quota-state';
 import { classifyQuota } from '../../../lib/applications/quota-ui-state';
@@ -117,7 +120,8 @@ export default async function JobDetailPage({ params }: PageProps) {
     description: job.description,
     datePosted: job.postedAt.toISOString(),
     ...(job.expiresAt ? { validThrough: job.expiresAt.toISOString() } : {}),
-    employmentType: 'FULL_TIME',
+    // Google for Jobs employmentType enum aligns with our EmploymentType values.
+    employmentType: job.employmentType,
     hiringOrganization: {
       name: job.company.name,
       ...(job.company.websiteUrl ? { sameAs: job.company.websiteUrl } : {}),
@@ -147,8 +151,39 @@ export default async function JobDetailPage({ params }: PageProps) {
     directApply: true,
   });
 
+  // SRS §4.11.16-17 — Layer 2 inline hint. Calm sentence, never a modal, never
+  // an upsell on Day 0 (subscription system OFF).
+  const actions = (
+    <div className="space-y-3">
+      {quotaUiState === 'warning' && quota && (
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          You&rsquo;ve used {quota.count} of {quota.limit} applications today — choose carefully.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <ApplyButton
+          jobId={job.id}
+          jobSlug={job.canonicalSlug}
+          isAuthed={user !== null}
+          initialApplied={applied}
+          disabled={!isActive}
+          quota={quota}
+        />
+        <SaveButton
+          jobId={job.id}
+          jobSlug={job.canonicalSlug}
+          isAuthed={user !== null}
+          initialSaved={saved}
+        />
+        <div className="ml-auto">
+          <ShareButtons url={canonicalUrl} title={job.title} />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
+    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
       <Script
         id="ldjson-jobposting"
         type="application/ld+json"
@@ -157,63 +192,68 @@ export default async function JobDetailPage({ params }: PageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <article className="space-y-8">
-        <JobHeader
-          title={job.title}
-          companyName={job.company.name}
-          companySlug={job.company.slug}
-          companyId={job.companyId}
-          postedAt={job.postedAt.toISOString()}
+      <div className="space-y-6">
+        <Breadcrumbs
+          items={[{ label: 'Home', href: '/' }, { label: 'Jobs', href: '/jobs' }, { label: job.title }]}
         />
 
         {!isActive && <ClosedJobNotice status={job.status} />}
 
-        <JobMeta
+        <JobHero
+          title={job.title}
+          companyName={job.company.name}
+          companySlug={job.company.slug}
+          companyId={job.companyId}
+          logoUrl={job.company.logoUrl}
+          postedAt={job.postedAt.toISOString()}
           cityNames={cityNames}
           salaryMinPaise={job.salaryMinPaise}
           salaryMaxPaise={job.salaryMaxPaise}
           experienceMinYears={job.experienceMinYears}
           experienceMaxYears={job.experienceMaxYears}
+          employmentType={job.employmentType}
+          workMode={job.workMode}
           skillNames={skillNames}
+          actions={actions}
         />
 
-        <div className="space-y-3 border-y border-[var(--color-border)] py-4">
-          {/* SRS §4.11.16-17 — Layer 2 inline hint. Calm sentence, never a
-              modal, never an upsell on Day 0 (subscription system OFF). */}
-          {quotaUiState === 'warning' && quota && (
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              You&rsquo;ve used {quota.count} of {quota.limit} applications today — choose carefully.
-            </p>
-          )}
-          <div className="flex flex-wrap items-center gap-3">
-            <ApplyButton
-              jobId={job.id}
-              jobSlug={job.canonicalSlug}
-              isAuthed={user !== null}
-              initialApplied={applied}
-              disabled={!isActive}
-              quota={quota}
+        {/* 3-column layout on lg+: left overview/company rail, main description,
+            right "similar roles at other companies" rail. Stacks on mobile. */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[3fr_6fr_3fr]">
+          <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+            <JobOverviewCard
+              cityNames={cityNames}
+              salaryMinPaise={job.salaryMinPaise}
+              salaryMaxPaise={job.salaryMaxPaise}
+              experienceMinYears={job.experienceMinYears}
+              experienceMaxYears={job.experienceMaxYears}
+              employmentType={job.employmentType}
+              workMode={job.workMode}
             />
-            <SaveButton
-              jobId={job.id}
-              jobSlug={job.canonicalSlug}
-              isAuthed={user !== null}
-              initialSaved={saved}
+            <AboutCompanyCard
+              companyId={job.companyId}
+              companyName={job.company.name}
+              companySlug={job.company.slug}
+              logoUrl={job.company.logoUrl}
+              websiteUrl={job.company.websiteUrl}
+              industryName={job.industry?.name ?? null}
             />
-            <div className="ml-auto">
-              <ShareButtons url={canonicalUrl} title={job.title} />
-            </div>
+          </aside>
+
+          <div className="min-w-0">
+            <JobBody description={job.description} />
           </div>
+
+          <aside className="lg:sticky lg:top-6 lg:self-start">
+            <RelatedRoles
+              jobId={job.id}
+              companyId={job.companyId}
+              skillSlugs={skillSlugs}
+              industrySlug={job.industry?.slug ?? null}
+            />
+          </aside>
         </div>
-
-        <JobBody description={job.description} />
-
-        <SimilarJobs
-          jobId={job.id}
-          skillSlugs={skillSlugs}
-          industrySlug={job.industry?.slug ?? null}
-        />
-      </article>
+      </div>
     </main>
   );
 }

@@ -17,6 +17,7 @@ export {
   ChevronUp,
   Circle,
   ClipboardList,
+  Clock,
   CreditCard,
   Download,
   Eye,
