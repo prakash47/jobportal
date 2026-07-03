@@ -26,21 +26,23 @@ export function SavedJobRow({ jobId, savedAt, job, applied, appliedStatus }: Sav
   const isActive = job.status === 'ACTIVE';
 
   return (
-    <div className="flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-[var(--color-bg)] sm:flex-row sm:items-center sm:gap-6 sm:px-5">
+    <div className="relative flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-[var(--color-bg)] sm:flex-row sm:items-center sm:gap-6 sm:px-5">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
+          {/* Whole-row click opens the job (title link's ::after covers the row);
+              the company link + the action buttons sit above it via z-10. */}
           <Link
             href={`/job/${job.canonicalSlug}`}
-            className="truncate text-sm font-medium text-[var(--color-fg)] hover:underline"
+            className="min-w-0 text-sm font-medium text-[var(--color-fg)] hover:underline after:absolute after:inset-0 after:content-['']"
           >
-            {job.title}
+            <span className="block truncate">{job.title}</span>
           </Link>
           {!isActive && <Badge variant="neutral">{job.status.toLowerCase()}</Badge>}
         </div>
         <p className="mt-0.5 truncate text-sm text-[var(--color-fg-muted)]">
           <Link
             href={`/company/${job.company.slug}-overview-${job.company.id}`}
-            className="hover:text-[var(--color-fg)]"
+            className="relative z-10 hover:text-[var(--color-fg)]"
           >
             {job.company.name}
           </Link>
@@ -51,7 +53,7 @@ export function SavedJobRow({ jobId, savedAt, job, applied, appliedStatus }: Sav
         </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="relative z-10 flex shrink-0 items-center gap-2">
         {applied ? (
           <Badge variant="primary">{(appliedStatus ?? 'APPLIED').replace('_', ' ')}</Badge>
         ) : (

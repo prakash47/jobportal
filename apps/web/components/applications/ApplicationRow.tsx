@@ -45,18 +45,22 @@ export function ApplicationRow({
 
   return (
     <div className="px-4 py-4 transition-colors hover:bg-[var(--color-bg)] sm:px-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+      {/* `relative` scopes the title's ::after overlay to THIS top row only, so
+          clicking the row opens the job but the expandable timeline panel below
+          (a sibling) stays free. The company link + actions get z-10 to sit
+          above the overlay. */}
+      <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
         <div className="min-w-0 flex-1">
           <Link
             href={`/job/${job.canonicalSlug}`}
-            className="block truncate text-sm font-medium text-[var(--color-fg)] hover:underline"
+            className="block text-sm font-medium text-[var(--color-fg)] hover:underline after:absolute after:inset-0 after:content-['']"
           >
-            {job.title}
+            <span className="block truncate">{job.title}</span>
           </Link>
           <p className="mt-0.5 truncate text-sm text-[var(--color-fg-muted)]">
             <Link
               href={`/company/${job.company.slug}-overview-${job.company.id}`}
-              className="hover:text-[var(--color-fg)]"
+              className="relative z-10 hover:text-[var(--color-fg)]"
             >
               {job.company.name}
             </Link>
@@ -67,7 +71,7 @@ export function ApplicationRow({
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="relative z-10 flex shrink-0 items-center gap-3">
           <StatusPill status={status} />
           {canWithdraw && <WithdrawButton applicationId={id} jobTitle={job.title} />}
           <button
