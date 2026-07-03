@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh Mistry | `feature/header-logo-seeker-dashboard` | Header **logo links to `/profile` for signed-in seekers** (no `/`→redirect hop): `SiteHeader` reads the verified session and sets `brandHref` from `role === 'CANDIDATE'`. | `apps/web/components/home/SiteHeader.tsx` only. No schema/flags/locks. | 2026-07-03 |
 
 ---
 
