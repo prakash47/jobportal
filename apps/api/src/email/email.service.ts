@@ -10,6 +10,8 @@ import type {
   PaymentReceiptPayload,
   RecruiterInvitePayload,
   RegistrationConfirmationPayload,
+  SupportContactMessagePayload,
+  SupportTicketOpenedPayload,
 } from './templates';
 
 // SRS §4.13 — public producer API. Every transactional email goes through a
@@ -126,6 +128,36 @@ export class EmailService {
       kind: 'recruiter_invite',
       to,
       userId,
+      payload,
+    });
+  }
+
+  // Help & Support — Contact Us submission forwarded to the ops inbox. userId
+  // is null (recipient is the internal support inbox, not a user account); the
+  // email is transactional-mandatory (no preference gating).
+  enqueueSupportContactMessage(
+    to: string,
+    payload: SupportContactMessagePayload,
+  ): Promise<void> {
+    return this.queue.enqueue({
+      kind: 'support_contact_message',
+      to,
+      userId: null,
+      payload,
+    });
+  }
+
+  // Help & Support — a newly raised support ticket forwarded to the ops inbox.
+  // userId is null (recipient is the internal support inbox); transactional-
+  // mandatory.
+  enqueueSupportTicketOpened(
+    to: string,
+    payload: SupportTicketOpenedPayload,
+  ): Promise<void> {
+    return this.queue.enqueue({
+      kind: 'support_ticket_opened',
+      to,
+      userId: null,
       payload,
     });
   }

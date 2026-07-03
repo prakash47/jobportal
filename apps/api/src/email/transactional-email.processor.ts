@@ -60,6 +60,18 @@ export type TransactionalEmailJob =
       to: string;
       userId: number | null;
       payload: TemplatePayload<'recruiter_invite'>;
+    }
+  | {
+      kind: 'support_contact_message';
+      to: string;
+      userId: number | null;
+      payload: TemplatePayload<'support_contact_message'>;
+    }
+  | {
+      kind: 'support_ticket_opened';
+      to: string;
+      userId: number | null;
+      payload: TemplatePayload<'support_ticket_opened'>;
     };
 
 // Which user-preference toggle (if any) gates each template. null means the
@@ -78,6 +90,11 @@ const PREFERENCE_GATE: Record<TemplateKind, keyof PrefRow | null> = {
   // transactional-mandatory, no preference gating. The invitee has no account /
   // preference row yet anyway (userId is null at enqueue time).
   recruiter_invite: null,
+  // Help & Support ops-inbox mail. Recipient is the internal support inbox, not
+  // a user — transactional-mandatory, never preference-gated (userId is null at
+  // enqueue time).
+  support_contact_message: null,
+  support_ticket_opened: null,
 };
 
 interface PrefRow {

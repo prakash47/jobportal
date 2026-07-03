@@ -142,6 +142,46 @@ describe('TransactionalEmailProcessor.handle', () => {
     expect(call.text).toContain('https://jobportal.com/verify?token=abc');
   });
 
+  it('support_ticket_opened is mandatory (no preference lookup) and renders to Resend', async () => {
+    await proc.handle({
+      kind: 'support_ticket_opened',
+      to: 'support@jobportal.com',
+      userId: null,
+      payload: {
+        ticketId: 7,
+        subject: 'Cannot publish a job',
+        category: 'JOB_POSTING',
+        companyName: 'Acme',
+        recruiterName: 'Priya Sharma',
+        recruiterEmail: 'priya@acme.com',
+        description: 'The publish button does nothing.',
+      },
+    });
+    expect(mockedPrisma.emailPreference.findUnique).not.toHaveBeenCalled();
+    const call = resend.send.mock.calls[0]?.[0] as { subject: string; html: string };
+    expect(call.subject).toContain('[Ticket #7]');
+    expect(call.html).toContain('Acme');
+  });
+
+  it('support_contact_message is mandatory (no preference lookup) and renders to Resend', async () => {
+    await proc.handle({
+      kind: 'support_contact_message',
+      to: 'support@jobportal.com',
+      userId: null,
+      payload: {
+        contactId: 3,
+        name: 'Ravi Kumar',
+        email: 'ravi@acme.com',
+        subject: 'Question about applicants',
+        message: 'How do I export the list?',
+      },
+    });
+    expect(mockedPrisma.emailPreference.findUnique).not.toHaveBeenCalled();
+    const call = resend.send.mock.calls[0]?.[0] as { subject: string; html: string };
+    expect(call.subject).toContain('[Contact]');
+    expect(call.html).toContain('ravi@acme.com');
+  });
+
   it('userId=null bypasses preference lookup even for gated categories', async () => {
     // E.g. an admin-triggered application_submitted email where the
     // recipient hasn't been resolved to a user row. Defaults would let it
