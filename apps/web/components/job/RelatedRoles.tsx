@@ -27,10 +27,10 @@ function Row({
   const salary = formatSalaryLpa(job.salaryMin, job.salaryMax);
   const meta = [cityName, salary].filter(Boolean).join(' · ');
   return (
-    <li>
+    <li className="py-3.5 first:pt-0 last:pb-0">
       <Link
         href={`/job/${job.canonicalSlug}`}
-        className="group flex items-start gap-3 py-3.5 first:pt-0 last:pb-0"
+        className="group flex items-start gap-3"
       >
         <CompanyLogo
           companyId={job.companyId}
@@ -43,7 +43,7 @@ function Row({
           <p className="line-clamp-2 text-sm font-medium leading-snug text-[var(--color-fg)] group-hover:text-[var(--color-primary-600)] group-hover:underline">
             {job.title}
           </p>
-          <p className="truncate text-xs text-[var(--color-fg-muted)]">{job.companyName}</p>
+          <p className="truncate text-xs font-medium text-[var(--color-fg-muted)]">{job.companyName}</p>
           {meta && <p className="truncate text-xs text-[var(--color-fg-muted)]">{meta}</p>}
         </div>
       </Link>
