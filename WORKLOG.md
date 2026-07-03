@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| Jayesh | `feature/seeker-dashboard-polish` | Seeker dashboard UI overhaul (all 10 pages): new shared primitives `apps/web/components/dashboard/{PageHeader,ContentCard,Pagination,EmptyState}.tsx`; card-based restyle of `/applications` (+ scrollable status tabs w/ counts + expandable **status timeline** from `Application.statusHistory` — read-only, no schema), `/saved-jobs`, `/alerts` (+new/edit), `/profile/{details,education,experience,skills,resume}`, `/settings/notifications`; mobile row stacking. apps/web only — no schema, no flags, no locks | none | 2026-07-02 |
+| _(none in progress)_ | | | | |
 
 ---
 
@@ -68,6 +68,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Date | Branch | What shipped |
 |---|---|---|
+| 2026-07-02 | `feature/seeker-dashboard-polish` | Seeker dashboard UI overhaul (all 10 pages): shared `PageHeader`/`ContentCard`/`Pagination`/`EmptyState` primitives → card-based restyle of applications/saved-jobs/alerts/profile-subpages/settings; expandable **application status timeline** from `Application.statusHistory` (read-only, no schema); scrollable status-filter chips with counts; mobile row stacking; **redesigned recommended-job cards** (company logo 44px + object-contain, resolved city names, ₹N–M LPA, skills, posted-age). Two adversarial reviews → 30 confirmed findings fixed (ARIA tablist→links, IST date hydration, contrast, corner clipping, legacy-row timeline). apps/web only — no schema, no flags, no locks |
 | 2026-07-02 | `bugfix/signin-popup-redirect` | Seeker sign-in now lands on the dashboard: navbar `AuthModal` pushes `/profile` after login (was close+refresh-in-place, which also raced and swallowed navigation); `/login` bare-`/` fallback → `/profile` (matches Google OAuth fallback); `?next=` deep links unchanged. Browser-verified all 3 paths. apps/web auth components only |
 | 2026-07-02 | `feature/recruiter-billing` | Recruiter **Plans & Billing** (Razorpay prepaid, company-scoped): `PaymentOrder`/`PaymentWebhookEvent`/`CompanyBillingProfile` + `Subscription.companyId` + `SubscriptionPlan.audience` + GST-extended `SubscriptionInvoice`; API `recruiter-billing` + `POST /webhooks/razorpay`; `/plans` + `/billing` pages + sidebar Billing group; middleware L1 on `subscription.system.enabled` (reused, no new key). Adversarial review: 14 findings fixed. apps/web untouched |
 | 2026-07-01 | `feature/recruiter-user-management` | Recruiter **Users / Team management**: `RecruiterRole` (Owner/Admin/Member) + per-module permissions + `RecruiterInvite`; `recruiter-users` API (invite/revoke/role+perms/remove/accept/preview), `/users` panel + public `/accept-invite/[token]`; soft-remove + re-login block + reactivate-on-reinvite; `killswitch.recruiter_user_management`; registration now new-company-only (creator = Owner), join is invite-only. Adversarial review: 5 findings fixed. apps/web untouched |
