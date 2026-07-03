@@ -85,7 +85,7 @@ export function NotificationPreferencesForm({
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-2">
       {CHANNELS.map((c) => {
         const checked = prefs[c.key];
         return (
@@ -109,7 +109,7 @@ export function NotificationPreferencesForm({
         );
       })}
 
-      <div className="flex items-center justify-between pt-6">
+      <div className="mt-6 flex items-center justify-between border-t border-[var(--color-border)] pt-6">
         <div className="min-h-[20px] text-sm">
           {error ? (
             <span className="text-[var(--color-danger)]">{error}</span>

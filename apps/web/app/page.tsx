@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { loadHomePageData } from '../lib/home/queries';
+import { readUserFromCookie } from '../lib/auth/server-session';
 import { JsonLd } from '../lib/seo';
 import {
   BentoValue,
@@ -33,6 +35,17 @@ export const metadata: Metadata = {
 };
 
 export default async function HomePage() {
+  // Signed-in seekers skip the marketing home and land on their dashboard: any
+  // visit to "/" (typed URL, logo, client nav, post-login) bounces to /profile.
+  // Only CANDIDATE is redirected — logged-out visitors and crawlers get the full
+  // marketing home (SEO), and recruiters/admins (their own surfaces) keep it too.
+  // readUserFromCookie verifies the JWT, so a stale/invalid cookie falls through
+  // to the marketing home rather than looping.
+  const user = await readUserFromCookie();
+  if (user?.role === 'CANDIDATE') {
+    redirect('/profile');
+  }
+
   const data = await loadHomePageData();
 
   // WebSite + potentialAction = SearchAction. This is what Google reads to

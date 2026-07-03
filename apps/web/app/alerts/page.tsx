@@ -1,7 +1,10 @@
 import Link from 'next/link';
 import { prisma } from '@jobportal/db';
 import { Button } from '@jobportal/ui';
+import { Plus } from '@jobportal/ui/icons';
 import { requireUser } from '../../lib/auth/require-user';
+import { PageHeader } from '../../components/dashboard/PageHeader';
+import { ContentCard } from '../../components/dashboard/ContentCard';
 import { AlertRow, AlertsEmpty } from '../../components/alerts';
 
 const MAX_ALERTS = 10;
@@ -24,28 +27,31 @@ export default async function AlertsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-            Job alerts
-          </h1>
-          <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-            Save searches and we&rsquo;ll email you when matches go live.
-            {' '}
-            <span className="text-[var(--color-fg-subtle)]">{rows.length}/{MAX_ALERTS}</span>
-          </p>
-        </div>
-        <Button asChild disabled={atCap} variant={atCap ? 'secondary' : 'primary'}>
-          <Link href={atCap ? '#' : '/alerts/new'} aria-disabled={atCap || undefined}>
-            New alert
-          </Link>
-        </Button>
-      </header>
+      <PageHeader
+        title="Job alerts"
+        description={`Save searches and we'll email you when matches go live. ${rows.length}/${MAX_ALERTS} used.`}
+        action={
+          atCap ? (
+            // At the cap the action is genuinely unavailable — render a real
+            // disabled button (an aria-disabled link would still navigate).
+            <Button disabled leadingIcon={<Plus className="size-4" aria-hidden="true" />}>
+              New alert
+            </Button>
+          ) : (
+            <Button asChild>
+              <Link href="/alerts/new">
+                <Plus className="size-4" aria-hidden="true" />
+                New alert
+              </Link>
+            </Button>
+          )
+        }
+      />
 
       {rows.length === 0 ? (
         <AlertsEmpty />
       ) : (
-        <div className="rounded-md border border-[var(--color-border)] px-4">
+        <ContentCard className="divide-y divide-[var(--color-border)] overflow-hidden">
           {rows.map((r) => (
             <AlertRow
               key={r.id}
@@ -56,7 +62,7 @@ export default async function AlertsPage() {
               lastSentAt={r.lastSentAt}
             />
           ))}
-        </div>
+        </ContentCard>
       )}
     </div>
   );

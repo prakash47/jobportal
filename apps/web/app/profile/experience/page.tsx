@@ -1,5 +1,7 @@
 import { prisma } from '@jobportal/db';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { PageHeader } from '../../../components/dashboard/PageHeader';
+import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { ExperienceManager } from '../../../components/profile/ExperienceManager';
 
 export default async function ExperiencePage() {
@@ -27,16 +29,14 @@ export default async function ExperiencePage() {
   }));
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-          Work experience
-        </h1>
-        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          List your roles in reverse-chronological order.
-        </p>
-      </header>
-      <ExperienceManager initial={experiences} />
+    <div className="max-w-3xl space-y-6">
+      <PageHeader
+        title="Work experience"
+        description="List your roles in reverse-chronological order."
+      />
+      <ContentCard className="p-5 sm:p-6">
+        <ExperienceManager initial={experiences} />
+      </ContentCard>
     </div>
   );
 }

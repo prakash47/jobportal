@@ -72,14 +72,15 @@ export async function CompanyOpenings({
           {rows.map((j) => (
             <div
               key={j.id}
-              className="flex items-center justify-between gap-4 border-b border-[var(--color-border)] py-3 last:border-b-0"
+              className="relative flex items-center justify-between gap-4 border-b border-[var(--color-border)] py-3 last:border-b-0"
             >
               <div className="min-w-0">
+                {/* Whole-row click via the title link's ::after overlay. */}
                 <Link
                   href={`/job/${j.canonicalSlug}`}
-                  className="truncate text-sm font-medium text-[var(--color-fg)] hover:underline"
+                  className="block text-sm font-medium text-[var(--color-fg)] hover:underline after:absolute after:inset-0 after:content-['']"
                 >
-                  {j.title}
+                  <span className="block truncate">{j.title}</span>
                 </Link>
                 <p className="mt-0.5 text-xs text-[var(--color-fg-subtle)]">
                   {j.primaryCityName ?? 'Location not set'} · Posted {fmt(j.postedAt)}

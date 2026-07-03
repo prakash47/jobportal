@@ -2,7 +2,8 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useTransition, type ChangeEvent, type ReactNode } from 'react';
-import { Checkbox, Input, Label } from '@jobportal/ui';
+import { Checkbox, Input, Label, cn } from '@jobportal/ui';
+import { ChevronDown } from '@jobportal/ui/icons';
 // Direct path (NOT the lib/srp barrel) — the barrel re-exports
 // loadSrpUserContext which touches Prisma. Importing from the barrel
 // in a client component drags node:module into the browser bundle.
@@ -56,7 +57,7 @@ function FilterSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-b border-[var(--color-border)] py-4">
+    <div className="border-b border-[var(--color-border)] py-4 last:border-b-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -64,9 +65,13 @@ function FilterSection({
         className="flex w-full items-center justify-between text-left text-sm font-medium text-[var(--color-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
       >
         {title}
-        <span className="text-[var(--color-fg-subtle)]" aria-hidden="true">
-          {open ? '−' : '+'}
-        </span>
+        <ChevronDown
+          className={cn(
+            'size-4 shrink-0 text-[var(--color-fg-subtle)] transition-transform duration-[var(--duration-fast)]',
+            open ? 'rotate-180' : '',
+          )}
+          aria-hidden="true"
+        />
       </button>
       {open && <div className="mt-3 space-y-2">{children}</div>}
     </div>
@@ -167,7 +172,7 @@ export function IndustryFilter({
   }
 
   return (
-    <FilterSection title="Industry">
+    <FilterSection title="Industry" defaultOpen={false}>
       <select
         value={current ?? ''}
         onChange={onChange}
@@ -205,7 +210,7 @@ export function EmploymentTypeFilter({ basePath }: { basePath: string }) {
   }
 
   return (
-    <FilterSection title="Employment type">
+    <FilterSection title="Employment type" defaultOpen={false}>
       <div className="flex flex-wrap gap-2">
         {EMP_TYPES.map((o) => {
           const active = selected.has(o.value);
@@ -252,7 +257,7 @@ export function WorkModeFilter({ basePath }: { basePath: string }) {
   }
 
   return (
-    <FilterSection title="Work mode">
+    <FilterSection title="Work mode" defaultOpen={false}>
       <div className="flex flex-wrap gap-2">
         {WORK_MODES.map((o) => {
           const active = selected.has(o.value);
@@ -297,7 +302,7 @@ export function ExperienceFilter({ basePath }: { basePath: string }) {
   }
 
   return (
-    <FilterSection title="Experience (years)">
+    <FilterSection title="Experience (years)" defaultOpen={false}>
       <div className="flex items-center gap-2">
         <Input
           type="number"
@@ -342,7 +347,7 @@ export function SalaryFilter({ basePath }: { basePath: string }) {
   }
 
   return (
-    <FilterSection title="Min salary (₹ lakhs / year)">
+    <FilterSection title="Min salary (₹ lakhs / year)" defaultOpen={false}>
       <Input
         type="number"
         min={0}
@@ -380,7 +385,7 @@ export function PostedWithinFilter({ basePath }: { basePath: string }) {
   }
 
   return (
-    <FilterSection title="Posted">
+    <FilterSection title="Posted" defaultOpen={false}>
       <div className="space-y-1.5">
         {POSTED.map((o) => {
           const id = `posted-${o.value}`;
