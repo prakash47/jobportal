@@ -31,6 +31,15 @@ const BILLING_ITEMS = [
   { href: '/billing', label: 'Subscription & invoices' },
 ] as const;
 
+// "Help & Support" is a collapsible group like Settings. Always rendered (it is
+// a free feature); if an admin flips killswitch.recruiter_help_support ON the
+// sub-pages 404 — the same behaviour as the Verification / Users entries.
+const HELP_ITEMS = [
+  { href: '/support/faq', label: 'FAQ' },
+  { href: '/support/contact', label: 'Contact us' },
+  { href: '/support/tickets', label: 'Raise a ticket' },
+] as const;
+
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -47,12 +56,15 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
   const pathname = usePathname();
   const submenuId = useId();
   const billingMenuId = useId();
+  const helpMenuId = useId();
   // /settings and every /settings/* child (incl. the redirect stub pages) belong
   // to the group — used to auto-expand on first load and to highlight the parent.
   const settingsActive = pathname === '/settings' || pathname.startsWith('/settings/');
   const [open, setOpen] = useState(settingsActive);
   const billingActive = BILLING_ITEMS.some((item) => isActive(pathname, item.href));
   const [billingOpen, setBillingOpen] = useState(billingActive);
+  const helpActive = pathname === '/support' || pathname.startsWith('/support/');
+  const [helpOpen, setHelpOpen] = useState(helpActive);
 
   return (
     <nav aria-label="Recruiter portal" className="flex flex-col gap-0.5 text-sm">
@@ -134,6 +146,38 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
           class-vs-UA specificity gotcha; when closed the links leave the tab order. */}
       <ul id={submenuId} className={cn('mt-0.5 flex-col gap-0.5 pl-3', open ? 'flex' : 'hidden')}>
         {SETTINGS_ITEMS.map((item) => {
+          const active = isActive(pathname, item.href);
+          return (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                aria-current={active ? 'page' : undefined}
+                className={cn(ROW, 'block', active ? ROW_ACTIVE : ROW_IDLE)}
+              >
+                {item.label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Help & Support — collapsible group, same pattern as Settings. */}
+      <button
+        type="button"
+        aria-expanded={helpOpen}
+        aria-controls={helpMenuId}
+        onClick={() => setHelpOpen((v) => !v)}
+        className={cn(ROW, 'flex items-center justify-between gap-2 text-left', helpActive ? ROW_ACTIVE : ROW_IDLE)}
+      >
+        <span>Help &amp; Support</span>
+        <ChevronDown
+          aria-hidden
+          className={cn('size-4 shrink-0 transition-transform duration-200', helpOpen ? 'rotate-0' : '-rotate-90')}
+        />
+      </button>
+
+      <ul id={helpMenuId} className={cn('mt-0.5 flex-col gap-0.5 pl-3', helpOpen ? 'flex' : 'hidden')}>
+        {HELP_ITEMS.map((item) => {
           const active = isActive(pathname, item.href);
           return (
             <li key={item.href}>
