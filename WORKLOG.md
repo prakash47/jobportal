@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh Mistry | `bugfix/signed-in-header-auth-state` | **Fix: signed-in seekers saw "Sign in/Register" on public pages** (`/jobs`, `/job/[slug]`, `/companies`). Header auth now resolves **server-side** (`getHeaderUser`, cached) in `SiteHeader` → passed to `HeaderAuthActions` (client `/auth/me` fetch removed) → correct chrome on first paint, consistent with the dashboard. Guarded `/login` + `/register` to redirect signed-in seekers → `/profile`. | `apps/web`: `lib/auth/header-user.ts` (new), `home/SiteHeader`, `home/HeaderAuthActions`, `(auth)/{login,register}/page`. No schema/flags/locks. | 2026-07-03 |
 
 ---
 

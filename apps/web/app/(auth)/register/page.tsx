@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { getGoogleEnabled } from '../../../lib/auth/google-status';
+import { readUserFromCookie } from '../../../lib/auth/server-session';
 import { GoogleButton } from '../../../components/auth/GoogleButton';
 import { OrDivider } from '../../../components/auth/OrDivider';
 import { RegisterForm } from '../../../components/auth/RegisterForm';
@@ -8,6 +10,10 @@ import { RegisterForm } from '../../../components/auth/RegisterForm';
 // auth popup). On success the shared RegisterForm auto-logs-in and navigates to
 // /onboarding (identical to the popup — there is no longer a page-vs-popup branch).
 export default async function RegisterPage() {
+  // A signed-in seeker is already registered — send them to the dashboard.
+  const user = await readUserFromCookie();
+  if (user?.role === 'CANDIDATE') redirect('/profile');
+
   const googleEnabled = await getGoogleEnabled();
 
   return (
