@@ -166,12 +166,16 @@ export class RecruiterSupportService {
         data: { ticketId, authorId: userId, fromSupport: false, body: input.body },
         select: { id: true, body: true, fromSupport: true, createdAt: true },
       });
-      if (reopened) {
-        await tx.supportTicket.update({
-          where: { id: ticketId },
-          data: { status: 'IN_PROGRESS', resolvedAt: null },
-        });
-      }
+      // Always touch the parent so its updatedAt tracks the latest activity — the
+      // "Last update" column reads it. A reopen also flips status + clears
+      // resolvedAt (that update fires @updatedAt too); a plain reply bumps
+      // updatedAt on its own.
+      await tx.supportTicket.update({
+        where: { id: ticketId },
+        data: reopened
+          ? { status: 'IN_PROGRESS', resolvedAt: null }
+          : { updatedAt: new Date() },
+      });
       return created;
     });
 

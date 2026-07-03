@@ -183,19 +183,27 @@ describe('RecruiterSupportService', () => {
       expect(res.reopened).toBe(true);
     });
 
-    it('does NOT change status when the ticket is OPEN', async () => {
+    it('bumps updatedAt without a status change when the ticket is OPEN', async () => {
       db.supportTicket.findUnique.mockResolvedValue({ id: 1, userId: 42, status: 'OPEN' });
       db.supportTicketMessage.create.mockResolvedValue(msg);
+      db.supportTicket.update.mockResolvedValue({});
       const res = await service.reply(42, 1, { body: 'more' });
-      expect(db.supportTicket.update).not.toHaveBeenCalled();
+      expect(db.supportTicket.update).toHaveBeenCalledOnce();
+      const data = db.supportTicket.update.mock.calls[0]?.[0].data;
+      expect(data.status).toBeUndefined();
+      expect(data.updatedAt).toBeInstanceOf(Date);
       expect(res.reopened).toBe(false);
     });
 
-    it('does NOT change status when the ticket is IN_PROGRESS', async () => {
+    it('bumps updatedAt without a status change when the ticket is IN_PROGRESS', async () => {
       db.supportTicket.findUnique.mockResolvedValue({ id: 1, userId: 42, status: 'IN_PROGRESS' });
       db.supportTicketMessage.create.mockResolvedValue(msg);
+      db.supportTicket.update.mockResolvedValue({});
       await service.reply(42, 1, { body: 'more' });
-      expect(db.supportTicket.update).not.toHaveBeenCalled();
+      expect(db.supportTicket.update).toHaveBeenCalledOnce();
+      const data = db.supportTicket.update.mock.calls[0]?.[0].data;
+      expect(data.status).toBeUndefined();
+      expect(data.updatedAt).toBeInstanceOf(Date);
     });
   });
 

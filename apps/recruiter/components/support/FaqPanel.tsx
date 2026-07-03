@@ -50,13 +50,15 @@ export function FaqPanel() {
           />
         </div>
 
-        <div role="tablist" aria-label="Filter by topic" className="flex flex-wrap gap-1.5">
+        {/* Single-select filter — a toggle-button group (aria-pressed), NOT an
+            ARIA tablist: the filtered content is an Accordion, not tabpanels, and
+            there's no roving-tabindex/arrow-key tab behaviour to back that up. */}
+        <div role="group" aria-label="Filter by topic" className="flex flex-wrap gap-1.5">
           {[{ key: 'all' as const, label: 'All' }, ...FAQ_CATEGORIES].map((c) => (
             <button
               key={c.key}
               type="button"
-              role="tab"
-              aria-selected={category === c.key}
+              aria-pressed={category === c.key}
               onClick={() => setCategory(c.key)}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                 category === c.key

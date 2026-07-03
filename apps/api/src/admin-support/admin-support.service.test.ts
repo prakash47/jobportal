@@ -161,10 +161,13 @@ describe('AdminSupportService', () => {
       expect(m.supportTicket.update.mock.calls[0]?.[0].data).toEqual({ status: 'IN_PROGRESS' });
     });
 
-    it('does NOT change status when already IN_PROGRESS', async () => {
+    it('bumps updatedAt without a status change when already IN_PROGRESS', async () => {
       m.supportTicket.findUnique.mockResolvedValue({ id: 1, userId: 5, subject: 'Help', status: 'IN_PROGRESS' });
       await service.staffReply(7, 1, { body: 'update' });
-      expect(m.supportTicket.update).not.toHaveBeenCalled();
+      expect(m.supportTicket.update).toHaveBeenCalledOnce();
+      const data = m.supportTicket.update.mock.calls[0]?.[0].data;
+      expect(data.status).toBeUndefined();
+      expect(data.updatedAt).toBeInstanceOf(Date);
     });
 
     it('notifies the owner with kind reply', async () => {

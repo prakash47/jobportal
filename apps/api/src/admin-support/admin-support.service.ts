@@ -155,12 +155,13 @@ export class AdminSupportService {
       const created = await tx.supportTicketMessage.create({
         data: { ticketId, authorId: adminUserId, fromSupport: true, body: input.body },
       });
-      if (engage) {
-        await tx.supportTicket.update({
-          where: { id: ticketId },
-          data: { status: 'IN_PROGRESS' },
-        });
-      }
+      // Always touch the parent so updatedAt tracks the latest activity (the
+      // recruiter's "Last update" column reads it). Engaging also flips status;
+      // otherwise just bump updatedAt.
+      await tx.supportTicket.update({
+        where: { id: ticketId },
+        data: engage ? { status: 'IN_PROGRESS' } : { updatedAt: new Date() },
+      });
       return created;
     });
 
