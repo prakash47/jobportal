@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh Mistry | `feature/job-search-srp-redesign` | **Job-search SRP redesign** (`/jobs` + `[...path]` SEO SRPs): shared site shell (reuse home `SiteHeader`/`SiteFooter`) on all search pages + **signed-in user menu** in the header; 3-column `SrpShell` layout (filters · results · rail); redesigned `JobCard` (+`CompanyLogo`, real city names, snippet, `formatSalaryLpa`); new `SrpRail` (job-alert CTA + roles at other companies). Components: `srp/{SrpShell,JobCard,SrpRail,FilterSidebar,Filters}`, `components/shell/*`, `home/{SiteHeader,HeaderAuthActions}`, `(seo-jobs)/layout`, `[...path]` handlers. | `apps/web` only. Append-only: `components/srp/index.ts`, `components/header/index.ts`, possibly `packages/ui/src/icons.ts`. **No schema / migration / flags / theme-token / types locks.** | 2026-07-03 |
 
 ---
 
