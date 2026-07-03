@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Logo } from '../brand/Logo';
+import { getHeaderUser } from '../../lib/auth/header-user';
 
 const RECRUITER_URL = process.env.NEXT_PUBLIC_RECRUITER_URL ?? 'http://localhost:3001';
 
@@ -9,35 +10,50 @@ interface FooterLink {
   external?: boolean;
 }
 
-const COLUMNS: Array<{ title: string; links: FooterLink[] }> = [
-  {
-    title: 'Discover',
-    links: [
-      { label: 'Browse jobs', href: '/jobs' },
-      { label: 'Companies', href: '/companies' },
-      { label: 'Career advice', href: '/career-advice' },
-      { label: 'Job alerts', href: '/alerts' },
-    ],
-  },
-  {
-    title: 'Account',
-    links: [
-      { label: 'Sign in', href: '/login' },
-      { label: 'Create account', href: '/register' },
-      { label: 'Profile', href: '/profile' },
-      { label: 'My applications', href: '/applications' },
-    ],
-  },
-  {
-    title: 'For recruiters',
-    links: [
-      { label: 'Hire on Career Queue', href: `${RECRUITER_URL}/register`, external: true },
-      { label: 'Recruiter sign in', href: `${RECRUITER_URL}/login`, external: true },
-    ],
-  },
-];
+// The Account column adapts to auth: a signed-in seeker never sees "Sign in /
+// Create account" (they'd just bounce to /profile) — they get their dashboard
+// destinations instead.
+function columnsFor(isSeeker: boolean): Array<{ title: string; links: FooterLink[] }> {
+  return [
+    {
+      title: 'Discover',
+      links: [
+        { label: 'Browse jobs', href: '/jobs' },
+        { label: 'Companies', href: '/companies' },
+        { label: 'Career advice', href: '/career-advice' },
+        { label: 'Job alerts', href: '/alerts' },
+      ],
+    },
+    {
+      title: 'Account',
+      links: isSeeker
+        ? [
+            { label: 'Dashboard', href: '/profile' },
+            { label: 'My applications', href: '/applications' },
+            { label: 'Saved jobs', href: '/saved-jobs' },
+            { label: 'Notifications', href: '/settings/notifications' },
+          ]
+        : [
+            { label: 'Sign in', href: '/login' },
+            { label: 'Create account', href: '/register' },
+          ],
+    },
+    {
+      title: 'For recruiters',
+      links: [
+        { label: 'Hire on Career Queue', href: `${RECRUITER_URL}/register`, external: true },
+        { label: 'Recruiter sign in', href: `${RECRUITER_URL}/login`, external: true },
+      ],
+    },
+  ];
+}
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const user = await getHeaderUser();
+  const isSeeker = user?.role === 'CANDIDATE';
+  const columns = columnsFor(isSeeker);
+  const brandHref = isSeeker ? '/profile' : '/';
+
   return (
     <footer className="bg-[var(--color-primary-700)]">
       {/* Page closes on a single brand-gradient hairline. */}
@@ -45,7 +61,11 @@ export function SiteFooter() {
       <div className="mx-auto w-full max-w-[var(--container-max)] px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-4">
           <div className="col-span-2 sm:col-span-3 lg:col-span-1">
-            <Link href="/" aria-label="Career Queue — home" className="inline-flex items-center">
+            <Link
+              href={brandHref}
+              aria-label={isSeeker ? 'Career Queue — dashboard' : 'Career Queue — home'}
+              className="inline-flex items-center"
+            >
               <Logo variant="lockup" onDark className="h-12 w-auto" />
             </Link>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-[var(--color-primary-200)]">
@@ -53,7 +73,7 @@ export function SiteFooter() {
             </p>
           </div>
 
-          {COLUMNS.map((col) => (
+          {columns.map((col) => (
             <div key={col.title}>
               <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--color-primary-300)]">
                 {col.title}
