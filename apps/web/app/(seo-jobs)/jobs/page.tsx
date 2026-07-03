@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { prisma } from '@jobportal/db';
 import { searchJobs } from '@jobportal/search';
-import { SrpShell } from '../../../components/srp';
+import { SrpShell } from '../../../components/srp/SrpShell';
 import { homeOnly, loadSrpUserContext, parseSrpSearchParams } from '../../../lib/srp';
 import type { ItemListEntry } from '../../../lib/seo/json-ld';
 
@@ -47,6 +47,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
     <SrpShell
       basePath="/jobs"
       pageTitle={title}
+      searchQuery={params.q}
       resultCount={results.total}
       results={results}
       page={page}

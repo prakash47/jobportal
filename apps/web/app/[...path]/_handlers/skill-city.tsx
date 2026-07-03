@@ -13,7 +13,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { prisma } from '@jobportal/db';
 import { searchJobs } from '@jobportal/search';
-import { SrpShell } from '../../../components/srp';
+import { SrpShell } from '../../../components/srp/SrpShell';
 import {
   loadSrpUserContext,
   parseSrpSearchParams,
@@ -115,6 +115,7 @@ export default async function SkillCityJobsPage({ params, searchParams }: PagePr
     <SrpShell
       basePath={basePath}
       pageTitle={title}
+      searchQuery={queryParams.q}
       resultCount={results.total}
       results={results}
       page={page}

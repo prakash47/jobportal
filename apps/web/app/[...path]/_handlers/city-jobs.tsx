@@ -8,7 +8,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { prisma } from '@jobportal/db';
 import { searchJobs } from '@jobportal/search';
-import { SrpShell } from '../../../components/srp';
+import { SrpShell } from '../../../components/srp/SrpShell';
 import { cityBreadcrumb, loadSrpUserContext, parseSrpSearchParams } from '../../../lib/srp';
 import { buildMultiCitySlug, parseMultiCitySlug } from '../../../lib/url/slug';
 import type { ItemListEntry } from '../../../lib/seo/json-ld';
@@ -94,6 +94,7 @@ export default async function CityJobsPage({ params, searchParams }: PageProps) 
     <SrpShell
       basePath={basePath}
       pageTitle={title}
+      searchQuery={queryParams.q}
       resultCount={results.total}
       results={results}
       page={page}
