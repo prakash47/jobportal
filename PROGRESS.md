@@ -10,7 +10,7 @@
 
 ---
 
-## Snapshot — 2026-07-02
+## Snapshot — 2026-07-03
 
 - **Current phase**: Phase 1 — Freemium MVP (CLAUDE.md §13), complete. Active work is **post-Phase-1 recruiter + job-seeker UX**: the seeker dashboard redesign (PR #47, on `develop`), recruiter **Company Verification (KYC)**, recruiter **Notification settings + bell**, recruiter **Settings menu + Change Password**, recruiter **Users / Team management**, and now recruiter **Plans & Billing** (merged below — the first monetization surface to ship, built-but-flag-OFF per CLAUDE.md §0).
 - **Phase 1 progress**: **18 of 18** build-order items merged. **Phase 1 is complete.**
@@ -51,6 +51,24 @@
 ## PR log
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
+
+### `feature/job-search-srp-redesign` · 2026-07-03
+
+Full **redesign of the job-search results page** `/jobs` and all `[...path]` SEO landing SRPs (`/[skill]-jobs`, `/jobs-in-[city]`, `/[skill]-jobs-in-[city]`) — SRS §4.1. CLI merge to `develop` (`--no-ff`). `apps/web` only — **no schema, no migration, no flags, no shared-surface locks** (append-only barrel edits + a deleted stub layout).
+
+**What shipped:**
+- **Shared site shell on every search page** (`components/shell/SiteShell`, reusing the homepage `SiteHeader`/`SiteFooter`): the old 26-line SRP stub header (text wordmark + search, no footer) is gone — `/jobs` and the SEO SRPs now get the real logo, nav, frosted-on-scroll header, and the navy footer. `SrpShell` wraps its body in `SiteShell`; the `(seo-jobs)/layout.tsx` stub was deleted.
+- **Signed-in user menu in the header** — `HeaderAuthActions` now resolves the session **client-side** (`GET /auth/me`, so the header adds no server cookie read and can't force a page dynamic) and renders a `UserMenu` (avatar + Popover: Dashboard, Saved jobs, Applications, Job alerts, Settings, Sign out) when authed, falling back to Sign in/Register when anon. `MobileMenu` gained the matching authed variant. Applies site-wide (home too).
+- **3-column layout** (`xl:grid-cols-[248px_minmax(0,1fr)_320px]`, sticky rails): **left** filters (a Dialog sheet below `lg`), **center** results, **right** the new `SrpRail`. Degrades to 2-col at `lg`, single column with a filter sheet on mobile. Added a prominent search toolbar (prefilled with the current query), a sort control, and removable `ActiveFilterChips` (with "Clear all"; `q` preserved).
+- **Redesigned `JobCard`** — company logo via `CompanyLogo` (monogram fallback), **real display city names** (was a raw slug), a description snippet, icon-led meta, skills footer + posted-age, group-hover title. Logos + city names are resolved once in `SrpShell` via two batched Prisma lookups keyed by the visible hits (no per-card query). Consolidated the three divergent salary/experience/posted formatters onto `lib/job/format` (new `formatExperienceMonths` + `postedAgo`; the card now uses `formatSalaryLpa`), fixing the old `100_000_00` salary divisor.
+- **`SrpRail`** — a "Create job alert for this search" CTA + "Roles at other companies" (one posting per company for variety, seeded from the visible results' skills, page jobs excluded; `try/catch` around the ES call for local-dev resilience).
+- **Fixes along the way**: the 768–1023px **filter dead-zone** (the mobile filter trigger was `md:hidden` while the sidebar was `hidden lg:block` — aligned the trigger to `lg:hidden`); filter panel polish (rotating chevron, sensible collapse defaults, clean last divider). `SrpShell` (now async + Prisma) was deep-imported out of the client-mixed `components/srp` barrel (PR #33 precedent).
+
+**Adversarial multi-agent review** (4 dimensions — correctness/data, auth/session/security, a11y/responsive, isolation/SSR/perf — each finding verified by 3 diverse refuters): **3 confirmed, all fixed, 0 dismissed.** (HIGH) header `signOut()` redirected as signed-out even when `POST /auth/logout` failed — auth cookies are HttpOnly so the session stayed live behind a signed-out UI; now only redirects on `res.ok`. (LOW a11y) the rail's "Get job alerts" title was a `<div>` → promoted to `<h2>`. (LOW a11y, pre-existing) the "Hire on Career Queue" CTA text dropped to 4.25:1 on its `accent-600` hover → deepened to `primary-800` (both states clear WCAG AA).
+
+**Gate (integrated state, develop unchanged since branch):** workspace typecheck **11/11** · tests **181 web + packages** green (unchanged) · `pnpm build` **4/4** apps. Browser-verified against the running stack: 3-column desktop (`248/520/320`), sticky rails, real city names + logos, alert CTA + 4 other-company roles; anon **and** signed-in header (throwaway seeker → avatar menu + all links + sign-out); mobile 375px single-column, zero horizontal overflow; SEO landing `/react-jobs` (skill filter correctly hidden); zero console warnings. Throwaway QA user deleted, no demo mutations.
+
+**Deferred / follow-ups:** the header could resolve auth **server-side** now that these pages are already dynamic (the root layout reads cookies/headers) — flash-free + drops the per-load `/auth/me` request (clean refinement; the client approach shipped for uniformity + low risk). The employment-type/work-mode filters remain non-functional (not in the ES index — needs a reindex; kept collapsed with the honest note); `emp`/`mode` chips render if set but don't filter. The same `signOut()` "redirect regardless" pattern still exists in the dashboard's `DashboardChrome` (out of scope — a candidate fast-follow).
 
 ### `feature/job-detail-layout` · 2026-07-02
 
