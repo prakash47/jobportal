@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { prisma, type Prisma } from '@jobportal/db';
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { requireUser } from '../../../lib/auth/require-user';
+import { PageHeader } from '../../../components/dashboard/PageHeader';
+import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { AlertForm, SendTestButton, type Frequency } from '../../../components/alerts';
 
 interface PageProps {
@@ -39,29 +41,29 @@ export default async function EditAlertPage({ params }: PageProps) {
   const query = (alert.query ?? {}) as Prisma.JsonObject;
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-            Edit alert
-          </h1>
-          <p className="mt-1 text-sm text-[var(--color-fg-muted)]">{alert.name}</p>
-        </div>
-        {/* Layer 3 of the killswitch enforcement: hide the test button when the
-            killswitch is ON. The API independently rejects the call (Layer 2). */}
-        {!killswitchOn && <SendTestButton id={alert.id} />}
-      </header>
-      <AlertForm
-        initial={{
-          id: alert.id,
-          name: alert.name,
-          query: query as never,
-          frequency,
-          isActive: alert.isActive,
-        }}
-        skillCatalogue={skills}
-        cityCatalogue={cities}
+    <div className="max-w-3xl space-y-6">
+      <PageHeader
+        title="Edit alert"
+        description={alert.name}
+        backHref="/alerts"
+        backLabel="Job alerts"
+        // Layer 3 of the killswitch enforcement: hide the test button when the
+        // killswitch is ON. The API independently rejects the call (Layer 2).
+        {...(!killswitchOn ? { action: <SendTestButton id={alert.id} /> } : {})}
       />
+      <ContentCard className="p-5 sm:p-6">
+        <AlertForm
+          initial={{
+            id: alert.id,
+            name: alert.name,
+            query: query as never,
+            frequency,
+            isActive: alert.isActive,
+          }}
+          skillCatalogue={skills}
+          cityCatalogue={cities}
+        />
+      </ContentCard>
     </div>
   );
 }

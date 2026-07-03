@@ -103,7 +103,7 @@ export function SkillsManager({
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 border-t border-[var(--color-border)] pt-6">
         <Button onClick={save} loading={busy}>
           Save skills
         </Button>

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { requireUser } from '../../../lib/auth/require-user';
 import { readPreferences } from '../../../lib/notifications/preferences';
+import { PageHeader } from '../../../components/dashboard/PageHeader';
+import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { NotificationPreferencesForm } from '../../../components/settings/NotificationPreferencesForm';
 
 // SRS §4.13.4 — settings page is private; never indexed.
@@ -33,16 +35,11 @@ export default async function NotificationSettingsPage({ searchParams }: PagePro
   }
 
   return (
-    <div className="max-w-2xl space-y-8">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-          Notification preferences
-        </h1>
-        <p className="text-sm text-[var(--color-fg-muted)]">
-          Choose which emails you want from Career Queue. Account-related emails
-          (verification, password reset, payment receipts) are always sent.
-        </p>
-      </header>
+    <div className="max-w-3xl space-y-6">
+      <PageHeader
+        title="Notification preferences"
+        description="Choose which emails you want from Career Queue. Account-related emails (verification, password reset, payment receipts) are always sent."
+      />
 
       {fromUnsubscribe && (
         <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)] p-4">
@@ -53,7 +50,9 @@ export default async function NotificationSettingsPage({ searchParams }: PagePro
         </div>
       )}
 
-      <NotificationPreferencesForm initial={prefs} />
+      <ContentCard className="p-5 sm:p-6">
+        <NotificationPreferencesForm initial={prefs} />
+      </ContentCard>
     </div>
   );
 }

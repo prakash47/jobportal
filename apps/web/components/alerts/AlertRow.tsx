@@ -24,7 +24,7 @@ const FREQUENCY_LABEL: Record<string, string> = {
 
 export function AlertRow({ id, name, frequency, isActive, lastSentAt }: AlertRowProps) {
   return (
-    <div className="flex items-center justify-between gap-6 border-b border-[var(--color-border)] py-4 last:border-b-0">
+    <div className="flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-[var(--color-bg)] sm:flex-row sm:items-center sm:gap-6 sm:px-5">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <Link
@@ -37,8 +37,10 @@ export function AlertRow({ id, name, frequency, isActive, lastSentAt }: AlertRow
         </div>
         <p className="mt-0.5 text-sm text-[var(--color-fg-muted)]">
           {FREQUENCY_LABEL[frequency] ?? frequency}
-          <span className="mx-2 text-[var(--color-fg-subtle)]">·</span>
-          <span className="text-xs text-[var(--color-fg-subtle)]">Last sent {fmt(lastSentAt)}</span>
+          <span className="mx-2" aria-hidden="true">
+            ·
+          </span>
+          <span className="text-xs">Last sent {fmt(lastSentAt)}</span>
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">

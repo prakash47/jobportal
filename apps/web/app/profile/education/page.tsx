@@ -1,5 +1,7 @@
 import { prisma } from '@jobportal/db';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { PageHeader } from '../../../components/dashboard/PageHeader';
+import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { EducationOnboardingForm } from '../../../components/profile/EducationOnboardingForm';
 import { CLASS12_DEGREE } from '../../../components/onboarding/education-constants';
 
@@ -28,37 +30,34 @@ export default async function EducationPage() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Education</h1>
-        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          Add your most recent degree and Class 12.
-        </p>
-      </header>
+    <div className="max-w-3xl space-y-6">
+      <PageHeader title="Education" description="Add your most recent degree and Class 12." />
 
-      <EducationOnboardingForm
-        currentYear={currentYear}
-        degree={{
-          id: degreeRow?.id ?? null,
-          institute: degreeRow?.institute ?? '',
-          degree: degreeRow?.degree ?? '',
-          fieldOfStudy: degreeRow?.fieldOfStudy ?? '',
-          startYear: degreeRow?.startYear != null ? String(degreeRow.startYear) : '',
-          endYear: degreeRow?.endYear != null ? String(degreeRow.endYear) : '',
-          grade: degreeRow?.grade ?? '',
-          pursuing: degreeRow?.endYear === null,
-        }}
-        class12={{
-          id: class12Row?.id ?? null,
-          institute: class12Row?.institute ?? '',
-          degree: '',
-          fieldOfStudy: class12Row?.fieldOfStudy ?? '',
-          startYear: class12Row?.startYear != null ? String(class12Row.startYear) : '',
-          endYear: class12Row?.endYear != null ? String(class12Row.endYear) : '',
-          grade: '',
-          pursuing: class12Row?.endYear === null,
-        }}
-      />
+      <ContentCard className="p-5 sm:p-6">
+        <EducationOnboardingForm
+          currentYear={currentYear}
+          degree={{
+            id: degreeRow?.id ?? null,
+            institute: degreeRow?.institute ?? '',
+            degree: degreeRow?.degree ?? '',
+            fieldOfStudy: degreeRow?.fieldOfStudy ?? '',
+            startYear: degreeRow?.startYear != null ? String(degreeRow.startYear) : '',
+            endYear: degreeRow?.endYear != null ? String(degreeRow.endYear) : '',
+            grade: degreeRow?.grade ?? '',
+            pursuing: degreeRow?.endYear === null,
+          }}
+          class12={{
+            id: class12Row?.id ?? null,
+            institute: class12Row?.institute ?? '',
+            degree: '',
+            fieldOfStudy: class12Row?.fieldOfStudy ?? '',
+            startYear: class12Row?.startYear != null ? String(class12Row.startYear) : '',
+            endYear: class12Row?.endYear != null ? String(class12Row.endYear) : '',
+            grade: '',
+            pursuing: class12Row?.endYear === null,
+          }}
+        />
+      </ContentCard>
     </div>
   );
 }

@@ -5,8 +5,10 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@jobportal/ui';
 import { STATUS_LABELS } from './StatusPill';
 
-// Pill-row chips at the top of the dashboard. URL-driven (?status=...) so
-// shareable links work and back/forward navigation respects the filter.
+// Status filter chips. URL-driven (?status=...) so shareable links work and
+// back/forward navigation respects the filter. One horizontal scrolling row —
+// never wraps into a chip blob on mobile. Counts come from the page's groupBy
+// so each chip shows how many applications sit in that state.
 
 const FILTERS = [
   { value: 'ALL', label: 'All' },
@@ -20,10 +22,14 @@ const FILTERS = [
   { value: 'WITHDRAWN', label: STATUS_LABELS.WITHDRAWN },
 ] as const;
 
-export function StatusFilter() {
+export function StatusFilter({ counts }: { counts: Record<string, number> }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const current = searchParams.get('status') ?? 'ALL';
+  // Normalize unknown/hand-edited ?status= values to 'ALL', mirroring the
+  // server's readStatus fallback — otherwise no chip would show as active
+  // while the server renders the unfiltered list.
+  const raw = searchParams.get('status');
+  const current = raw && FILTERS.some((f) => f.value === raw) ? raw : 'ALL';
 
   function buildHref(value: string): string {
     const params = new URLSearchParams(searchParams.toString());
@@ -35,26 +41,38 @@ export function StatusFilter() {
   }
 
   return (
-    <div role="tablist" aria-label="Filter by status" className="flex flex-wrap gap-1.5">
-      {FILTERS.map((f) => {
-        const active = current === f.value;
-        return (
-          <Link
-            key={f.value}
-            href={buildHref(f.value)}
-            role="tab"
-            aria-selected={active}
-            className={cn(
-              'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-              active
-                ? 'border-[var(--color-fg)] bg-[var(--color-fg)] text-[var(--color-bg)]'
-                : 'border-[var(--color-border)] text-[var(--color-fg-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-fg)]',
-            )}
-          >
-            {f.label}
-          </Link>
-        );
-      })}
+    // -mt-1/pt-1 (like the -mx-1/px-1 pair) gives the keyboard focus ring 4px
+    // of breathing room inside the scroll container so it isn't clipped.
+    <div className="scrollbar-slim -mx-1 -mt-1 overflow-x-auto px-1 pb-1 pt-1">
+      {/* Plain filter links — NOT an ARIA tablist (these navigate, they don't
+          switch in-page panels); aria-current marks the active filter. */}
+      <nav aria-label="Filter by status" className="flex w-max gap-1.5">
+        {FILTERS.map((f) => {
+          const active = current === f.value;
+          const count = counts[f.value] ?? 0;
+          // Hide zero-count statuses (except the active one and "All") so the
+          // row stays short for typical candidates.
+          if (count === 0 && !active && f.value !== 'ALL') return null;
+          return (
+            <Link
+              key={f.value}
+              href={buildHref(f.value)}
+              aria-current={active ? 'true' : undefined}
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                active
+                  ? 'border-[var(--color-primary-600)] bg-[var(--color-primary-600)] text-white'
+                  : 'border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-fg-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-fg)]',
+              )}
+            >
+              {f.label}
+              <span className={cn('tabular-nums', active ? 'text-white/75' : 'text-[var(--color-fg-muted)]')}>
+                {count}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

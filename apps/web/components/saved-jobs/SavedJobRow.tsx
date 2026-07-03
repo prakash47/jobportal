@@ -20,13 +20,13 @@ export interface SavedJobRowProps {
   appliedStatus: string | null;
 }
 
-// Linear-style dense row: 56-px height, single border, calm spacing. No card
-// shadow; the surrounding list provides the structure.
+// Linear-style dense row inside the list card. Stacks vertically under the sm
+// breakpoint so the Apply/remove actions never crush a long title.
 export function SavedJobRow({ jobId, savedAt, job, applied, appliedStatus }: SavedJobRowProps) {
   const isActive = job.status === 'ACTIVE';
 
   return (
-    <div className="flex items-center justify-between gap-6 border-b border-[var(--color-border)] py-4 last:border-b-0">
+    <div className="flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-[var(--color-bg)] sm:flex-row sm:items-center sm:gap-6 sm:px-5">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <Link
@@ -44,10 +44,10 @@ export function SavedJobRow({ jobId, savedAt, job, applied, appliedStatus }: Sav
           >
             {job.company.name}
           </Link>
-          <span className="mx-2 text-[var(--color-fg-subtle)]">·</span>
-          <span className="text-xs text-[var(--color-fg-subtle)]">
-            Saved {fmt(savedAt)}
+          <span className="mx-2" aria-hidden="true">
+            ·
           </span>
+          <span className="text-xs">Saved {fmt(savedAt)}</span>
         </p>
       </div>
 

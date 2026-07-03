@@ -1,6 +1,7 @@
 import { prisma } from '@jobportal/db';
 import { Bell, Bookmark, ClipboardList, Eye } from '@jobportal/ui/icons';
 import { readUserFromCookie } from '../../lib/auth/server-session';
+import { PageHeader } from '../../components/dashboard/PageHeader';
 import { NextSteps, StatCard, type ProfileStep } from '../../components/profile';
 // Deep import (not via the barrel): RecommendedJobs is server-only (ES client +
 // Prisma), so it must not be reachable through the client-mixed barrel.
@@ -75,15 +76,11 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-          Welcome back{firstName ? `, ${firstName}` : ''}
-        </h1>
-        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          Here&apos;s what&apos;s happening with your job search.
-        </p>
-      </header>
+    <div className="space-y-6">
+      <PageHeader
+        title={`Welcome back${firstName ? `, ${firstName}` : ''}`}
+        description="Here's what's happening with your job search."
+      />
 
       <NextSteps score={data.candidate.profileCompleteness} steps={steps} />
 
