@@ -227,6 +227,11 @@ enum ProfileAuditAction {
   BILLING_ORDER_CREATED
   BILLING_SUBSCRIPTION_ACTIVATED
   BILLING_PAYMENT_FAILED
+  // Recruiter Help & Support. Written with the reviewing ADMIN's User id when
+  // support staff moves a ticket through its lifecycle. Ticket create/reply
+  // need no audit action — the SupportTicket / SupportTicketMessage rows are
+  // the record. Never write message bodies to the diff — only ids + statuses.
+  SUPPORT_TICKET_STATUS_CHANGED
 }
 
 // SRS §4.9 — legal / organisational classification of an employer, shown on the
@@ -275,6 +280,9 @@ enum NotificationType {
   NEW_APPLICATION
   KYC_VERIFIED
   KYC_REJECTED
+  // Help & Support: support staff replied to / changed the status of one of the
+  // recruiter's tickets (linkUrl points at /support/tickets/:id).
+  SUPPORT_TICKET_UPDATED
 }
 
 // SRS §4.9 — recruiter Team / User-management in-company role (RBAC). This is
@@ -290,6 +298,30 @@ enum RecruiterRole {
   OWNER
   ADMIN
   MEMBER
+}
+
+// Recruiter Help & Support ticket lifecycle. OPEN on creation; support staff
+// moves it to IN_PROGRESS / RESOLVED from the admin console; CLOSED is terminal
+// (set by staff, or by the recruiter closing their own ticket). A recruiter
+// reply to a RESOLVED ticket reopens it to IN_PROGRESS (service-enforced).
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+// What a support ticket is about — drives admin triage. Mirrors the portal's
+// module split (account / jobs / applicants / verification / billing) plus a
+// technical bucket and a catch-all.
+enum SupportTicketCategory {
+  ACCOUNT
+  JOB_POSTING
+  APPLICANTS
+  VERIFICATION
+  BILLING
+  TECHNICAL
+  OTHER
 }
 
 // ============================================================
@@ -331,6 +363,10 @@ model User {
   recruiterNotificationPreference RecruiterNotificationPreference?
   // Recruiter billing — orders this user initiated (owner/admin on the company).
   paymentOrders                   PaymentOrder[]
+  // Help & Support — tickets this user raised; contact messages keep a loose
+  // (SetNull) link so the inbound record survives account deletion.
+  supportTickets         SupportTicket[]
+  supportContactMessages SupportContactMessage[]
 
   @@index([role])
 }
@@ -636,6 +672,9 @@ model Company {
   paymentOrders  PaymentOrder[]
   invoices       SubscriptionInvoice[]
   billingProfile CompanyBillingProfile?
+  // Help & Support — tickets raised by this company's recruiters (company kept
+  // on the ticket for admin context + a possible future team-visible list).
+  supportTickets SupportTicket[]
 
   @@index([industryId])
   @@index([headquartersCityId])
@@ -1198,4 +1237,73 @@ model UsageRecord {
   metadata   Json?
 
   @@index([userId, featureKey, occurredAt])
+}
+
+// ============================================================
+// Recruiter Help & Support (tickets + contact messages)
+// ============================================================
+
+// A tracked support issue raised by a recruiter (Help & Support → Raise a
+// ticket). Creator-scoped: the raising recruiter sees + replies to their own
+// tickets; support staff (ADMIN) work the queue in /admin/support. The initial
+// problem statement lives in `description`; the back-and-forth lives in
+// SupportTicketMessage rows.
+model SupportTicket {
+  id          Int                   @id @default(autoincrement())
+  userId      Int
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Company kept for admin context (which employer is asking) — the ticket
+  // itself stays creator-scoped, mirroring "user-owned rows" everywhere else.
+  companyId   Int
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  subject     String
+  description String
+  category    SupportTicketCategory
+  status      SupportTicketStatus   @default(OPEN)
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  messages SupportTicketMessage[]
+
+  // "My tickets" list: WHERE userId = ? ORDER BY createdAt DESC.
+  @@index([userId, createdAt(sort: Desc)])
+  // Admin queue: filter by status, newest first.
+  @@index([status, createdAt(sort: Desc)])
+  @@index([companyId])
+}
+
+// One message in a ticket's thread. authorId is a loose User id (no FK — same
+// pattern as CompanyKyc.reviewedById): the raising recruiter for their own
+// replies, the admin's id when fromSupport is true. Bodies are user content —
+// never copied into audit diffs or logs.
+model SupportTicketMessage {
+  id          Int           @id @default(autoincrement())
+  ticketId    Int
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId    Int
+  fromSupport Boolean       @default(false)
+  body        String
+  createdAt   DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+// A one-off "Contact Us" submission (Help & Support → Contact us). The durable
+// record — the ops-inbox email is best-effort fire-and-log on top. userId is
+// the signed-in recruiter, SetNull so the inbound record outlives the account;
+// name/email are the submitted form values (prefilled from the session but
+// editable).
+model SupportContactMessage {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name      String
+  email     String
+  subject   String
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
 }

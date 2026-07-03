@@ -7,6 +7,7 @@ import { cn } from '@jobportal/ui';
 const ITEMS = [
   { href: '/admin/feature-flags', label: 'Feature flags' },
   { href: '/admin/kyc-review', label: 'KYC review' },
+  { href: '/admin/support', label: 'Support' },
   { href: '/admin/audit-log?type=feature_flag', label: 'Audit log' },
 ] as const;
 

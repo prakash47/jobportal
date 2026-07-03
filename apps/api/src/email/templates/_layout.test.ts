@@ -55,6 +55,8 @@ const ALL_KINDS: TemplateKind[] = [
   'application_status_change',
   'job_posted_confirmation',
   'payment_receipt',
+  'support_contact_message',
+  'support_ticket_opened',
 ];
 
 const fixtures = {
@@ -92,6 +94,22 @@ const fixtures = {
     companyName: 'Acme Corp',
     inviterName: 'Anjali',
     expiresInHours: 72,
+  },
+  support_contact_message: {
+    contactId: 3,
+    name: 'Ravi Kumar',
+    email: 'ravi@acme.com',
+    subject: 'Question about applicants',
+    message: 'How do I export the applicant list?',
+  },
+  support_ticket_opened: {
+    ticketId: 7,
+    subject: 'Cannot publish a job',
+    category: 'JOB_POSTING',
+    companyName: 'Acme Corp',
+    recruiterName: 'Priya Sharma',
+    recruiterEmail: 'priya@acme.com',
+    description: 'The publish button does nothing when I click it.',
   },
 } as const;
 

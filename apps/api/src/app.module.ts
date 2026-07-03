@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { AdminKycModule } from './admin-kyc/admin-kyc.module';
+import { AdminSupportModule } from './admin-support/admin-support.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { AppController } from './app.controller';
 import { ApplicationsModule } from './applications/applications.module';
@@ -21,6 +22,7 @@ import { RecruiterKycModule } from './recruiter-kyc/recruiter-kyc.module';
 import { RecruiterNotificationsModule } from './recruiter-notifications/recruiter-notifications.module';
 import { RecruiterProfileModule } from './recruiter-profile/recruiter-profile.module';
 import { RecruiterPostQuotaModule } from './recruiter-post-quota/quota.module';
+import { RecruiterSupportModule } from './recruiter-support/recruiter-support.module';
 import { RecruiterUsersModule } from './recruiter-users/recruiter-users.module';
 import { RedisModule } from './redis/redis.module';
 import { ResumeModule } from './resume/resume.module';
@@ -54,7 +56,9 @@ import { StorageModule } from './storage/storage.module';
     RecruiterNotificationsModule,
     RecruiterUsersModule,
     RecruiterBillingModule,
+    RecruiterSupportModule,
     AdminKycModule,
+    AdminSupportModule,
     JobLifecycleModule,
     NotificationsPreferencesModule,
     MediaModule,

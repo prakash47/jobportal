@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { isFlagEnabled } from '@jobportal/feature-flags';
-import { prisma, Prisma } from '@jobportal/db';
+import { prisma, Prisma, type SupportTicketStatus } from '@jobportal/db';
+
+// Human-readable status label for the bell notification body.
+const STATUS_LABEL: Record<SupportTicketStatus, string> = {
+  OPEN: 'Open',
+  IN_PROGRESS: 'In progress',
+  RESOLVED: 'Resolved',
+  CLOSED: 'Closed',
+};
 
 // Same killswitch as the read/write service — when ON, the whole feature is
 // paused, so the producer stops creating rows (a silent no-op; callers treat
@@ -71,5 +79,37 @@ export class NotificationsProducerService {
       linkUrl: '/kyc',
     }));
     await prisma.notification.createMany({ data: rows });
+  }
+
+  // Support staff replied to, or changed the status of, one of the recruiter's
+  // tickets. Notifies just the ticket owner (tickets are creator-scoped). Called
+  // fire-and-log from the admin support console — wrap in .catch(log).
+  async notifyTicketUpdate(input: {
+    recruiterUserId: number;
+    ticketId: number;
+    subject: string;
+    kind: 'reply' | 'status';
+    status?: SupportTicketStatus;
+  }): Promise<void> {
+    if (await isFlagEnabled(NOTIFICATIONS_KILLSWITCH_FLAG)) return;
+
+    const isReply = input.kind === 'reply';
+    const title = isReply
+      ? 'Support replied to your ticket'
+      : 'Your support ticket status changed';
+    const body =
+      isReply || !input.status
+        ? input.subject
+        : `"${input.subject}" is now ${STATUS_LABEL[input.status]}`;
+
+    await prisma.notification.create({
+      data: {
+        userId: input.recruiterUserId,
+        type: 'SUPPORT_TICKET_UPDATED',
+        title,
+        body,
+        linkUrl: `/support/tickets/${input.ticketId}`,
+      },
+    });
   }
 }

@@ -14,6 +14,8 @@ import { renderApplicationStatusChange } from './application-status-change';
 import { renderJobPostedConfirmation } from './job-posted-confirmation';
 import { renderPaymentReceipt } from './payment-receipt';
 import { renderRecruiterInvite } from './recruiter-invite';
+import { renderSupportContactMessage } from './support-contact-message';
+import { renderSupportTicketOpened } from './support-ticket-opened';
 
 export type { Rendered };
 
@@ -56,6 +58,22 @@ export interface RecruiterInvitePayload {
   inviterName?: string;
   expiresInHours: number;
 }
+export interface SupportContactMessagePayload {
+  contactId: number;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+}
+export interface SupportTicketOpenedPayload {
+  ticketId: number;
+  subject: string;
+  category: string;
+  companyName: string;
+  recruiterName: string;
+  recruiterEmail: string;
+  description: string;
+}
 
 export interface TemplateMap {
   registration_confirmation: RegistrationConfirmationPayload;
@@ -66,6 +84,8 @@ export interface TemplateMap {
   job_posted_confirmation: JobPostedConfirmationPayload;
   payment_receipt: PaymentReceiptPayload;
   recruiter_invite: RecruiterInvitePayload;
+  support_contact_message: SupportContactMessagePayload;
+  support_ticket_opened: SupportTicketOpenedPayload;
 }
 
 export type TemplateKind = keyof TemplateMap;
@@ -98,6 +118,12 @@ export function renderTemplate<K extends TemplateKind>(
       return renderPaymentReceipt(payload as PaymentReceiptPayload);
     case 'recruiter_invite':
       return renderRecruiterInvite(payload as RecruiterInvitePayload);
+    case 'support_contact_message':
+      return renderSupportContactMessage(
+        payload as SupportContactMessagePayload,
+      );
+    case 'support_ticket_opened':
+      return renderSupportTicketOpened(payload as SupportTicketOpenedPayload);
     default: {
       const _exhaustive: never = kind;
       throw new Error(`unknown template kind: ${String(_exhaustive)}`);
