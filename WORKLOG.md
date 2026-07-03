@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh Mistry | `feature/job-detail-site-shell` | **Job detail page gets the shared site chrome**: `/job/[slug]` + its `not-found` wrapped in `SiteShell` (navbar + footer) + `Container`, so the detail page matches the search page instead of rendering bare under the root layout. | `apps/web/app/job/[slug]/{page,not-found}.tsx` only. No schema/flags/locks. | 2026-07-03 |
 
 ---
 

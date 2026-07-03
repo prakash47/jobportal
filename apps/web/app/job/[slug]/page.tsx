@@ -3,7 +3,8 @@ import { permanentRedirect } from 'next/navigation';
 import { notFound } from 'next/navigation';
 import Script from 'next/script';
 import { prisma } from '@jobportal/db';
-import { Breadcrumbs } from '@jobportal/ui';
+import { Breadcrumbs, Container } from '@jobportal/ui';
+import { SiteShell } from '../../../components/shell/SiteShell';
 import {
   AboutCompanyCard,
   ApplyButton,
@@ -183,16 +184,17 @@ export default async function JobDetailPage({ params }: PageProps) {
   );
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
-      <Script
-        id="ldjson-jobposting"
-        type="application/ld+json"
-        strategy="afterInteractive"
-        // eslint-disable-next-line react/no-danger -- JSON.stringify output is JSON; we render inside <script>.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+    <SiteShell>
+      <Container className="py-8 sm:py-10">
+        <Script
+          id="ldjson-jobposting"
+          type="application/ld+json"
+          strategy="afterInteractive"
+          // eslint-disable-next-line react/no-danger -- JSON.stringify output is JSON; we render inside <script>.
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
 
-      <div className="space-y-6">
+        <div className="space-y-6">
         <Breadcrumbs
           items={[{ label: 'Home', href: '/' }, { label: 'Jobs', href: '/jobs' }, { label: job.title }]}
         />
@@ -253,7 +255,8 @@ export default async function JobDetailPage({ params }: PageProps) {
             />
           </aside>
         </div>
-      </div>
-    </main>
+        </div>
+      </Container>
+    </SiteShell>
   );
 }
