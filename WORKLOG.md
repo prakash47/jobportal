@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh | `feature/job-detail-layout` | Redesign `/job/[slug]` into a 3-column layout: full-width hero card (logo + title + company + meta + Apply/Save/Share), left rail (**Job overview** facts + **About-company** card), main = description, right rail = NEW **"Similar roles at other companies"** with company logos (`RelatedRoles.tsx`, replaces `SimilarJobs`). New components: `JobOverviewCard`, `AboutCompanyCard`, `RelatedRoles`. apps/web only — no schema, no flags, no locks | none | 2026-07-02 |
 
 ---
 
