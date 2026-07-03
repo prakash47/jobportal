@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ArrowRight } from '@jobportal/ui/icons';
 import { AuthModal, type AuthTab } from '../auth/AuthModal';
 import { MobileMenu } from './MobileMenu';
@@ -20,42 +20,27 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 // navigation — not even in the brief window before this island hydrates, which
 // was the cause of the intermittent "redirect to /login instead of popup" bug.
 //
-// Signed-in state resolves on the CLIENT (GET /auth/me) rather than server-side,
-// so this header stays safe inside statically revalidated pages (e.g. the ISR
-// homepage) without opting them into dynamic rendering. Anon is the pre-resolve
-// default (matches the vast majority of visitors + SSR), so there is no flash
-// for signed-out users; a signed-in visitor briefly sees the logged-out actions
-// until /auth/me returns, then the account menu swaps in.
+// Signed-in state is resolved SERVER-SIDE (SiteHeader → getHeaderUser) and passed
+// in as `user`, so the correct chrome renders on first paint. Previously this was
+// a client GET /auth/me, which flashed "Sign in / Register" for a signed-in
+// seeker (e.g. arriving on /jobs from the dashboard) — the reported bug. Rendering
+// from the prop also means the header can never disagree with the dashboard about
+// whether the user is signed in.
 export function HeaderAuthActions({
   links,
   recruiterUrl,
   googleEnabled,
+  user,
 }: {
   links: readonly NavLink[];
   recruiterUrl: string;
   googleEnabled: boolean;
+  /** Server-resolved session; absent = anon. */
+  user?: HeaderUser;
 }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<AuthTab>('login');
-  const [user, setUser] = useState<HeaderUser | null>(null);
   const [signingOut, setSigningOut] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${API_URL}/auth/me`, { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { user?: { name?: string; email?: string } } | null) => {
-        if (cancelled) return;
-        const u = data?.user;
-        if (u && typeof u.email === 'string') {
-          setUser({ name: u.name && u.name.trim() ? u.name : u.email, email: u.email });
-        }
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   function openLogin() {
     setTab('login');

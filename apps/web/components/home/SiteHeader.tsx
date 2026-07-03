@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getGoogleEnabled } from '../../lib/auth/google-status';
-import { readUserFromCookie } from '../../lib/auth/server-session';
+import { getHeaderUser } from '../../lib/auth/header-user';
 import { Logo } from '../brand/Logo';
 import { ScrollHeaderChrome } from './ScrollHeaderChrome';
 import { HeaderAuthActions } from './HeaderAuthActions';
@@ -30,14 +30,13 @@ const navLinkClass =
 const RECRUITER_URL = process.env.NEXT_PUBLIC_RECRUITER_URL ?? 'http://localhost:3001';
 
 export async function SiteHeader() {
-  const [googleEnabled, user] = await Promise.all([getGoogleEnabled(), readUserFromCookie()]);
-  // Signed-in seekers' brand link points straight at their dashboard, so the
-  // logo doesn't take the "/" → redirect → /profile hop (the home page bounces
-  // candidates to /profile). Resolved from the verified JWT claims (role only —
-  // no DB lookup); anon + recruiters/admins keep the marketing home. This read
-  // adds no dynamic penalty — SiteHeader is only used on already-dynamic pages
-  // (home + the SRP), and the root layout already reads the session per request.
-  const isSeeker = user?.role === 'CANDIDATE';
+  // Resolve the session SERVER-SIDE (same path as the dashboard) so the header
+  // renders the correct auth state on first paint — no client /auth/me fetch and
+  // no "Sign in / Register" flash for a signed-in seeker on /jobs, /job/[slug],
+  // etc. Signed-in seekers' brand link also points straight at their dashboard,
+  // so the logo skips the "/" → redirect → /profile hop.
+  const [googleEnabled, headerUser] = await Promise.all([getGoogleEnabled(), getHeaderUser()]);
+  const isSeeker = headerUser?.role === 'CANDIDATE';
   const brandHref = isSeeker ? '/profile' : '/';
 
   return (
@@ -61,7 +60,12 @@ export async function SiteHeader() {
           ))}
         </nav>
 
-        <HeaderAuthActions links={NAV_LINKS} recruiterUrl={RECRUITER_URL} googleEnabled={googleEnabled} />
+        <HeaderAuthActions
+          links={NAV_LINKS}
+          recruiterUrl={RECRUITER_URL}
+          googleEnabled={googleEnabled}
+          {...(headerUser ? { user: { name: headerUser.name, email: headerUser.email } } : {})}
+        />
       </div>
     </ScrollHeaderChrome>
   );

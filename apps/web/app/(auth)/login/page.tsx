@@ -1,12 +1,20 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { getGoogleEnabled } from '../../../lib/auth/google-status';
+import { readUserFromCookie } from '../../../lib/auth/server-session';
 import { LoginPageForm } from './LoginPageForm';
 
 // Standalone /login route — kept as the fallback path (the navbar opens the
 // auth popup). Still serves guard redirects (?next=), deep links, no-JS users,
 // and is where a failed Google sign-in bounces back (?error=google).
 export default async function LoginPage() {
+  // A signed-in seeker never needs the login form — bounce them to the dashboard
+  // (with the server-side header, they no longer see a "Sign in" button anyway,
+  // but the footer link + a typed URL still reach here).
+  const user = await readUserFromCookie();
+  if (user?.role === 'CANDIDATE') redirect('/profile');
+
   const googleEnabled = await getGoogleEnabled();
 
   return (
