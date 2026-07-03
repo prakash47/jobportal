@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { Button } from '@jobportal/ui';
+import { SiteShell } from '../../../components/shell/SiteShell';
 
 export default function JobNotFound() {
   return (
-    <main className="mx-auto flex min-h-[60vh] max-w-2xl flex-col items-center justify-center px-6 py-24 text-center">
+    <SiteShell>
+      <div className="mx-auto flex min-h-[60vh] max-w-2xl flex-col items-center justify-center px-6 py-24 text-center">
       <p className="text-sm font-medium text-[var(--color-fg-subtle)]">404</p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--color-fg)] sm:text-3xl">
         Job not found
@@ -20,6 +22,7 @@ export default function JobNotFound() {
           <Link href="/">Home</Link>
         </Button>
       </div>
-    </main>
+      </div>
+    </SiteShell>
   );
 }
