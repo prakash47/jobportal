@@ -35,27 +35,27 @@ export default async function EducationPage() {
 
       <ContentCard className="p-5 sm:p-6">
         <EducationOnboardingForm
-        currentYear={currentYear}
-        degree={{
-          id: degreeRow?.id ?? null,
-          institute: degreeRow?.institute ?? '',
-          degree: degreeRow?.degree ?? '',
-          fieldOfStudy: degreeRow?.fieldOfStudy ?? '',
-          startYear: degreeRow?.startYear != null ? String(degreeRow.startYear) : '',
-          endYear: degreeRow?.endYear != null ? String(degreeRow.endYear) : '',
-          grade: degreeRow?.grade ?? '',
-          pursuing: degreeRow?.endYear === null,
-        }}
-        class12={{
-          id: class12Row?.id ?? null,
-          institute: class12Row?.institute ?? '',
-          degree: '',
-          fieldOfStudy: class12Row?.fieldOfStudy ?? '',
-          startYear: class12Row?.startYear != null ? String(class12Row.startYear) : '',
-          endYear: class12Row?.endYear != null ? String(class12Row.endYear) : '',
-          grade: '',
-          pursuing: class12Row?.endYear === null,
-        }}
+          currentYear={currentYear}
+          degree={{
+            id: degreeRow?.id ?? null,
+            institute: degreeRow?.institute ?? '',
+            degree: degreeRow?.degree ?? '',
+            fieldOfStudy: degreeRow?.fieldOfStudy ?? '',
+            startYear: degreeRow?.startYear != null ? String(degreeRow.startYear) : '',
+            endYear: degreeRow?.endYear != null ? String(degreeRow.endYear) : '',
+            grade: degreeRow?.grade ?? '',
+            pursuing: degreeRow?.endYear === null,
+          }}
+          class12={{
+            id: class12Row?.id ?? null,
+            institute: class12Row?.institute ?? '',
+            degree: '',
+            fieldOfStudy: class12Row?.fieldOfStudy ?? '',
+            startYear: class12Row?.startYear != null ? String(class12Row.startYear) : '',
+            endYear: class12Row?.endYear != null ? String(class12Row.endYear) : '',
+            grade: '',
+            pursuing: class12Row?.endYear === null,
+          }}
         />
       </ContentCard>
     </div>
