@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh Mistry | `feature/home-redirect-signed-in-seekers` | Signed-in **seekers redirected off the marketing home** → `/profile`: server-side `redirect()` in `apps/web/app/page.tsx` gated on `role === 'CANDIDATE'` (anon + recruiters/admins keep home). | `apps/web/app/page.tsx` only. No schema/flags/locks. | 2026-07-03 |
 
 ---
 
