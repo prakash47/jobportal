@@ -69,9 +69,18 @@ export function HeaderAuthActions({
   async function signOut() {
     setSigningOut(true);
     try {
-      await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+      const res = await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+      // Only treat logout as done when the SERVER confirms it cleared the session:
+      // both auth cookies are HttpOnly, so client JS cannot clear them itself. On a
+      // failed request we must NOT show a signed-out UI over a still-live session
+      // (a real risk on shared machines) — stay put and let the user retry.
+      if (!res.ok) {
+        setSigningOut(false);
+        return;
+      }
     } catch {
-      // Redirect home regardless so the user is never stuck.
+      setSigningOut(false);
+      return;
     }
     window.location.assign('/');
   }
@@ -106,7 +115,7 @@ export function HeaderAuthActions({
               text unchanged per owner. */}
           <a
             href={recruiterUrl}
-            className="hidden h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent-500)] px-4 text-sm font-semibold text-[var(--color-primary-700)] transition-colors hover:bg-[var(--color-accent-600)] lg:inline-flex"
+            className="hidden h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent-500)] px-4 text-sm font-semibold text-[var(--color-primary-800)] transition-colors hover:bg-[var(--color-accent-600)] lg:inline-flex"
           >
             Hire on Career Queue
             <ArrowRight className="size-4" aria-hidden="true" />

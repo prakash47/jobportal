@@ -87,10 +87,10 @@ export async function SrpRail({ hits, alertHref }: SrpRailProps) {
         aria-label="Job alert"
         className="rounded-xl border border-[var(--color-accent-500)]/30 bg-[var(--color-accent-50)] p-5"
       >
-        <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary-700)]">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary-700)]">
           <Bell className="size-4" aria-hidden="true" />
           Get job alerts
-        </div>
+        </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-primary-700)]/85">
           Be the first to know when new roles match this search.
         </p>
