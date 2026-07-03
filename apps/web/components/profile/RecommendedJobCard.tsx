@@ -69,32 +69,36 @@ export function RecommendedJobCard({
   const city = cityName ?? null;
 
   return (
-    <article className="group flex flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4 transition-colors hover:border-[var(--color-border-strong)] sm:p-5">
+    <article className="group relative flex flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4 transition-colors hover:border-[var(--color-border-strong)] sm:p-5">
       <div className="flex items-start gap-3">
         <CompanyLogo companyId={job.companyId} name={job.companyName} logoUrl={logoUrl} size={44} />
         <div className="min-w-0 flex-1">
           <h3 className="text-[15px] font-semibold leading-snug tracking-tight">
+            {/* Whole-card click: the title link's ::after covers the card. Clamp
+                on an inner span so the overlay isn't clipped by overflow:hidden. */}
             <Link
               href={`/job/${job.canonicalSlug}`}
-              className="line-clamp-2 text-[var(--color-fg)] transition-colors group-hover:text-[var(--color-primary-600)]"
+              className="text-[var(--color-fg)] transition-colors after:absolute after:inset-0 after:content-[''] group-hover:text-[var(--color-primary-600)]"
             >
-              {job.title}
+              <span className="line-clamp-2">{job.title}</span>
             </Link>
           </h3>
           <Link
             href={`/company/${job.companySlug}-overview-${job.companyId}`}
-            className="mt-0.5 block truncate text-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+            className="relative z-10 mt-0.5 block truncate text-sm text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
           >
             {job.companyName}
           </Link>
         </div>
-        <JobCardSaveToggle
-          jobId={job.id}
-          jobSlug={job.canonicalSlug}
-          isAuthed={isAuthed}
-          initialSaved={initialSaved}
-          returnTo={returnTo}
-        />
+        <span className="relative z-10 shrink-0">
+          <JobCardSaveToggle
+            jobId={job.id}
+            jobSlug={job.canonicalSlug}
+            isAuthed={isAuthed}
+            initialSaved={initialSaved}
+            returnTo={returnTo}
+          />
+        </span>
       </div>
 
       {job.shortDescription ? (

@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh Mistry | `feature/clickable-job-cards` | **Whole job card clickable** (stretched-link): the title link's `::after` overlays the card so a click anywhere opens the job; company link + save/action buttons lifted with `relative z-10`; clamp/truncate moved to an inner span so the overlay isn't clipped. Applied to `srp/JobCard`, `profile/RecommendedJobCard`, `saved-jobs/SavedJobRow`, `applications/ApplicationRow` (overlay scoped to top row), `companies/CompanyOpenings`. (Rail/related/hero already whole-clickable.) | `apps/web` components only. No schema/flags/locks. | 2026-07-03 |
 
 ---
 
