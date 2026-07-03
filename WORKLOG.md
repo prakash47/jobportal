@@ -33,12 +33,12 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | rat145 | `feature/recruiter-help-support` | 2026-07-02 | The #1 conflict source. See COLLABORATION.md §3. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | rat145 | `feature/recruiter-help-support` | 2026-07-02 | New flag keys. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| rat145 | `feature/recruiter-help-support` | Recruiter **Help & Support** sidebar group: FAQ (static, searchable) + Contact Us + Raise a Ticket. Models: `SupportTicket`, `SupportTicketMessage`, `SupportContactMessage` (+ enums `SupportTicketStatus`, `SupportTicketCategory`; `NotificationType.SUPPORT_TICKET_UPDATED`; `ProfileAuditAction.SUPPORT_TICKET_STATUS_CHANGED`). API: `recruiter-support` (`POST /recruiter/support/{contact,tickets,tickets/:id/messages,tickets/:id/close}`) + `admin-support` (`/admin/support/*`). Recruiter pages `/support/{faq,contact,tickets,tickets/[id]}` + SidebarNav group; admin `/admin/support` queue (isolated subtree). Flag `killswitch.recruiter_help_support`. Email kinds `support_contact_message`, `support_ticket_opened`. | schema.prisma + 1 migration; feature-flags `keys.ts`; `seed/flags.ts` | 2026-07-02 |
+| _(none in progress)_ | | | | |
 
 ---
 
@@ -68,6 +68,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Date | Branch | What shipped |
 |---|---|---|
+| 2026-07-03 | `feature/recruiter-help-support` | Recruiter **Help & Support** (sidebar group): searchable static **FAQ** + **Contact us** form + **Raise a ticket** with a reply thread. Models `SupportTicket`/`SupportTicketMessage`/`SupportContactMessage` (+ enums `SupportTicketStatus`/`SupportTicketCategory`, `NotificationType.SUPPORT_TICKET_UPDATED`, `ProfileAuditAction.SUPPORT_TICKET_STATUS_CHANGED`). API `recruiter-support` (create/reply/close/contact, killswitch 503, cross-user 404) + `admin-support` (`/admin/support/*` under AdminGuard, NOT killswitch-gated) + 2 email kinds + `notifyTicketUpdate` bell producer. Recruiter `/support/{faq,contact,tickets,tickets/[id]}`; admin `/admin/support` queue + detail + contact-messages (isolated subtree, apps/web job-seeker untouched). Flag `killswitch.recruiter_help_support`. Adversarial review: 2 findings fixed. |
 | 2026-07-03 | `feature/clickable-job-cards` | **Whole job card is now clickable** (was title-only). Stretched-link: the title link's `::after` overlays the card/row so a click anywhere opens the job; the company link + save/apply/withdraw/expand controls are lifted with `relative z-10` so they still work; clamp/truncate moved to an inner `<span>` so the overlay isn't clipped by `overflow:hidden`. Applied to `srp/JobCard`, `profile/RecommendedJobCard`, `saved-jobs/SavedJobRow`, `applications/ApplicationRow` (overlay scoped to the top row so the expandable timeline stays free), `companies/CompanyOpenings`. Rail/related/hero cards already wrapped the whole card in one `Link`. Browser-verified via `elementFromPoint`: card body → job, save/company/expand → their own action. `apps/web` components only. |
 | 2026-07-03 | `feature/job-detail-site-shell` | **Job detail page now carries the shared site chrome**: `/job/[slug]` + its `not-found` were rendering a bare `<main>` under the root layout (no navbar/footer) while the search page got `SiteShell` — so the same detail page looked inconsistent arriving from search or the dashboard. Wrapped both in `SiteShell` + `Container` (matches the search page's header/footer + width). No new rendering penalty (the page already reads cookies for apply/save → already dynamic). Browser-verified: navbar + footer present, 3-col body intact, no overflow. `app/job/[slug]/{page,not-found}.tsx` only. |
 | 2026-07-03 | `feature/header-logo-seeker-dashboard` | Header **logo links straight to `/profile` for signed-in seekers** (no `/`→307→`/profile` hop): `SiteHeader` now reads the verified session (`Promise.all` with the Google-flag read) and sets the brand link + aria-label from `role === 'CANDIDATE'`. Role comes from the JWT claims (no DB lookup); anon + recruiters/admins keep home. No dynamic penalty (SiteHeader is only on already-dynamic home + SRP). curl-verified: authed header logo `href=/profile` (aria "dashboard"), anon `href=/` (aria "home"). Footer logo left at `/` (conventional). `SiteHeader.tsx` only. |
