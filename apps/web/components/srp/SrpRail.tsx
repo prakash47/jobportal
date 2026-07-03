@@ -17,15 +17,21 @@ function Row({ job, logoUrl, cityName }: { job: JobDoc; logoUrl: string | null; 
   const salary = formatSalaryLpa(job.salaryMin, job.salaryMax);
   const meta = [cityName, salary].filter(Boolean).join(' · ');
   return (
-    <li>
-      <Link href={`/job/${job.canonicalSlug}`} className="group flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-        <CompanyLogo companyId={job.companyId} name={job.companyName} logoUrl={logoUrl} size={36} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-[var(--color-fg)] group-hover:text-[var(--color-primary-600)] group-hover:underline">
+    <li className="py-3.5 first:pt-0 last:pb-0">
+      <Link href={`/job/${job.canonicalSlug}`} className="group flex items-start gap-3">
+        <CompanyLogo
+          companyId={job.companyId}
+          name={job.companyName}
+          logoUrl={logoUrl}
+          size={40}
+          className="mt-0.5"
+        />
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="line-clamp-2 text-sm font-medium leading-snug text-[var(--color-fg)] group-hover:text-[var(--color-primary-600)] group-hover:underline">
             {job.title}
           </p>
-          <p className="mt-0.5 truncate text-xs text-[var(--color-fg-muted)]">{job.companyName}</p>
-          {meta && <p className="mt-0.5 truncate text-xs text-[var(--color-fg-muted)]">{meta}</p>}
+          <p className="truncate text-xs font-medium text-[var(--color-fg-muted)]">{job.companyName}</p>
+          {meta && <p className="truncate text-xs text-[var(--color-fg-muted)]">{meta}</p>}
         </div>
       </Link>
     </li>
