@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh Mistry | `bugfix/rail-row-congestion` | **De-congest the "roles at other companies" rail rows** (SRP `SrpRail` + job-detail `RelatedRoles`, identical Row): `space-y-1` between the title/company/meta lines (was `mt-0.5`), row padding `py-3`→`py-3.5`, logo 36→40, titles wrap 2 lines (`line-clamp-2` + `leading-snug`) instead of truncating mid-word. | `apps/web` components only. No schema/flags/locks. | 2026-07-03 |
 
 ---
 
