@@ -5,11 +5,11 @@ import { Logo } from '../brand/Logo';
 import { ScrollHeaderChrome } from './ScrollHeaderChrome';
 import { HeaderAuthActions } from './HeaderAuthActions';
 
-// Homepage header. Desktop (lg+): logo · centred nav · Sign in (outline) +
-// Register (solid navy) + a flat "Hire" CTA. Below lg (phones AND tablets):
-// logo + hamburger drawer. The lg breakpoint avoids cramming the actions + nav
-// at ~768px; the 3-section flex (flex-1 / nav / flex-1) keeps the nav centred
-// while everything stays in flow, so the actions can never overlap the links.
+// Site header. Desktop (lg+): logo + "Career Queue" wordmark + LEFT-aligned nav
+// (Jobs / Companies / Career advice), then Sign in / Register / Hire (or the
+// account menu) pushed to the right edge. Below lg (phones AND tablets): logo +
+// hamburger drawer. HeaderAuthActions takes flex-1 + justify-end, so it always
+// sits at the right while the brand + nav cluster on the left.
 //
 // The auth actions + mobile drawer live in the HeaderAuthActions client island
 // (it owns the shared auth popup). The nav links stay server-rendered for SEO.
@@ -23,7 +23,7 @@ const NAV_LINKS: ReadonlyArray<{ label: string; href: string }> = [
 // Animated cyan underline on hover — an accent MARK (1px hairline), never
 // colored text, so it stays inside the cyan budget and the mandate.
 const navLinkClass =
-  'relative text-sm text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)] ' +
+  'relative text-[15px] font-semibold text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)] ' +
   "after:absolute after:-bottom-1 after:left-0 after:h-px after:w-0 after:bg-[var(--color-accent-500)] after:content-[''] " +
   'after:transition-[width] after:duration-[var(--duration-base)] after:ease-[var(--ease-out)] hover:after:w-full';
 
@@ -41,18 +41,19 @@ export async function SiteHeader() {
 
   return (
     <ScrollHeaderChrome>
-      <div className="mx-auto flex h-14 w-full max-w-[var(--container-max)] items-center px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-1 items-center">
-          <Link
-            href={brandHref}
-            aria-label={isSeeker ? 'Career Queue — dashboard' : 'Career Queue — home'}
-            className="flex items-center"
-          >
-            <Logo variant="mark" priority className="h-8 w-auto" />
-          </Link>
-        </div>
+      <div className="mx-auto flex h-14 w-full max-w-[var(--container-max)] items-center gap-5 px-4 sm:px-6 lg:gap-8 lg:px-8">
+        <Link
+          href={brandHref}
+          aria-label={isSeeker ? 'Career Queue — dashboard' : 'Career Queue — home'}
+          className="flex shrink-0 items-center gap-2"
+        >
+          <Logo variant="mark" priority className="h-8 w-auto" />
+          <span className="text-[15px] font-semibold tracking-tight text-[var(--color-primary-600)]">
+            Career Queue
+          </span>
+        </Link>
 
-        <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-6 lg:flex" aria-label="Primary">
           {NAV_LINKS.map((l) => (
             <Link key={l.href} href={l.href} className={navLinkClass}>
               {l.label}

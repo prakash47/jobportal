@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh Mistry | `feature/navbar-nav-and-brand` | **Navbar tweaks** (shared `SiteHeader`, all pages): moved the Jobs/Companies/Career-advice nav links to the **left** next to the logo (was centred), made them **semibold + 15px** for visibility, and added the **"Career Queue" wordmark** beside the logo mark in brand navy (`--color-primary-600`). | `apps/web/components/home/SiteHeader.tsx` only. No schema/flags/locks. | 2026-07-03 |
 
 ---
 
