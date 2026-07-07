@@ -52,6 +52,14 @@
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/navbar-nav-and-brand` · 2026-07-03
+
+**Navbar polish** (SRS §4.1) — shared `SiteHeader`, so it applies to every public page (home, `/jobs` + SEO SRPs, `/job/[slug]`, companies, career-advice). CLI merge to `develop` (`--no-ff`). Three files, `apps/web/components/home/{SiteHeader,MobileMenu,Hero}.tsx` — no schema/migration/flags/locks. Two owner requests, arrived over a few iterations:
+- **Nav links moved left + made prominent.** The primary nav (Jobs / Companies / Career advice) was centred (the old `flex-1 / nav / flex-1` layout); it now clusters on the **left** next to the brand, with the auth actions still taking `flex-1 justify-end` so they pin to the right edge. The links went from `text-sm` regular to **`text-[15px]` semibold** so they read clearly (kept `--color-fg-muted` → hover `--color-fg` + the cyan underline).
+- **"Career Queue" wordmark under the logo.** Added the portal name **stacked below the logo mark** (owner corrected an initial beside-the-logo attempt), left-aligned, in the exact brand navy **`--color-primary-600` (#192249)**, nudged right with `pl-1` to sit under the mark's glyph (the `cq-mark-color.png` is a wide 400×178 logo with a small transparent left inset). The brand was enlarged for legibility (logo `h-7`→`h-10` ≈ 40×90px, wordmark `11px`→`text-sm` 14px) and given vertical breathing room: the bar grew **`h-14`(56px) → 72px**, leaving ~6px above the logo and below the text. The two offsets that track the header height were updated in lockstep — the `MobileMenu` drawer (`top`/`max-h`) and the `Hero` `min-height` (`calc(100svh-…)`); the SRP sticky rails at `top-20` (80px) still clear the 72px bar, so they needed no change.
+
+**Verified in-browser** at 1320px (bar 72px, nav links left at 15px/600, wordmark navy 600, no overflow) and at a narrow width (stacked brand with the wordmark aligned under the mark + gaps above/below). **Gate:** typecheck **11/11** · tests **52 API + 16 web files** green · build **4/4** apps. **Follow-up:** the exact horizontal alignment of the wordmark under the mark is a `pl-1` (4px) estimate — the mark's glyph inset lives in the PNG and isn't measurable via the DOM, so the nudge can be trimmed by a pixel or two on request.
+
 ### `feature/srp-search-header` · 2026-07-03
 
 **Redesigned the job-search page (SRP) header** (SRS §4.1). CLI merge to `develop` (`--no-ff`). `apps/web` only — no schema/migration/flags/locks. The old header read as sparse/unprofessional: a bare `<h1>` + count, a narrow `max-w-2xl` search box, and a lone "Sort" control stranded on the far right in empty space (the `MobileFilterSheet` next to it is `lg:hidden`, so on desktop that row held only the sort). Rebuilt into a proper search header, shown to the owner as a `visualize` mockup first:
