@@ -24,7 +24,7 @@ const GUARANTEES = ['No ads', 'Free for job seekers', 'No spam alerts'];
 
 export function Hero({ cities }: HeroProps) {
   return (
-    <section className="relative flex min-h-[calc(100svh-3.5rem)] flex-col items-center justify-center border-b border-[var(--color-border)] px-4 py-12 sm:px-6">
+    <section className="relative flex min-h-[calc(100svh-72px)] flex-col items-center justify-center border-b border-[var(--color-border)] px-4 py-12 sm:px-6">
       {/* Background layers, clipped to the section. Kept separate from the
           content so the search dropdowns can overflow without being clipped. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
