@@ -10,7 +10,7 @@ const SEED_LINKS: Array<{ label: string; href: string }> = [
   { label: 'Java jobs', href: '/java-jobs' },
   { label: 'Jobs in Pune', href: '/jobs-in-pune' },
   { label: 'NodeJS jobs', href: '/nodejs-jobs' },
-  { label: 'Data Scientist jobs', href: '/data-scientist-jobs' },
+  { label: 'TypeScript jobs', href: '/typescript-jobs' },
 ];
 
 // FR-4.1.9 — empty results SHALL show a helpful message + related searches.

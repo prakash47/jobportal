@@ -9,7 +9,7 @@ const POPULAR: ReadonlyArray<{ label: string; href: string }> = [
   { label: 'React', href: '/react-jobs' },
   { label: 'Python', href: '/python-jobs' },
   { label: 'Node.js', href: '/nodejs-jobs' },
-  { label: 'Data Scientist', href: '/data-scientist-jobs' },
+  { label: 'Java', href: '/java-jobs' },
   { label: 'Bangalore', href: '/jobs-in-bangalore' },
   { label: 'Mumbai', href: '/jobs-in-mumbai' },
 ];

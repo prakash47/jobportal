@@ -105,11 +105,11 @@ export function SearchInput({
           </div>
           <button
             type="submit"
+            aria-label="Search jobs"
             className="m-1.5 inline-flex shrink-0 items-center gap-2 rounded-lg bg-[var(--color-primary-600)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-700)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70 sm:px-6"
           >
             <Search className="size-4 sm:hidden" aria-hidden="true" />
             <span className="hidden sm:inline">Search</span>
-            <span className="sr-only">jobs</span>
           </button>
         </div>
       ) : (
