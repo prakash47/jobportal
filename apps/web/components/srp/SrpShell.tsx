@@ -9,6 +9,7 @@ import { FilterSidebar, type FilterOption } from './FilterSidebar';
 import { SortSelect } from './SortSelect';
 import { MobileFilterSheet } from './MobileFilterSheet';
 import { ActiveFilterChips } from './ActiveFilterChips';
+import { QuickSearches } from './QuickSearches';
 import { RelatedSearches } from './RelatedSearches';
 import { SrpRail } from './SrpRail';
 import { SrpPaginationLink } from './SrpPaginationLink';
@@ -109,20 +110,28 @@ export async function SrpShell({
       <JsonLd value={breadcrumbList(breadcrumbs)} />
       <JsonLd value={itemList({ name: jsonLdName, items: jsonLdItems })} />
       <Container className="py-6 lg:py-8">
-        <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{pageTitle}</h1>
-          <p className="text-sm text-[var(--color-fg-muted)]">
-            {resultCount.toLocaleString('en-IN')} {resultCount === 1 ? 'job' : 'jobs'}
-          </p>
-        </header>
+        {/* Search header: title, a prominent search bar with an integrated
+            Search button, and one-tap popular searches. */}
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{pageTitle}</h1>
 
-        <div className="mt-5 max-w-2xl">
-          <SearchInput size="lg" {...(searchQuery ? { initialValue: searchQuery } : {})} />
+        <div className="mt-4 max-w-3xl">
+          <SearchInput size="lg" withButton {...(searchQuery ? { initialValue: searchQuery } : {})} />
         </div>
 
-        <div className="mt-5 flex items-center gap-3">
-          <MobileFilterSheet>{filters}</MobileFilterSheet>
-          <div className="ml-auto shrink-0">
+        <QuickSearches className="mt-3.5" />
+
+        {/* Controls toolbar — result count on the left, filters/sort on the
+            right — set off from the search zone by a hairline. Balanced instead
+            of the old lone sort floating in empty space. */}
+        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[var(--color-border)] pt-4">
+          <p className="text-sm text-[var(--color-fg-muted)]">
+            <span className="font-semibold text-[var(--color-fg)]">
+              {resultCount.toLocaleString('en-IN')}
+            </span>{' '}
+            {resultCount === 1 ? 'job' : 'jobs'}
+          </p>
+          <div className="ml-auto flex items-center gap-2">
+            <MobileFilterSheet>{filters}</MobileFilterSheet>
             <SortSelect basePath={basePath} />
           </div>
         </div>
