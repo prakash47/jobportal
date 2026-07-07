@@ -15,7 +15,7 @@ interface NavLink {
 // drawer + backdrop are PORTALED to <body> — if they render inside the sticky
 // header (its own z-50 stacking context), the backdrop paints over the header
 // and dims it. At the body level the header (z-50) stays clean above the
-// backdrop (z-40), and the drawer sits flush under it (top-14). Closes on link
+// backdrop (z-40), and the drawer sits flush under it (top-[72px]). Closes on link
 // tap / backdrop / Escape; locks body scroll while open.
 //
 // Signed-out: Sign in / Register open the shared auth popup (owned by
@@ -87,7 +87,7 @@ export function MobileMenu({
               onClick={() => setOpen(false)}
               className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
             />
-            <div className="rise fixed inset-x-0 top-14 z-40 max-h-[calc(100svh-3.5rem)] overflow-y-auto border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 pb-5 pt-2 shadow-[var(--shadow-lift)]">
+            <div className="rise fixed inset-x-0 top-[72px] z-40 max-h-[calc(100svh-72px)] overflow-y-auto border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 pb-5 pt-2 shadow-[var(--shadow-lift)]">
               {user ? (
                 <div className="mb-1 flex items-center gap-3 border-b border-[var(--color-border)] px-3 pb-3 pt-2">
                   <span

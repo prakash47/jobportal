@@ -41,14 +41,14 @@ export async function SiteHeader() {
 
   return (
     <ScrollHeaderChrome>
-      <div className="mx-auto flex h-14 w-full max-w-[var(--container-max)] items-center gap-5 px-4 sm:px-6 lg:gap-8 lg:px-8">
+      <div className="mx-auto flex h-[72px] w-full max-w-[var(--container-max)] items-center gap-5 px-4 sm:px-6 lg:gap-8 lg:px-8">
         <Link
           href={brandHref}
           aria-label={isSeeker ? 'Career Queue — dashboard' : 'Career Queue — home'}
-          className="flex shrink-0 items-center gap-2"
+          className="flex shrink-0 flex-col items-start justify-center gap-1.5 leading-none"
         >
-          <Logo variant="mark" priority className="h-8 w-auto" />
-          <span className="text-[15px] font-semibold tracking-tight text-[var(--color-primary-600)]">
+          <Logo variant="mark" priority className="h-10 w-auto" />
+          <span className="pl-1 text-sm font-semibold leading-none tracking-tight text-[var(--color-primary-600)]">
             Career Queue
           </span>
         </Link>
