@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| Jayesh Mistry | `feature/srp-search-header` | **Redesign the job-search page header** (was sparse: title + bare search + lone floating sort). Prominent search bar with an integrated navy **Search button** (`SearchInput` gains opt-in `withButton`), a one-tap **popular quick-searches** chip row (new `QuickSearches`), and a balanced controls toolbar (result count left · Filters/Sort right, set off by a hairline). | `apps/web`: `components/header/SearchInput`, `components/srp/{QuickSearches (new), SrpShell}`. No schema/flags/locks. | 2026-07-03 |
 
 ---
 
