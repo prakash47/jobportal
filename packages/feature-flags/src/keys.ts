@@ -29,6 +29,15 @@ export const FLAG = {
   // Recruiter
   RECRUITER_RESDEX: 'recruiter.resdex.enabled',
   RECRUITER_BULK_MESSAGING: 'recruiter.bulk_messaging.enabled',
+  // Premium job-posting products (Post a Job → job-type selector). Both are
+  // inherently PAID (Naukri Hot Vacancy = top-of-search boost + branding + media;
+  // SMB Pack = a Featured-grade post consumed from a subscription pack + CV
+  // search). Per CLAUDE.md §0/§4 they ship OFF on Day 0: the type cards render
+  // but are locked ("upgrade") until an admin flips these ON. Free Job +
+  // Internship are always available (no flag). The trusted per-type enforcement
+  // lands with the Phase 3 API (these are the UI/product gates).
+  RECRUITER_HOT_VACANCY: 'recruiter.hot_vacancy.enabled',
+  RECRUITER_SMB_PACK: 'recruiter.smb_pack.enabled',
 
   // Experiments
   EXP_NEW_HOMEPAGE: 'experiment.new_homepage',

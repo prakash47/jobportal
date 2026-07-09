@@ -41,6 +41,12 @@ const flags: FlagSeed[] = [
   { key: 'recruiter.resdex.enabled', type: 'BOOLEAN', category: 'recruiter', uiLabel: 'ResDex candidate search' },
   { key: 'recruiter.bulk_messaging.enabled', type: 'BOOLEAN', category: 'recruiter', uiLabel: 'Bulk recruiter messaging' },
   { key: 'feature.recruiter_post_quota', type: 'TIER_GATED', category: 'recruiter', uiLabel: 'Lift recruiter post quota for paid tiers' },
+  // Premium job-posting products (Post a Job → job-type selector). Paid, so
+  // seeded OFF per CLAUDE.md §0: the Hot Vacancy / SMB Pack cards render locked
+  // ("upgrade") until an admin flips these ON. Free Job + Internship are always
+  // available (no flag).
+  { key: 'recruiter.hot_vacancy.enabled', type: 'BOOLEAN', category: 'recruiter', uiLabel: 'Sell Hot Vacancy premium job posts' },
+  { key: 'recruiter.smb_pack.enabled', type: 'BOOLEAN', category: 'recruiter', uiLabel: 'Sell SMB Pack job posts' },
 
   // Moderation
   { key: 'moderation.jobs.enabled', type: 'BOOLEAN', category: 'moderation', uiLabel: 'Route new jobs through admin moderation' },
