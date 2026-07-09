@@ -16,6 +16,8 @@ import { RecruiterPostQuotaService } from '../recruiter-post-quota/quota.service
 import type {
   CreateRecruiterJobInput,
   ListRecruiterJobsQuery,
+  ReachQuery,
+  SalaryTrendsQuery,
   UpdateRecruiterJobInput,
 } from './dto';
 
@@ -81,6 +83,71 @@ export class RecruiterJobsService {
     ]);
 
     return { hits, total, page, pageSize: PAGE_SIZE };
+  }
+
+  // Post a Job Phase 4 — Salary Trends. Benchmarks the role from our own LIVE
+  // postings: midpoint salaries of ACTIVE jobs matching the title keyword +
+  // city. Best-effort/estimate — null when there aren't enough data points.
+  async salaryTrends(
+    query: SalaryTrendsQuery,
+  ): Promise<{ count: number; minLpa: number; medianLpa: number; maxLpa: number } | null> {
+    const where: Prisma.JobWhereInput = { status: 'ACTIVE', salaryMinPaise: { not: null } };
+    if (query.cityId) where.primaryCityId = query.cityId;
+    const title = query.title?.trim();
+    if (title) {
+      // Match on the longest word (usually the role noun) to widen the sample.
+      const keyword = title.split(/\s+/).sort((a, b) => b.length - a.length)[0] ?? title;
+      if (keyword.length >= 3) where.title = { contains: keyword, mode: 'insensitive' };
+    }
+
+    const rows = await prisma.job.findMany({
+      where,
+      select: { salaryMinPaise: true, salaryMaxPaise: true },
+      take: 500,
+    });
+    if (rows.length < 3) return null; // not enough to be meaningful
+
+    const mids = rows
+      .map((r) => {
+        const min = r.salaryMinPaise ?? 0;
+        const max = r.salaryMaxPaise ?? min;
+        return (min + max) / 2;
+      })
+      .sort((a, b) => a - b);
+    const toLpa = (paise: number): number => Math.round((paise / 100_000 / 100) * 10) / 10;
+    const median = mids[Math.floor(mids.length / 2)] ?? 0;
+    return {
+      count: rows.length,
+      minLpa: toLpa(mids[0] ?? 0),
+      medianLpa: toLpa(median),
+      maxLpa: toLpa(mids[mids.length - 1] ?? 0),
+    };
+  }
+
+  // Post a Job Phase 4 — Reach Meter. Estimates matching candidates from our own
+  // candidate pool by overlapping skills + preferred city (+ min experience).
+  // Returns 0 until at least skills or a city are provided (don't advertise the
+  // whole pool as "reach").
+  async reach(query: ReachQuery): Promise<{ count: number }> {
+    const skillIds = (query.skillIds ?? '')
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => Number.isInteger(n) && n > 0);
+
+    if (!skillIds.length && !query.cityId) return { count: 0 };
+
+    const where: Prisma.CandidateWhereInput = {};
+    if (skillIds.length) where.skillIds = { hasSome: skillIds };
+    if (query.cityId) where.preferredCityIds = { has: query.cityId };
+    if (query.experienceMonths !== undefined) {
+      where.OR = [
+        { experienceMonths: { gte: query.experienceMonths } },
+        { experienceMonths: null },
+      ];
+    }
+
+    const count = await prisma.candidate.count({ where });
+    return { count };
   }
 
   async getOne(userId: number, id: number): Promise<Job> {
@@ -188,6 +255,7 @@ export class RecruiterJobsService {
             canonicalSlug: placeholderSlug,
             title: input.title,
             description: input.description,
+            descriptionMarkdown: input.descriptionMarkdown ?? null,
             shortDescription: input.shortDescription ?? null,
             companyId: ctx.companyId,
             postedById: userId,
@@ -255,6 +323,7 @@ export class RecruiterJobsService {
     const data: Prisma.JobUncheckedUpdateInput = {};
     if (input.title !== undefined) data.title = input.title;
     if (input.description !== undefined) data.description = input.description;
+    if (input.descriptionMarkdown !== undefined) data.descriptionMarkdown = input.descriptionMarkdown;
     if (input.shortDescription !== undefined) data.shortDescription = input.shortDescription;
     if (input.primaryCityId !== undefined) data.primaryCityId = input.primaryCityId;
     if (input.cityIds !== undefined) data.cityIds = input.cityIds;

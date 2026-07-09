@@ -20,6 +20,7 @@ vi.mock('@jobportal/db', () => ({
     },
     locality: { findUnique: vi.fn(), upsert: vi.fn() },
     city: { findUnique: vi.fn() },
+    candidate: { count: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -46,6 +47,7 @@ const mocked = prisma as unknown as {
   };
   locality: { findUnique: ReturnType<typeof vi.fn>; upsert: ReturnType<typeof vi.fn> };
   city: { findUnique: ReturnType<typeof vi.fn> };
+  candidate: { count: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 };
 
@@ -356,6 +358,43 @@ describe('RecruiterJobsService', () => {
       await service.list(42, { status: 'ALL' });
       const args = mocked.job.findMany.mock.calls[0]?.[0] as { where: Record<string, unknown> };
       expect(args.where).toEqual({ postedById: 42 });
+    });
+  });
+
+  describe('salaryTrends (Phase 4)', () => {
+    it('returns null when fewer than 3 matching jobs', async () => {
+      mocked.job.findMany.mockResolvedValue([{ salaryMinPaise: 1, salaryMaxPaise: 2 }]);
+      await expect(service.salaryTrends({ title: 'Engineer', cityId: 1 })).resolves.toBeNull();
+    });
+
+    it('computes min/median/max in LPA from job midpoints', async () => {
+      const L = (lpa: number) => lpa * 100_000 * 100;
+      mocked.job.findMany.mockResolvedValue([
+        { salaryMinPaise: L(10), salaryMaxPaise: L(10) },
+        { salaryMinPaise: L(20), salaryMaxPaise: L(20) },
+        { salaryMinPaise: L(30), salaryMaxPaise: L(30) },
+      ]);
+      await expect(service.salaryTrends({ title: 'Engineer' })).resolves.toEqual({
+        count: 3,
+        minLpa: 10,
+        medianLpa: 20,
+        maxLpa: 30,
+      });
+    });
+  });
+
+  describe('reach (Phase 4)', () => {
+    it('returns 0 without hitting the DB when no skills or city given', async () => {
+      await expect(service.reach({})).resolves.toEqual({ count: 0 });
+      expect(mocked.candidate.count).not.toHaveBeenCalled();
+    });
+
+    it('counts candidates by skill overlap + preferred city', async () => {
+      mocked.candidate.count.mockResolvedValue(7);
+      await expect(service.reach({ skillIds: '3,5', cityId: 1 })).resolves.toEqual({ count: 7 });
+      const where = mocked.candidate.count.mock.calls[0]?.[0]?.where as Record<string, unknown>;
+      expect(where.skillIds).toEqual({ hasSome: [3, 5] });
+      expect(where.preferredCityIds).toEqual({ has: 1 });
     });
   });
 });

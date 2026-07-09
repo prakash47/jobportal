@@ -20,6 +20,8 @@ import { RecruiterPostQuotaService } from '../recruiter-post-quota/quota.service
 import {
   CreateRecruiterJobDto,
   ListRecruiterJobsQueryDto,
+  ReachQueryDto,
+  SalaryTrendsQueryDto,
   UpdateRecruiterJobDto,
 } from './dto';
 import { RecruiterJobsService } from './recruiter-jobs.service';
@@ -44,6 +46,23 @@ export class RecruiterJobsController {
   @Get('quota')
   getQuota(@CurrentUser() user: AccessClaims) {
     return this.quota.readState(user.sub);
+  }
+
+  // Post a Job Phase 4 — live sidebar widgets. Read-only, RECRUITER-guarded by
+  // the class guard. Declared before ':id' so the literal paths don't get
+  // captured by the ParseIntPipe param route.
+  @Get('salary-trends')
+  async salaryTrends(@Query() query: unknown) {
+    const parsed = SalaryTrendsQueryDto.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return this.service.salaryTrends(parsed.data);
+  }
+
+  @Get('reach')
+  async reach(@Query() query: unknown) {
+    const parsed = ReachQueryDto.safeParse(query);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return this.service.reach(parsed.data);
   }
 
   @Get(':id')

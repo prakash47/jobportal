@@ -15,6 +15,7 @@ type Stage = 'start' | 'template' | 'type' | 'form';
 interface FetchedJob {
   title: string;
   description: string;
+  descriptionMarkdown: string | null;
   shortDescription: string | null;
   skillIds: number[];
   primaryCityId: number | null;
@@ -81,6 +82,7 @@ export function PostJobFlow({ pastJobs, availability, ...wizardProps }: PostJobF
       setInitialValues({
         title: job.title,
         description: job.description,
+        descriptionMarkdown: job.descriptionMarkdown,
         shortDescription: job.shortDescription,
         skillIds: job.skillIds ?? [],
         primaryCityId: job.primaryCityId,
