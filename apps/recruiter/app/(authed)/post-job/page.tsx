@@ -6,7 +6,7 @@ import { prisma } from '@jobportal/db';
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { Button } from '@jobportal/ui';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
-import { PostJobWizard } from '../../../components/jobs/PostJobWizard';
+import { PostJobFlow } from '../../../components/jobs/PostJobFlow';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -80,26 +80,68 @@ export default async function PostJobPage() {
     );
   }
 
-  const [skills, cities, industries, functionalAreas, quota] = await Promise.all([
-    prisma.skill.findMany({
-      select: { id: true, slug: true, name: true },
-      orderBy: { name: 'asc' },
-      take: 500,
-    }),
-    prisma.city.findMany({
-      select: { id: true, slug: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.industry.findMany({
-      select: { id: true, slug: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.functionalArea.findMany({
-      select: { id: true, slug: true, name: true },
-      orderBy: { name: 'asc' },
-    }),
-    readQuota(),
-  ]);
+  const [skills, cities, industries, functionalAreas, quota, pastJobsRaw, hotVacancyEnabled, smbEnabled] =
+    await Promise.all([
+      prisma.skill.findMany({
+        select: { id: true, slug: true, name: true },
+        orderBy: { name: 'asc' },
+        take: 500,
+      }),
+      prisma.city.findMany({
+        select: { id: true, slug: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.industry.findMany({
+        select: { id: true, slug: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.functionalArea.findMany({
+        select: { id: true, slug: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      readQuota(),
+      // The recruiter's own past jobs — the "start from a previous job"
+      // template list. Lightweight fields only; the full job is fetched on
+      // selection via GET /recruiter/jobs/:id.
+      prisma.job.findMany({
+        where: { postedById: session.sub },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          postedAt: true,
+          primaryCity: { select: { name: true } },
+        },
+        orderBy: { postedAt: 'desc' },
+        take: 100,
+      }),
+      // Paid job-type products — gated OFF on Day 0 (CLAUDE.md §0).
+      isFlagEnabled('recruiter.hot_vacancy.enabled'),
+      isFlagEnabled('recruiter.smb_pack.enabled'),
+    ]);
+
+  // Format the posted date server-side with a fixed IST zone (avoids
+  // server/client locale drift, matching the seeker dashboard pattern).
+  const dateFmt = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const pastJobs = pastJobsRaw.map((j) => ({
+    id: j.id,
+    title: j.title,
+    status: j.status,
+    cityName: j.primaryCity?.name ?? null,
+    postedLabel: dateFmt.format(j.postedAt),
+  }));
+
+  const availability = {
+    FREE: true,
+    HOT_VACANCY: hotVacancyEnabled,
+    SMB: smbEnabled,
+    INTERNSHIP: true,
+  };
 
   return (
     <div className="space-y-6">
@@ -119,12 +161,14 @@ export default async function PostJobPage() {
         )}
       </header>
 
-      <PostJobWizard
+      <PostJobFlow
         skills={skills}
         cities={cities}
         industries={industries}
         functionalAreas={functionalAreas}
         quota={quota}
+        pastJobs={pastJobs}
+        availability={availability}
       />
     </div>
   );

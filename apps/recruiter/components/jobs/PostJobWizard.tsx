@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Input, Label, RadioGroup, RadioItem, Textarea } from '@jobportal/ui';
+import type { JobType } from '../../lib/job-types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -19,12 +20,38 @@ interface QuotaState {
   upgradeAvailable: boolean;
 }
 
+// Prefill shape when starting from a template (a past job). Salary is carried in
+// paise (the API's unit) and converted to LPA for the inputs. All optional — an
+// absent key falls back to the blank/default the wizard uses for a new job.
+export interface WizardInitialValues {
+  title?: string;
+  description?: string;
+  shortDescription?: string | null;
+  skillIds?: number[];
+  primaryCityId?: number | null;
+  cityIds?: number[];
+  industryId?: number | null;
+  functionalAreaId?: number | null;
+  employmentType?: EmploymentType;
+  workMode?: WorkMode;
+  experienceMinYears?: number | null;
+  experienceMaxYears?: number | null;
+  salaryMinPaise?: number | null;
+  salaryMaxPaise?: number | null;
+}
+
 export interface PostJobWizardProps {
   skills: CatalogueEntry[];
   cities: CatalogueEntry[];
   industries: CatalogueEntry[];
   functionalAreas: CatalogueEntry[];
   quota: QuotaState | null;
+  // The selected job-type product (Phase 2 UI: drives the Internship→INTERN
+  // preset + display; not yet persisted to the API — no jobType column until
+  // Phase 3). Defaults to FREE.
+  jobType?: JobType;
+  // Prefill from a chosen template (past job). Undefined = blank new job.
+  initialValues?: WizardInitialValues | undefined;
 }
 
 type Step = 0 | 1 | 2 | 3 | 4 | 5;
@@ -45,6 +72,11 @@ function lpaToPaise(lpa: number | ''): number | null {
   return Math.round(Number(lpa) * 100_000 * 100);
 }
 
+function paiseToLpa(paise: number | null | undefined): number | '' {
+  if (paise === null || paise === undefined) return '';
+  return paise / 100_000 / 100;
+}
+
 // SRS §4.9.3 — six-step wizard. Linear-style: keyboard-driven (Enter advances,
 // Esc steps back), single column, step indicator is plain text rather than a
 // progress bar (CLAUDE.md §2 — restraint).
@@ -54,33 +86,38 @@ export function PostJobWizard({
   industries,
   functionalAreas,
   quota,
+  jobType = 'FREE',
+  initialValues,
 }: PostJobWizardProps) {
   const router = useRouter();
+  const iv = initialValues ?? {};
   const [step, setStep] = useState<Step>(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Step 1
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(iv.title ?? '');
   // Step 2
-  const [description, setDescription] = useState('');
-  const [shortDescription, setShortDescription] = useState('');
+  const [description, setDescription] = useState(iv.description ?? '');
+  const [shortDescription, setShortDescription] = useState(iv.shortDescription ?? '');
   // Step 3
-  const [skillIds, setSkillIds] = useState<Set<number>>(new Set());
+  const [skillIds, setSkillIds] = useState<Set<number>>(new Set(iv.skillIds ?? []));
   const [skillQuery, setSkillQuery] = useState('');
-  const [primaryCityId, setPrimaryCityId] = useState<number | ''>('');
-  const [cityIds, setCityIds] = useState<Set<number>>(new Set());
+  const [primaryCityId, setPrimaryCityId] = useState<number | ''>(iv.primaryCityId ?? '');
+  const [cityIds, setCityIds] = useState<Set<number>>(new Set(iv.cityIds ?? []));
   const [cityQuery, setCityQuery] = useState('');
-  const [industryId, setIndustryId] = useState<number | ''>('');
-  const [functionalAreaId, setFunctionalAreaId] = useState<number | ''>('');
+  const [industryId, setIndustryId] = useState<number | ''>(iv.industryId ?? '');
+  const [functionalAreaId, setFunctionalAreaId] = useState<number | ''>(iv.functionalAreaId ?? '');
   // Step 4
-  const [expMinYears, setExpMinYears] = useState<number | ''>('');
-  const [expMaxYears, setExpMaxYears] = useState<number | ''>('');
-  const [salaryMinLpa, setSalaryMinLpa] = useState<number | ''>('');
-  const [salaryMaxLpa, setSalaryMaxLpa] = useState<number | ''>('');
+  const [expMinYears, setExpMinYears] = useState<number | ''>(iv.experienceMinYears ?? '');
+  const [expMaxYears, setExpMaxYears] = useState<number | ''>(iv.experienceMaxYears ?? '');
+  const [salaryMinLpa, setSalaryMinLpa] = useState<number | ''>(paiseToLpa(iv.salaryMinPaise));
+  const [salaryMaxLpa, setSalaryMaxLpa] = useState<number | ''>(paiseToLpa(iv.salaryMaxPaise));
   // Step 5
-  const [employmentType, setEmploymentType] = useState<EmploymentType>('FULL_TIME');
-  const [workMode, setWorkMode] = useState<WorkMode>('ONSITE');
+  const [employmentType, setEmploymentType] = useState<EmploymentType>(
+    iv.employmentType ?? (jobType === 'INTERNSHIP' ? 'INTERN' : 'FULL_TIME'),
+  );
+  const [workMode, setWorkMode] = useState<WorkMode>(iv.workMode ?? 'ONSITE');
 
   const filteredSkills = useMemo(() => {
     const q = skillQuery.trim().toLowerCase();
