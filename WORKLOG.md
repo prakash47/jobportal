@@ -38,7 +38,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | rat145 | `feature/recruiter-post-a-job` | 2026-07-09 | Adding `killswitch.recruiter_post_job` (P1) + `recruiter.hot_vacancy`/`recruiter.smb_pack` (P2). |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| rat145 | `feature/recruiter-post-a-job` | **Post a Job** revamp (phased, recruiter-only). **P1:** new `/post-job` route (moves the existing `PostJobWizard`), sidebar "Post a Job" item below Jobs, repoint Jobs + Dashboard CTAs, `killswitch.recruiter_post_job` (L2 page 404 + L3 `create()` 503). **Later:** template picker (Indeed-style) · 4 job-type selector (Free/Internship live · Hot-Vacancy/SMB flag-gated) · rich Job Details form + migration (`JobType`/`openings`/`qualifications`/`Locality`+seed) · rich-text editor (+ 1 additive `apps/web/JobBody` tweak) · salary-trends + reach-meter. | `feature-flags/keys.ts` (P1, locked) · `schema.prisma` (P3) · `apps/web/JobBody.tsx` (P4, owner-approved) | 2026-07-09 |
 
 ---
 
