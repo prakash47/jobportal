@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const employmentType = z.enum(['FULL_TIME', 'PART_TIME', 'CONTRACTOR', 'INTERN']);
 const workMode = z.enum(['ONSITE', 'REMOTE', 'HYBRID']);
+const jobType = z.enum(['FREE', 'HOT_VACANCY', 'SMB', 'INTERNSHIP']);
 
 // SRS §4.9.3 — wizard payload. publishMode determines the final status:
 //   DRAFT → status='DRAFT' (saved, not visible, doesn't consume quota)
@@ -24,6 +25,15 @@ const baseFields = z
     experienceMinYears: z.number().int().min(0).max(60).optional(),
     experienceMaxYears: z.number().int().min(0).max(60).optional(),
     expiresAt: z.iso.datetime().optional(),
+    // Post a Job Phase 3 — rich Job Details fields.
+    jobType: jobType.optional(),
+    openings: z.number().int().min(1).max(9999).optional(),
+    qualifications: z.string().max(2000).optional(),
+    // Area/locality: either an existing id (dropdown) OR a free-typed name that
+    // the service find-or-creates as a City-scoped Locality.
+    localityId: z.number().int().positive().optional(),
+    localityName: z.string().min(1).max(120).optional(),
+    internshipDurationMonths: z.number().int().min(1).max(36).optional(),
   })
   .strict();
 

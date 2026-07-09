@@ -9,7 +9,9 @@ import { PrismaClient } from '../generated/client';
 import { seedArticles } from './seed/articles';
 import { seedCities } from './seed/cities';
 import { seedFlags } from './seed/flags';
+import { seedFunctionalAreas } from './seed/functional-areas';
 import { seedIndustries } from './seed/industries';
+import { seedLocalities } from './seed/localities';
 import { seedPlans } from './seed/plans';
 import { seedSkills } from './seed/skills';
 
@@ -30,6 +32,12 @@ async function main(): Promise<void> {
 
   console.log('[seed] cities...');
   await seedCities(prisma);
+
+  console.log('[seed] localities (city → area)...');
+  await seedLocalities(prisma);
+
+  console.log('[seed] functional areas (departments)...');
+  await seedFunctionalAreas(prisma);
 
   console.log('[seed] skills...');
   await seedSkills(prisma);

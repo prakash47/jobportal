@@ -21,8 +21,12 @@ interface FetchedJob {
   cityIds: number[];
   industryId: number | null;
   functionalAreaId: number | null;
+  localityId: number | null;
   employmentType: 'FULL_TIME' | 'PART_TIME' | 'CONTRACTOR' | 'INTERN';
   workMode: 'ONSITE' | 'REMOTE' | 'HYBRID';
+  openings: number | null;
+  qualifications: string | null;
+  internshipDurationMonths: number | null;
   experienceMinYears: number | null;
   experienceMaxYears: number | null;
   salaryMinPaise: number | null;
@@ -31,7 +35,7 @@ interface FetchedJob {
 
 type WizardPassthrough = Pick<
   PostJobWizardProps,
-  'skills' | 'cities' | 'industries' | 'functionalAreas' | 'quota'
+  'companyName' | 'skills' | 'cities' | 'localities' | 'industries' | 'functionalAreas' | 'quota'
 >;
 
 interface PostJobFlowProps extends WizardPassthrough {
@@ -83,8 +87,12 @@ export function PostJobFlow({ pastJobs, availability, ...wizardProps }: PostJobF
         cityIds: job.cityIds ?? [],
         industryId: job.industryId,
         functionalAreaId: job.functionalAreaId,
+        localityId: job.localityId,
         employmentType: job.employmentType,
         workMode: job.workMode,
+        openings: job.openings,
+        qualifications: job.qualifications,
+        internshipDurationMonths: job.internshipDurationMonths,
         experienceMinYears: job.experienceMinYears,
         experienceMaxYears: job.experienceMaxYears,
         salaryMinPaise: job.salaryMinPaise,

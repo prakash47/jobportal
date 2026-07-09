@@ -18,6 +18,8 @@ vi.mock('@jobportal/db', () => ({
       create: vi.fn(),
       update: vi.fn(),
     },
+    locality: { findUnique: vi.fn(), upsert: vi.fn() },
+    city: { findUnique: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -42,6 +44,8 @@ const mocked = prisma as unknown as {
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
+  locality: { findUnique: ReturnType<typeof vi.fn>; upsert: ReturnType<typeof vi.fn> };
+  city: { findUnique: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 };
 
@@ -208,6 +212,62 @@ describe('RecruiterJobsService', () => {
       await expect(
         service.create(42, { ...validInput, publishMode: 'DRAFT' }),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(mocked.job.create).not.toHaveBeenCalled();
+    });
+
+    // --- Phase 3 fields: jobType + locality ---------------------------------
+
+    it('persists jobType, openings, and qualifications in the create data', async () => {
+      mocked.recruiter.findUnique.mockResolvedValue({ companyId: 7, workEmailVerified: true });
+      mocked.job.create.mockResolvedValue({ id: 200, status: 'DRAFT', canonicalSlug: 'p' });
+      mocked.job.update.mockResolvedValue({ id: 200, status: 'DRAFT', canonicalSlug: 's-200' });
+
+      await service.create(42, {
+        ...validInput,
+        publishMode: 'DRAFT',
+        jobType: 'HOT_VACANCY',
+        openings: 3,
+        qualifications: 'B.Tech required',
+      });
+
+      const data = mocked.job.create.mock.calls[0]?.[0]?.data as Record<string, unknown>;
+      expect(data.jobType).toBe('HOT_VACANCY');
+      expect(data.openings).toBe(3);
+      expect(data.qualifications).toBe('B.Tech required');
+      expect(data.localityId).toBeNull();
+    });
+
+    it('localityName find-or-creates a City-scoped locality and links it', async () => {
+      mocked.recruiter.findUnique.mockResolvedValue({ companyId: 7, workEmailVerified: true });
+      mocked.city.findUnique.mockResolvedValue({ slug: 'bangalore' });
+      mocked.locality.upsert.mockResolvedValue({ id: 55 });
+      mocked.job.create.mockResolvedValue({ id: 201, status: 'DRAFT', canonicalSlug: 'p' });
+      mocked.job.update.mockResolvedValue({ id: 201, status: 'DRAFT', canonicalSlug: 's-201' });
+
+      await service.create(42, {
+        ...validInput,
+        publishMode: 'DRAFT',
+        primaryCityId: 7,
+        localityName: 'Koramangala',
+      });
+
+      expect(mocked.locality.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { slug: 'bangalore-koramangala' },
+          create: expect.objectContaining({ name: 'Koramangala', cityId: 7 }),
+        }),
+      );
+      const data = mocked.job.create.mock.calls[0]?.[0]?.data as Record<string, unknown>;
+      expect(data.localityId).toBe(55);
+    });
+
+    it('rejects a localityId that belongs to a different city (400, no row)', async () => {
+      mocked.recruiter.findUnique.mockResolvedValue({ companyId: 7, workEmailVerified: true });
+      mocked.locality.findUnique.mockResolvedValue({ id: 9, cityId: 99 });
+
+      await expect(
+        service.create(42, { ...validInput, primaryCityId: 7, localityId: 9 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
       expect(mocked.job.create).not.toHaveBeenCalled();
     });
   });
