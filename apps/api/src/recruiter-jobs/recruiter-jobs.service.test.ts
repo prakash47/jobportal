@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@jobportal/feature-flags', () => ({ isFlagEnabled: vi.fn() }));
@@ -62,11 +67,20 @@ const validInput = {
   description: 'Build the dashboard. ' + 'a'.repeat(50),
 };
 
+const MODERATION_FLAG = 'moderation.jobs.enabled';
+const POST_JOB_KILLSWITCH = 'killswitch.recruiter_post_job';
+
 describe('RecruiterJobsService', () => {
   let service: RecruiterJobsService;
+  // Key-aware flag mock: create() reads BOTH the killswitch and the moderation
+  // flag, so a positional mockResolvedValueOnce is order-fragile. Each test
+  // sets only the flags it cares about; everything else defaults to OFF.
+  let flagState: Record<string, boolean>;
 
   beforeEach(() => {
     vi.resetAllMocks();
+    flagState = {};
+    mockedFlag.mockImplementation(async (key: string) => flagState[key] === true);
     fakeQuota.consume.mockResolvedValue({});
     fakeAlertsHook.onJobIndexed.mockResolvedValue(undefined);
     fakeCachePurge.purgeJob.mockResolvedValue(undefined);
@@ -99,7 +113,7 @@ describe('RecruiterJobsService', () => {
 
     it('publish + moderation OFF → status=ACTIVE + ES sync + alerts hook + cache purge', async () => {
       mocked.recruiter.findUnique.mockResolvedValue({ companyId: 7, workEmailVerified: true });
-      mockedFlag.mockResolvedValueOnce(false); // moderation flag
+      // killswitch + moderation both default OFF
       mocked.job.create.mockResolvedValue({
         id: 100,
         title: 'Senior Frontend Engineer',
@@ -131,7 +145,7 @@ describe('RecruiterJobsService', () => {
 
     it('publish + moderation ON → status=PENDING_MODERATION + NO ES/alert/purge', async () => {
       mocked.recruiter.findUnique.mockResolvedValue({ companyId: 7, workEmailVerified: true });
-      mockedFlag.mockResolvedValueOnce(true); // moderation ON
+      flagState[MODERATION_FLAG] = true; // moderation ON (killswitch stays OFF)
       mocked.job.create.mockResolvedValue({
         id: 101,
         status: 'PENDING_MODERATION',
@@ -164,16 +178,36 @@ describe('RecruiterJobsService', () => {
       const out = await service.create(42, { ...validInput, publishMode: 'DRAFT' });
       expect(out.status).toBe('DRAFT');
       expect(fakeQuota.consume).not.toHaveBeenCalled();
-      expect(mockedFlag).not.toHaveBeenCalled(); // moderation flag never read for drafts
+      // moderation flag never read for drafts (the killswitch IS checked first)
+      expect(mockedFlag).not.toHaveBeenCalledWith(MODERATION_FLAG);
       await Promise.resolve();
       expect(mockedSync).not.toHaveBeenCalled();
     });
 
     it('quota race throws → service propagates the 429 (no row created)', async () => {
       mocked.recruiter.findUnique.mockResolvedValue({ companyId: 7, workEmailVerified: true });
-      mockedFlag.mockResolvedValueOnce(false);
       fakeQuota.consume.mockRejectedValue(new Error('429 race'));
       await expect(service.create(42, validInput)).rejects.toThrow('429 race');
+      expect(mocked.job.create).not.toHaveBeenCalled();
+    });
+
+    // --- L3 killswitch (killswitch.recruiter_post_job) ----------------------
+
+    it('killswitch ON → publish rejects 503, no quota consumed, no row created', async () => {
+      flagState[POST_JOB_KILLSWITCH] = true;
+      await expect(service.create(42, validInput)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
+      expect(mocked.recruiter.findUnique).not.toHaveBeenCalled();
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.create).not.toHaveBeenCalled();
+    });
+
+    it('killswitch ON → draft is also blocked with 503 (no row created)', async () => {
+      flagState[POST_JOB_KILLSWITCH] = true;
+      await expect(
+        service.create(42, { ...validInput, publishMode: 'DRAFT' }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(mocked.job.create).not.toHaveBeenCalled();
     });
   });

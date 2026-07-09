@@ -76,7 +76,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
           </p>
         </div>
         <Button asChild variant="primary">
-          <Link href="/jobs/new">Post a job</Link>
+          <Link href="/post-job">Post a job</Link>
         </Button>
       </header>
 

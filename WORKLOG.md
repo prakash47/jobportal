@@ -38,7 +38,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | rat145 | `feature/recruiter-post-a-job` | 2026-07-09 | Adding `killswitch.recruiter_post_job` (P1) + `recruiter.hot_vacancy`/`recruiter.smb_pack` (P2). |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building (feature + models / components / endpoints) | Shared surfaces touched | Started |
 |---|---|---|---|---|
-| _(none in progress)_ | | | | |
+| rat145 | `feature/recruiter-post-a-job` | **Post a Job** revamp (phased, recruiter-only). **P1:** new `/post-job` route (moves the existing `PostJobWizard`), sidebar "Post a Job" item below Jobs, repoint Jobs + Dashboard CTAs, `killswitch.recruiter_post_job` (L2 page 404 + L3 `create()` 503). **Later:** template picker (Indeed-style) · 4 job-type selector (Free/Internship live · Hot-Vacancy/SMB flag-gated) · rich Job Details form + migration (`JobType`/`openings`/`qualifications`/`Locality`+seed) · rich-text editor (+ 1 additive `apps/web/JobBody` tweak) · salary-trends + reach-meter. | `feature-flags/keys.ts` (P1, locked) · `schema.prisma` (P3) · `apps/web/JobBody.tsx` (P4, owner-approved) | 2026-07-09 |
 
 ---
 
@@ -68,6 +68,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Date | Branch | What shipped |
 |---|---|---|
+| 2026-07-09 | `feature/recruiter-post-a-job` (**P1**) | **Post a Job — Phase 1** (nav + route move; recruiter-only, no schema). New `/post-job` page renders the existing `PostJobWizard` (moved off `/jobs/new`, which now 307-redirects); sidebar "Post a Job" item below Jobs; Jobs-page CTA + the previously-dead Dashboard button both → `/post-job`; new `killswitch.recruiter_post_job` (seeded OFF ⇒ LIVE; L2 page 404 / L3 `create()` 503). Runtime-verified (routes, single active nav row, killswitch on/off). `apps/web`+`apps/services` byte-untouched. Branch stays **In Progress** for P2–P4. |
 | 2026-07-03 | `feature/navbar-nav-and-brand` | **Navbar polish** (shared `SiteHeader`, all pages). Moved the Jobs/Companies/Career-advice nav links to the **left** next to the logo (was centred) and made them **semibold + 15px**. Added the **"Career Queue" wordmark stacked BELOW the logo mark** (left-aligned, brand navy `--color-primary-600`, nudged right `pl-1` to line up under the mark's glyph). Enlarged the brand (logo h-7→h-10, text 11px→14px) and gave it breathing room by taking the bar **h-16→72px** (~6px above the logo + below the text); updated the two header-height-dependent offsets (`MobileMenu` drawer top/max-h + `Hero` min-height). Browser-verified (72px bar, 6px gaps, no overflow). `SiteHeader` + `MobileMenu` + `Hero`. |
 | 2026-07-03 | `feature/srp-search-header` | **Redesigned the job-search page header** (was sparse: bare title + narrow search + a lone "Sort" floating in empty space). Now: a prominent **search bar with an integrated navy Search button** (`SearchInput` gains an opt-in `withButton` segmented variant — icon on mobile, "Search" on sm+, one focus ring, `aria-label="Search jobs"`), a one-tap **"Popular" quick-searches chip row** (new `QuickSearches` → SEO landings), and a balanced controls toolbar (result count left · Filters/Sort right, hairline divider). Browser-verified desktop + mobile (button collapses to icon, chips wrap, no overflow); fixed a `/data-scientist-jobs` 404 in QuickSearches (→ Java) and the same broken link in `RelatedSearches` (→ TypeScript). `apps/web` only. |
 | 2026-07-03 | `bugfix/rail-row-congestion` | **Fixed the cramped "roles at other companies" rail rows** (SRP `SrpRail` + job-detail `RelatedRoles`). Real root cause found via in-browser geometry: row padding computed to `0px/0px` because `first:pt-0 last:pb-0` sat on the `<a>` (always the sole → first+last child of its `<li>`), zeroing every row. Moved `py-3.5 first:pt-0 last:pb-0` to the `<li>` (padding now applies), `space-y-1` between the 3 lines, logo 36→40, titles wrap 2 lines (`line-clamp-2`) instead of truncating; company name `font-medium` for a 3-tier hierarchy. Row heights ~59→73–88px. 2-agent design+a11y review: 0 bugs, applied 1 refinement. `apps/web` only. |
