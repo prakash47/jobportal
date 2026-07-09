@@ -243,7 +243,7 @@ export default async function JobDetailPage({ params }: PageProps) {
           </aside>
 
           <div className="min-w-0">
-            <JobBody description={job.description} />
+            <JobBody description={job.description} descriptionMarkdown={job.descriptionMarkdown} />
           </div>
 
           <aside className="lg:sticky lg:top-6 lg:self-start">

@@ -12,6 +12,9 @@ const baseFields = z
   .object({
     title: z.string().min(3).max(200),
     description: z.string().min(10).max(50_000),
+    // Post a Job Phase 4 — optional rich JD (Markdown). description stays the
+    // plain-text fallback used by JSON-LD/search.
+    descriptionMarkdown: z.string().max(50_000).optional(),
     shortDescription: z.string().max(280).optional(),
     primaryCityId: z.number().int().positive().optional(),
     cityIds: z.array(z.number().int().positive()).max(10).optional(),
@@ -69,3 +72,22 @@ export const ListRecruiterJobsQueryDto = z
   })
   .strict();
 export type ListRecruiterJobsQuery = z.infer<typeof ListRecruiterJobsQueryDto>;
+
+// Post a Job Phase 4 — live sidebar widgets (read-only).
+export const SalaryTrendsQueryDto = z
+  .object({
+    title: z.string().max(200).optional(),
+    cityId: z.coerce.number().int().positive().optional(),
+  })
+  .strict();
+export type SalaryTrendsQuery = z.infer<typeof SalaryTrendsQueryDto>;
+
+export const ReachQueryDto = z
+  .object({
+    cityId: z.coerce.number().int().positive().optional(),
+    // comma-separated skill ids (from the query string)
+    skillIds: z.string().max(200).optional(),
+    experienceMonths: z.coerce.number().int().min(0).max(720).optional(),
+  })
+  .strict();
+export type ReachQuery = z.infer<typeof ReachQueryDto>;

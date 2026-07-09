@@ -781,6 +781,10 @@ model Job {
   canonicalSlug      String          @unique
   title              String
   description        String
+  // Post a Job Phase 4 — rich JD as Markdown (rendered sanitized on the seeker
+  // side via the article pipeline). Nullable: existing jobs keep the plain-text
+  // `description` render, so this is zero-regression.
+  descriptionMarkdown String?
   shortDescription   String?
   companyId          Int
   company            Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)

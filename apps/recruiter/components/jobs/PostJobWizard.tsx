@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Input, Label, Textarea, cn } from '@jobportal/ui';
 import type { JobType } from '../../lib/job-types';
+import { SalaryTrendsPanel } from './SalaryTrendsPanel';
+import { ReachMeter } from './ReachMeter';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -37,6 +39,7 @@ type ExperienceLevel = 'ANY' | 'FRESHER' | 'EXPERIENCED';
 export interface WizardInitialValues {
   title?: string;
   description?: string;
+  descriptionMarkdown?: string | null;
   shortDescription?: string | null;
   skillIds?: number[];
   primaryCityId?: number | null;
@@ -78,6 +81,20 @@ function lpaToPaise(lpa: number | ''): number | null {
 function paiseToLpa(paise: number | null | undefined): number | '' {
   if (paise === null || paise === undefined) return '';
   return paise / 100_000 / 100;
+}
+
+// Plain-text fallback stored in `description` (used by JSON-LD/search/legacy
+// render) — strips the Markdown the editor produces.
+function stripMarkdown(md: string): string {
+  return md
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+    .trim();
 }
 
 // Derive the Any/Fresher/Experienced control from a prefill's numeric range.
@@ -143,9 +160,9 @@ export function PostJobWizard({
   const [salaryMinLpa, setSalaryMinLpa] = useState<number | ''>(paiseToLpa(iv.salaryMinPaise));
   const [salaryMaxLpa, setSalaryMaxLpa] = useState<number | ''>(paiseToLpa(iv.salaryMaxPaise));
 
-  // Description
+  // Description — prefer the Markdown source when prefilling from a template.
   const [shortDescription, setShortDescription] = useState(iv.shortDescription ?? '');
-  const [description, setDescription] = useState(iv.description ?? '');
+  const [description, setDescription] = useState(iv.descriptionMarkdown ?? iv.description ?? '');
 
   const cityLocalities = useMemo(
     () => (primaryCityId === '' ? [] : localities.filter((l) => l.cityId === primaryCityId)),
@@ -194,18 +211,55 @@ export function PostJobWizard({
     // EXPERIENCED keeps whatever is in the inputs (revealed below).
   }
 
+  // Minimum experience in months for the Reach Meter query.
+  const reachExpMonths =
+    expLevel === 'FRESHER'
+      ? 0
+      : expLevel === 'EXPERIENCED' && expMinYears !== ''
+        ? Number(expMinYears) * 12
+        : null;
+
+  // Insert Markdown around the current selection in the description textarea.
+  function applyMarkdown(kind: 'bold' | 'bullet' | 'heading') {
+    const ta = document.getElementById('description') as HTMLTextAreaElement | null;
+    const start = ta?.selectionStart ?? description.length;
+    const end = ta?.selectionEnd ?? description.length;
+    const val = description;
+    const selected = val.slice(start, end);
+    let next: string;
+    if (kind === 'bold') {
+      next = `${val.slice(0, start)}**${selected || 'bold text'}**${val.slice(end)}`;
+    } else if (kind === 'bullet') {
+      const bulleted = (selected || 'List item')
+        .split('\n')
+        .map((l) => `- ${l}`)
+        .join('\n');
+      next = `${val.slice(0, start)}${bulleted}${val.slice(end)}`;
+    } else {
+      const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+      next = `${val.slice(0, lineStart)}## ${val.slice(lineStart)}`;
+    }
+    setDescription(next);
+  }
+
   async function submit(publishMode: 'DRAFT' | 'PUBLISH') {
     setBusy(true);
     setError(null);
 
+    const md = description.trim();
+    const plain = stripMarkdown(md);
     const body: Record<string, unknown> = {
       publishMode,
       title: title.trim(),
-      description: description.trim(),
+      // description holds the plain-text fallback; descriptionMarkdown carries
+      // the rich source. Fall back to the raw text if stripping leaves it too
+      // short for the API's 10-char minimum.
+      description: plain.length >= 10 ? plain : md,
       jobType,
       employmentType,
       workMode,
     };
+    if (md) body['descriptionMarkdown'] = md;
     if (shortDescription.trim()) body['shortDescription'] = shortDescription.trim();
     if (functionalAreaId !== '') body['functionalAreaId'] = functionalAreaId;
     if (industryId !== '') body['industryId'] = industryId;
@@ -247,7 +301,8 @@ export function PostJobWizard({
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
+    <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="min-w-0 space-y-8">
       {/* Section: Job details */}
       <Section title="Job details">
         <Field label="Company">
@@ -519,14 +574,30 @@ export function PostJobWizard({
             maxLength={280}
           />
         </Field>
-        <Field label="Description" hint="Roles & responsibilities, required skills, perks.">
-          <Textarea
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={12}
-            placeholder={'About the role\n\nWhat the candidate will own.\n\nYou should have\n- 4+ years of…'}
-          />
+        <Field
+          label="Description"
+          hint="Roles & responsibilities, required skills, perks. Basic Markdown formatting supported."
+        >
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-1">
+              <ToolbarButton onClick={() => applyMarkdown('heading')} label="Heading">
+                Heading
+              </ToolbarButton>
+              <ToolbarButton onClick={() => applyMarkdown('bold')} label="Bold">
+                <span className="font-bold">B</span>
+              </ToolbarButton>
+              <ToolbarButton onClick={() => applyMarkdown('bullet')} label="Bulleted list">
+                • List
+              </ToolbarButton>
+            </div>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={12}
+              placeholder={'## About the role\n\nWhat the candidate will own.\n\n## You should have\n\n- 4+ years of…'}
+            />
+          </div>
         </Field>
       </Section>
 
@@ -565,7 +636,35 @@ export function PostJobWizard({
           To publish, add a department, title, description, openings, and a city.
         </p>
       )}
+      </div>
+
+      <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
+        <SalaryTrendsPanel title={title} cityId={primaryCityId} />
+        <ReachMeter skillIds={[...skillIds]} cityId={primaryCityId} experienceMonths={reachExpMonths} />
+      </aside>
     </div>
+  );
+}
+
+function ToolbarButton({
+  onClick,
+  label,
+  children,
+}: {
+  onClick: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]"
+    >
+      {children}
+    </button>
   );
 }
 
