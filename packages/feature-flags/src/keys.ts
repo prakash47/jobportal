@@ -77,6 +77,14 @@ export const FLAG = {
   // a redeploy. As a `killswitch.*` key it is auto-classified critical
   // (Slack + confirm modal).
   KILL_RECRUITER_HELP_SUPPORT: 'killswitch.recruiter_help_support',
+  // Recruiter "Post a Job" flow (the /post-job page + the POST /recruiter/jobs
+  // create action). Emergency stop for posting: when ON, the /post-job page
+  // 404s (L2) and the create endpoint rejects with 503 (L3). Job management
+  // (edit/close/reopen on the /jobs list) is deliberately NOT gated — only the
+  // posting action. Seeded enabled:false, so the feature is LIVE by default; an
+  // admin flipping this ON disables posting without a redeploy. As a
+  // `killswitch.*` key it is auto-classified critical (Slack + confirm modal).
+  KILL_RECRUITER_POST_JOB: 'killswitch.recruiter_post_job',
 } as const;
 
 export type FlagKey = (typeof FLAG)[keyof typeof FLAG];

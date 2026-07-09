@@ -10,6 +10,7 @@ import { ChevronDown } from '@jobportal/ui/icons';
 const TOP_ITEMS = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/jobs', label: 'Jobs' },
+  { href: '/post-job', label: 'Post a Job' },
   { href: '/profile', label: 'Profile' },
   { href: '/kyc', label: 'Verification' },
   { href: '/users', label: 'Users' },

@@ -1,12 +1,13 @@
+import Link from 'next/link';
 import { prisma } from '@jobportal/db';
 import { Button } from '@jobportal/ui';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
 import { VerifyWorkEmailBanner } from '../../../components/VerifyWorkEmailBanner';
 
-// Empty-state dashboard. The 'Post a job' button is intentionally disabled
-// until Task 17 wires the wizard — we want recruiters to see the path even
-// when they can't take it yet. Company identity (logo + name + KYC status) now
-// lives in the shared (authed) top bar, so it shows on every page.
+// Empty-state dashboard. The 'Post a job' button links to the dedicated
+// /post-job page (the posting flow now lives there — moved out of /jobs/new).
+// Company identity (logo + name + KYC status) lives in the shared (authed)
+// top bar, so it shows on every page.
 
 export default async function DashboardPage() {
   const session = (await readUserFromCookie())!;
@@ -38,13 +39,8 @@ export default async function DashboardPage() {
         <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
           Post your first opening and start receiving applicants.
         </p>
-        <Button
-          variant="primary"
-          disabled
-          className="mt-4"
-          title="Job posting wizard arrives in the next release"
-        >
-          Post a job
+        <Button asChild variant="primary" className="mt-4">
+          <Link href="/post-job">Post a job</Link>
         </Button>
       </div>
     </div>

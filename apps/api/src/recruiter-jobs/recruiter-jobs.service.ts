@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { prisma, Prisma, type Job, type JobStatus } from '@jobportal/db';
@@ -20,6 +21,10 @@ import type {
 
 const PAGE_SIZE = 20;
 const MODERATION_FLAG = 'moderation.jobs.enabled';
+// Killswitch (L3) for the Post-a-Job flow. Seeded OFF ⇒ posting LIVE; when an
+// admin flips it ON, create() rejects with 503 (matching the /post-job page's
+// L2 404). Only the posting action is gated — edit/close/reopen still work.
+const POST_JOB_KILLSWITCH_FLAG = 'killswitch.recruiter_post_job';
 
 // Title-only slug; final value is appended with the row id post-insert.
 function slugify(s: string): string {
@@ -101,7 +106,16 @@ export class RecruiterJobsService {
     return { companyId: recruiter.companyId };
   }
 
+  // L3 killswitch — the trust boundary for the Post-a-Job flow. Checked before
+  // any work (draft or publish) so flipping the flag ON fully stops posting.
+  private async assertPostingEnabled(): Promise<void> {
+    if (await isFlagEnabled(POST_JOB_KILLSWITCH_FLAG)) {
+      throw new ServiceUnavailableException('Job posting is temporarily unavailable');
+    }
+  }
+
   async create(userId: number, input: CreateRecruiterJobInput): Promise<Job> {
+    await this.assertPostingEnabled();
     const ctx = await this.resolveRecruiterContext(userId);
     const willPublish = input.publishMode === 'PUBLISH';
 

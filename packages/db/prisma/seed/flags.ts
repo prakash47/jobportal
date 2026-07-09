@@ -94,6 +94,12 @@ const flags: FlagSeed[] = [
   // the feature is LIVE by default; flipping it ON disables it without a
   // redeploy.
   { key: 'killswitch.recruiter_help_support', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter help & support (kill)' },
+  // Recruiter "Post a Job" flow (the /post-job page + POST /recruiter/jobs).
+  // Emergency stop: when ON the /post-job page 404s (L2) and the create
+  // endpoint rejects with 503 (L3); job management (edit/close/reopen) stays
+  // up. Seeded OFF so the feature is LIVE by default; flipping it ON disables
+  // posting without a redeploy.
+  { key: 'killswitch.recruiter_post_job', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter job posting (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {
