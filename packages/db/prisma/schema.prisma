@@ -766,6 +766,16 @@ model CompanyReview {
 // Job & related (SRS §8.2 — composite indexes mandatory)
 // ============================================================
 
+// Post a Job Phase 3 — the posting product/type. FREE + INTERNSHIP are always
+// available; HOT_VACANCY + SMB are paid (gated OFF on Day 0). Distinct from
+// EmploymentType (which stays the full/part/contract/intern axis).
+enum JobType {
+  FREE
+  HOT_VACANCY
+  SMB
+  INTERNSHIP
+}
+
 model Job {
   id                 Int             @id @default(autoincrement())
   canonicalSlug      String          @unique
@@ -780,6 +790,10 @@ model Job {
   postedBy           User?           @relation("PostedJobs", fields: [postedById], references: [id], onDelete: SetNull)
   primaryCityId      Int?
   primaryCity        City?           @relation(fields: [primaryCityId], references: [id], onDelete: SetNull)
+  // Post a Job Phase 3 — optional sub-city area/locality (City → Area selector).
+  // SetNull so pruning a locality doesn't delete jobs.
+  localityId         Int?
+  locality           Locality?       @relation(fields: [localityId], references: [id], onDelete: SetNull)
   cityIds            Int[]
   skillIds           Int[]
   industryId         Int?
@@ -791,12 +805,18 @@ model Job {
   // recruiter who skips the step still ships a sensible JSON-LD payload.
   employmentType     EmploymentType  @default(FULL_TIME)
   workMode           WorkMode        @default(ONSITE)
+  // Post a Job Phase 3 — posting product/type. Default so existing rows backfill to FREE.
+  jobType            JobType         @default(FREE)
   postedAt           DateTime        @default(now())
   expiresAt          DateTime?
   salaryMinPaise     Int?
   salaryMaxPaise     Int?
   experienceMinYears Int?
   experienceMaxYears Int?
+  // Post a Job Phase 3 — rich Job Details form fields (all additive/nullable).
+  openings           Int?
+  qualifications     String?
+  internshipDurationMonths Int?
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
@@ -987,8 +1007,24 @@ model City {
   country   String   @default("India")
   createdAt DateTime @default(now())
 
-  jobs      Job[]
-  companies Company[]
+  jobs        Job[]
+  companies   Company[]
+  localities  Locality[]
+}
+
+// Post a Job Phase 3 — sub-city area/locality, scoped to a City (the second
+// level of the City → Area location selector). Curated seed per major city.
+model Locality {
+  id        Int      @id @default(autoincrement())
+  slug      String   @unique
+  name      String
+  cityId    Int
+  city      City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  jobs Job[]
+
+  @@index([cityId])
 }
 
 model Skill {

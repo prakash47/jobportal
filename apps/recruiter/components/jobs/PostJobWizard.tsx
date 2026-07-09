@@ -1,8 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Badge, Button, Input, Label, RadioGroup, RadioItem, Textarea } from '@jobportal/ui';
+import { Badge, Button, Input, Label, Textarea, cn } from '@jobportal/ui';
 import type { JobType } from '../../lib/job-types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -13,6 +14,12 @@ interface CatalogueEntry {
   name: string;
 }
 
+export interface LocalityEntry {
+  id: number;
+  name: string;
+  cityId: number;
+}
+
 interface QuotaState {
   daily: { count: number; limit: number };
   monthly: { count: number; limit: number };
@@ -20,20 +27,28 @@ interface QuotaState {
   upgradeAvailable: boolean;
 }
 
+type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACTOR' | 'INTERN';
+type WorkMode = 'ONSITE' | 'REMOTE' | 'HYBRID';
+type ExperienceLevel = 'ANY' | 'FRESHER' | 'EXPERIENCED';
+
 // Prefill shape when starting from a template (a past job). Salary is carried in
 // paise (the API's unit) and converted to LPA for the inputs. All optional — an
-// absent key falls back to the blank/default the wizard uses for a new job.
+// absent key falls back to the blank/default the form uses for a new job.
 export interface WizardInitialValues {
   title?: string;
   description?: string;
   shortDescription?: string | null;
   skillIds?: number[];
   primaryCityId?: number | null;
+  localityId?: number | null;
   cityIds?: number[];
   industryId?: number | null;
   functionalAreaId?: number | null;
   employmentType?: EmploymentType;
   workMode?: WorkMode;
+  openings?: number | null;
+  qualifications?: string | null;
+  internshipDurationMonths?: number | null;
   experienceMinYears?: number | null;
   experienceMaxYears?: number | null;
   salaryMinPaise?: number | null;
@@ -41,31 +56,19 @@ export interface WizardInitialValues {
 }
 
 export interface PostJobWizardProps {
+  companyName: string;
   skills: CatalogueEntry[];
   cities: CatalogueEntry[];
+  localities: LocalityEntry[];
   industries: CatalogueEntry[];
   functionalAreas: CatalogueEntry[];
   quota: QuotaState | null;
-  // The selected job-type product (Phase 2 UI: drives the Internship→INTERN
-  // preset + display; not yet persisted to the API — no jobType column until
-  // Phase 3). Defaults to FREE.
+  // Selected job-type product. Drives the Internship framing (INTERN employment
+  // type + duration field) and is persisted (Phase 3). Defaults to FREE.
   jobType?: JobType;
   // Prefill from a chosen template (past job). Undefined = blank new job.
   initialValues?: WizardInitialValues | undefined;
 }
-
-type Step = 0 | 1 | 2 | 3 | 4 | 5;
-const STEP_LABELS = [
-  'Title',
-  'Description',
-  'Skills + locations',
-  'Experience + salary',
-  'Employment type + work mode',
-  'Review',
-] as const;
-
-type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACTOR' | 'INTERN';
-type WorkMode = 'ONSITE' | 'REMOTE' | 'HYBRID';
 
 function lpaToPaise(lpa: number | ''): number | null {
   if (lpa === '' || Number.isNaN(lpa)) return null;
@@ -77,12 +80,25 @@ function paiseToLpa(paise: number | null | undefined): number | '' {
   return paise / 100_000 / 100;
 }
 
-// SRS §4.9.3 — six-step wizard. Linear-style: keyboard-driven (Enter advances,
-// Esc steps back), single column, step indicator is plain text rather than a
-// progress bar (CLAUDE.md §2 — restraint).
+// Derive the Any/Fresher/Experienced control from a prefill's numeric range.
+function deriveExperienceLevel(min: number | null | undefined, max: number | null | undefined): ExperienceLevel {
+  if ((min === null || min === undefined) && (max === null || max === undefined)) return 'ANY';
+  if ((min ?? 0) === 0 && (max ?? 0) <= 1) return 'FRESHER';
+  return 'EXPERIENCED';
+}
+
+const SELECT_CLASS =
+  'h-9 w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-3 text-sm';
+const LOCALITY_OTHER = '__other__';
+
+// Post a Job — the Job Details form (SRS §4.9.3). Single-column, sectioned:
+// Job details → Location → Candidate requirements → Salary → Description, with a
+// Save draft / Publish action row. jobType comes from the selector step.
 export function PostJobWizard({
+  companyName,
   skills,
   cities,
+  localities,
   industries,
   functionalAreas,
   quota,
@@ -91,65 +107,91 @@ export function PostJobWizard({
 }: PostJobWizardProps) {
   const router = useRouter();
   const iv = initialValues ?? {};
-  const [step, setStep] = useState<Step>(0);
+  const isInternship = jobType === 'INTERNSHIP';
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Step 1
+  // Job details
   const [title, setTitle] = useState(iv.title ?? '');
-  // Step 2
-  const [description, setDescription] = useState(iv.description ?? '');
-  const [shortDescription, setShortDescription] = useState(iv.shortDescription ?? '');
-  // Step 3
-  const [skillIds, setSkillIds] = useState<Set<number>>(new Set(iv.skillIds ?? []));
-  const [skillQuery, setSkillQuery] = useState('');
-  const [primaryCityId, setPrimaryCityId] = useState<number | ''>(iv.primaryCityId ?? '');
-  const [cityIds, setCityIds] = useState<Set<number>>(new Set(iv.cityIds ?? []));
-  const [cityQuery, setCityQuery] = useState('');
-  const [industryId, setIndustryId] = useState<number | ''>(iv.industryId ?? '');
   const [functionalAreaId, setFunctionalAreaId] = useState<number | ''>(iv.functionalAreaId ?? '');
-  // Step 4
+  const [industryId, setIndustryId] = useState<number | ''>(iv.industryId ?? '');
+  const [employmentType, setEmploymentType] = useState<EmploymentType>(
+    isInternship ? 'INTERN' : iv.employmentType && iv.employmentType !== 'INTERN' ? iv.employmentType : 'FULL_TIME',
+  );
+  const [openings, setOpenings] = useState<number | ''>(iv.openings ?? 1);
+  const [durationMonths, setDurationMonths] = useState<number | ''>(iv.internshipDurationMonths ?? '');
+
+  // Location
+  const [primaryCityId, setPrimaryCityId] = useState<number | ''>(iv.primaryCityId ?? '');
+  const [localityId, setLocalityId] = useState<number | ''>(iv.localityId ?? '');
+  const [localityOther, setLocalityOther] = useState('');
+  const [useOtherLocality, setUseOtherLocality] = useState(false);
+  const [workMode, setWorkMode] = useState<WorkMode>(iv.workMode ?? 'ONSITE');
+
+  // Candidate requirements
+  const [expLevel, setExpLevel] = useState<ExperienceLevel>(
+    deriveExperienceLevel(iv.experienceMinYears, iv.experienceMaxYears),
+  );
   const [expMinYears, setExpMinYears] = useState<number | ''>(iv.experienceMinYears ?? '');
   const [expMaxYears, setExpMaxYears] = useState<number | ''>(iv.experienceMaxYears ?? '');
+  const [skillIds, setSkillIds] = useState<Set<number>>(new Set(iv.skillIds ?? []));
+  const [skillQuery, setSkillQuery] = useState('');
+  const [qualifications, setQualifications] = useState(iv.qualifications ?? '');
+
+  // Salary
   const [salaryMinLpa, setSalaryMinLpa] = useState<number | ''>(paiseToLpa(iv.salaryMinPaise));
   const [salaryMaxLpa, setSalaryMaxLpa] = useState<number | ''>(paiseToLpa(iv.salaryMaxPaise));
-  // Step 5
-  const [employmentType, setEmploymentType] = useState<EmploymentType>(
-    iv.employmentType ?? (jobType === 'INTERNSHIP' ? 'INTERN' : 'FULL_TIME'),
+
+  // Description
+  const [shortDescription, setShortDescription] = useState(iv.shortDescription ?? '');
+  const [description, setDescription] = useState(iv.description ?? '');
+
+  const cityLocalities = useMemo(
+    () => (primaryCityId === '' ? [] : localities.filter((l) => l.cityId === primaryCityId)),
+    [localities, primaryCityId],
   );
-  const [workMode, setWorkMode] = useState<WorkMode>(iv.workMode ?? 'ONSITE');
 
   const filteredSkills = useMemo(() => {
     const q = skillQuery.trim().toLowerCase();
-    if (!q) return skills.slice(0, 60);
-    return skills.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 60);
+    const base = q ? skills.filter((s) => s.name.toLowerCase().includes(q)) : skills;
+    return base.slice(0, 60);
   }, [skillQuery, skills]);
-
-  const filteredCities = useMemo(() => {
-    const q = cityQuery.trim().toLowerCase();
-    if (!q) return cities.slice(0, 40);
-    return cities.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 40);
-  }, [cityQuery, cities]);
 
   const exhausted =
     quota !== null &&
     !quota.unlimited &&
     (quota.daily.count >= quota.daily.limit || quota.monthly.count >= quota.monthly.limit);
 
-  const stepValid = ((): boolean => {
-    if (step === 0) return title.trim().length >= 3;
-    if (step === 1) return description.trim().length >= 10;
-    if (step === 2) return skillIds.size > 0 && primaryCityId !== '';
-    if (step === 3) return true; // ranges optional but if both set must be ordered
-    if (step === 4) return true;
-    return true;
-  })();
+  // Publish requires the mandatory fields (SRS §4.9.3); a draft only needs a title.
+  const titleOk = title.trim().length >= 3;
+  const descriptionOk = description.trim().length >= 10;
+  const canPublish =
+    titleOk &&
+    descriptionOk &&
+    functionalAreaId !== '' &&
+    openings !== '' &&
+    Number(openings) >= 1 &&
+    primaryCityId !== '';
 
-  function next() {
-    if (step < 5) setStep((step + 1) as Step);
+  function onCityChange(v: number | '') {
+    setPrimaryCityId(v);
+    // Reset the area when the city changes — a locality belongs to one city.
+    setLocalityId('');
+    setUseOtherLocality(false);
+    setLocalityOther('');
   }
-  function back() {
-    if (step > 0) setStep((step - 1) as Step);
+
+  function onExpLevelChange(level: ExperienceLevel) {
+    setExpLevel(level);
+    if (level === 'ANY') {
+      setExpMinYears('');
+      setExpMaxYears('');
+    } else if (level === 'FRESHER') {
+      setExpMinYears(0);
+      setExpMaxYears(1);
+    }
+    // EXPERIENCED keeps whatever is in the inputs (revealed below).
   }
 
   async function submit(publishMode: 'DRAFT' | 'PUBLISH') {
@@ -160,15 +202,23 @@ export function PostJobWizard({
       publishMode,
       title: title.trim(),
       description: description.trim(),
+      jobType,
       employmentType,
       workMode,
     };
     if (shortDescription.trim()) body['shortDescription'] = shortDescription.trim();
+    if (functionalAreaId !== '') body['functionalAreaId'] = functionalAreaId;
+    if (industryId !== '') body['industryId'] = industryId;
+    if (openings !== '') body['openings'] = Number(openings);
+    if (isInternship && durationMonths !== '') body['internshipDurationMonths'] = Number(durationMonths);
     if (skillIds.size > 0) body['skillIds'] = [...skillIds];
     if (primaryCityId !== '') body['primaryCityId'] = primaryCityId;
-    if (cityIds.size > 0) body['cityIds'] = [...cityIds];
-    if (industryId !== '') body['industryId'] = industryId;
-    if (functionalAreaId !== '') body['functionalAreaId'] = functionalAreaId;
+    if (useOtherLocality) {
+      if (localityOther.trim()) body['localityName'] = localityOther.trim();
+    } else if (localityId !== '') {
+      body['localityId'] = localityId;
+    }
+    if (qualifications.trim()) body['qualifications'] = qualifications.trim();
     if (expMinYears !== '') body['experienceMinYears'] = Number(expMinYears);
     if (expMaxYears !== '') body['experienceMaxYears'] = Number(expMaxYears);
     const salaryMin = lpaToPaise(salaryMinLpa);
@@ -197,62 +247,118 @@ export function PostJobWizard({
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <p className="text-xs text-[var(--color-fg-subtle)]">
-        Step {step + 1} of 6 · {STEP_LABELS[step]}
-      </p>
+    <div className="mx-auto max-w-2xl space-y-8">
+      {/* Section: Job details */}
+      <Section title="Job details">
+        <Field label="Company">
+          <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)]/40 px-3 py-2">
+            <span className="text-sm font-medium text-[var(--color-fg)]">{companyName}</span>
+            <Link
+              href="/profile"
+              className="text-xs text-[var(--color-primary-600)] hover:underline"
+            >
+              Change
+            </Link>
+          </div>
+        </Field>
 
-      {step === 0 && (
-        <Field label="Job title" hint="One line — what most recruiters and candidates would type into search.">
+        <Field label="Job department" hint="The function this role belongs to.">
+          <select
+            value={functionalAreaId}
+            onChange={(e) => setFunctionalAreaId(e.target.value === '' ? '' : Number(e.target.value))}
+            className={SELECT_CLASS}
+          >
+            <option value="">Select a department</option>
+            {functionalAreas.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Industry (optional)">
+          <select
+            value={industryId}
+            onChange={(e) => setIndustryId(e.target.value === '' ? '' : Number(e.target.value))}
+            className={SELECT_CLASS}
+          >
+            <option value="">—</option>
+            {industries.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Job title / designation">
           <Input
             id="title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={200}
-            autoFocus
             placeholder="e.g. Senior Frontend Engineer"
           />
         </Field>
-      )}
 
-      {step === 1 && (
-        <div className="space-y-6">
-          <Field label="Short description" hint="One sentence shown on listings. Optional.">
-            <Input
-              id="shortDescription"
-              value={shortDescription}
-              onChange={(e) => setShortDescription(e.target.value)}
-              maxLength={280}
+        {isInternship ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Internship type">
+              <Segmented
+                value={employmentType}
+                onChange={(v) => setEmploymentType(v as EmploymentType)}
+                options={[
+                  { value: 'INTERN', label: 'Internship' },
+                  { value: 'PART_TIME', label: 'Part-time' },
+                ]}
+              />
+            </Field>
+            <Field label="Duration (months)">
+              <Input
+                type="number"
+                min={1}
+                max={36}
+                value={durationMonths}
+                onChange={(e) => setDurationMonths(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="e.g. 6"
+              />
+            </Field>
+          </div>
+        ) : (
+          <Field label="Job type">
+            <Segmented
+              value={employmentType}
+              onChange={(v) => setEmploymentType(v as EmploymentType)}
+              options={[
+                { value: 'FULL_TIME', label: 'Full time' },
+                { value: 'PART_TIME', label: 'Part time' },
+                { value: 'CONTRACTOR', label: 'Contract' },
+              ]}
             />
           </Field>
-          <Field label="Description" hint="Markdown supported. Hiring requirements, responsibilities, what success looks like.">
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={14}
-              className="font-mono text-sm"
-              placeholder={'## About the role\n\nWhat the candidate will own.\n\n## You should have\n\n- 4+ years of...'}
-            />
-          </Field>
-        </div>
-      )}
+        )}
 
-      {step === 2 && (
-        <div className="space-y-6">
-          <ChipPicker
-            label="Required skills"
-            entries={filteredSkills}
-            selected={skillIds}
-            onToggle={(id) => toggleId(skillIds, id, setSkillIds)}
-            query={skillQuery}
-            onQueryChange={setSkillQuery}
+        <Field label="Number of openings">
+          <Input
+            type="number"
+            min={1}
+            max={9999}
+            value={openings}
+            onChange={(e) => setOpenings(e.target.value === '' ? '' : Number(e.target.value))}
+            className="max-w-[140px]"
           />
-          <Field label="Primary city">
+        </Field>
+      </Section>
+
+      {/* Section: Location */}
+      <Section title="Job location">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="City">
             <select
               value={primaryCityId}
-              onChange={(e) => setPrimaryCityId(e.target.value === '' ? '' : Number(e.target.value))}
-              className="h-9 w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-3 text-sm"
+              onChange={(e) => onCityChange(e.target.value === '' ? '' : Number(e.target.value))}
+              className={SELECT_CLASS}
             >
               <option value="">Select a city</option>
               {cities.map((c) => (
@@ -262,74 +368,126 @@ export function PostJobWizard({
               ))}
             </select>
           </Field>
-          <ChipPicker
-            label="Other cities (optional)"
-            entries={filteredCities}
-            selected={cityIds}
-            onToggle={(id) => toggleId(cityIds, id, setCityIds)}
-            query={cityQuery}
-            onQueryChange={setCityQuery}
+
+          <Field label="Area / locality" hint={primaryCityId === '' ? 'Select a city first.' : undefined}>
+            {useOtherLocality ? (
+              <div className="space-y-1.5">
+                <Input
+                  value={localityOther}
+                  onChange={(e) => setLocalityOther(e.target.value)}
+                  maxLength={120}
+                  placeholder="Type an area"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setUseOtherLocality(false)}
+                  className="text-xs text-[var(--color-primary-600)] hover:underline"
+                >
+                  Choose from list instead
+                </button>
+              </div>
+            ) : (
+              <select
+                value={localityId}
+                disabled={primaryCityId === ''}
+                onChange={(e) => {
+                  if (e.target.value === LOCALITY_OTHER) {
+                    setUseOtherLocality(true);
+                    setLocalityId('');
+                  } else {
+                    setLocalityId(e.target.value === '' ? '' : Number(e.target.value));
+                  }
+                }}
+                className={cn(SELECT_CLASS, primaryCityId === '' && 'opacity-50')}
+              >
+                <option value="">{cityLocalities.length ? 'Select an area' : 'No listed areas'}</option>
+                {cityLocalities.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+                {primaryCityId !== '' && <option value={LOCALITY_OTHER}>Other (type an area)…</option>}
+              </select>
+            )}
+          </Field>
+        </div>
+
+        <Field label="Work mode">
+          <Segmented
+            value={workMode}
+            onChange={(v) => setWorkMode(v as WorkMode)}
+            options={[
+              { value: 'ONSITE', label: 'On-site' },
+              { value: 'REMOTE', label: 'Remote' },
+              { value: 'HYBRID', label: 'Hybrid' },
+            ]}
           />
+        </Field>
+      </Section>
+
+      {/* Section: Candidate requirements */}
+      <Section title="Candidate requirements">
+        <Field label="Total experience">
+          <Segmented
+            value={expLevel}
+            onChange={(v) => onExpLevelChange(v as ExperienceLevel)}
+            options={[
+              { value: 'ANY', label: 'Any' },
+              { value: 'FRESHER', label: 'Fresher only' },
+              { value: 'EXPERIENCED', label: 'Experienced only' },
+            ]}
+          />
+        </Field>
+
+        {expLevel === 'EXPERIENCED' && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Industry (optional)">
-              <select
-                value={industryId}
-                onChange={(e) => setIndustryId(e.target.value === '' ? '' : Number(e.target.value))}
-                className="h-9 w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-3 text-sm"
-              >
-                <option value="">—</option>
-                {industries.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name}
-                  </option>
-                ))}
-              </select>
+            <Field label="Min experience (years)">
+              <Input
+                type="number"
+                min={0}
+                max={60}
+                value={expMinYears}
+                onChange={(e) => setExpMinYears(e.target.value === '' ? '' : Number(e.target.value))}
+              />
             </Field>
-            <Field label="Functional area (optional)">
-              <select
-                value={functionalAreaId}
-                onChange={(e) =>
-                  setFunctionalAreaId(e.target.value === '' ? '' : Number(e.target.value))
-                }
-                className="h-9 w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-3 text-sm"
-              >
-                <option value="">—</option>
-                {functionalAreas.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
+            <Field label="Max experience (years)">
+              <Input
+                type="number"
+                min={0}
+                max={60}
+                value={expMaxYears}
+                onChange={(e) => setExpMaxYears(e.target.value === '' ? '' : Number(e.target.value))}
+              />
             </Field>
           </div>
-        </div>
-      )}
+        )}
 
-      {step === 3 && (
+        <ChipPicker
+          label="Key skills"
+          entries={filteredSkills}
+          selected={skillIds}
+          onToggle={(id) => toggleId(skillIds, id, setSkillIds)}
+          query={skillQuery}
+          onQueryChange={setSkillQuery}
+        />
+
+        <Field label="Qualifications & must-haves" hint="Education, certifications, and any non-negotiable requirements.">
+          <Textarea
+            value={qualifications}
+            onChange={(e) => setQualifications(e.target.value)}
+            rows={4}
+            maxLength={2000}
+            placeholder="e.g. B.E./B.Tech in CS or equivalent; strong DSA; 2+ years with React…"
+          />
+        </Field>
+      </Section>
+
+      {/* Section: Salary */}
+      <Section title="Salary details">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Min experience (years)">
+          <Field label="Minimum (LPA)">
             <Input
-              id="expMin"
-              type="number"
-              min={0}
-              max={60}
-              value={expMinYears}
-              onChange={(e) => setExpMinYears(e.target.value === '' ? '' : Number(e.target.value))}
-            />
-          </Field>
-          <Field label="Max experience (years)">
-            <Input
-              id="expMax"
-              type="number"
-              min={0}
-              max={60}
-              value={expMaxYears}
-              onChange={(e) => setExpMaxYears(e.target.value === '' ? '' : Number(e.target.value))}
-            />
-          </Field>
-          <Field label="Min salary (LPA)">
-            <Input
-              id="salMin"
               type="number"
               min={0}
               step={0.5}
@@ -337,9 +495,8 @@ export function PostJobWizard({
               onChange={(e) => setSalaryMinLpa(e.target.value === '' ? '' : Number(e.target.value))}
             />
           </Field>
-          <Field label="Max salary (LPA)">
+          <Field label="Maximum (LPA)">
             <Input
-              id="salMax"
               type="number"
               min={0}
               step={0.5}
@@ -348,80 +505,30 @@ export function PostJobWizard({
             />
           </Field>
         </div>
-      )}
+        <p className="text-xs text-[var(--color-fg-subtle)]">
+          Annual CTC. Posts with a salary get more views and applies.
+        </p>
+      </Section>
 
-      {step === 4 && (
-        <div className="space-y-6">
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium text-[var(--color-fg)]">Employment type</legend>
-            <RadioGroup
-              value={employmentType}
-              onValueChange={(v) => setEmploymentType(v as EmploymentType)}
-              className="flex flex-row flex-wrap gap-4"
-            >
-              {(['FULL_TIME', 'PART_TIME', 'CONTRACTOR', 'INTERN'] as const).map((t) => (
-                <label key={t} className="flex items-center gap-2 text-sm">
-                  <RadioItem value={t} />
-                  <span className="capitalize">{t.replace('_', ' ').toLowerCase()}</span>
-                </label>
-              ))}
-            </RadioGroup>
-          </fieldset>
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium text-[var(--color-fg)]">Work mode</legend>
-            <RadioGroup
-              value={workMode}
-              onValueChange={(v) => setWorkMode(v as WorkMode)}
-              className="flex flex-row flex-wrap gap-4"
-            >
-              {(['ONSITE', 'REMOTE', 'HYBRID'] as const).map((m) => (
-                <label key={m} className="flex items-center gap-2 text-sm">
-                  <RadioItem value={m} />
-                  <span className="capitalize">{m.toLowerCase()}</span>
-                </label>
-              ))}
-            </RadioGroup>
-          </fieldset>
-        </div>
-      )}
-
-      {step === 5 && (
-        <div className="space-y-4 rounded-md border border-[var(--color-border)] p-6">
-          <h2 className="text-lg font-semibold text-[var(--color-fg)]">Review</h2>
-          <SummaryRow label="Title" value={title} />
-          <SummaryRow label="Employment" value={`${employmentType} · ${workMode}`} />
-          <SummaryRow
-            label="Skills"
-            value={`${skillIds.size} selected`}
+      {/* Section: Description */}
+      <Section title="Job description">
+        <Field label="Short description" hint="One sentence shown on listings. Optional.">
+          <Input
+            value={shortDescription}
+            onChange={(e) => setShortDescription(e.target.value)}
+            maxLength={280}
           />
-          <SummaryRow
-            label="Cities"
-            value={
-              primaryCityId !== ''
-                ? `${cities.find((c) => c.id === primaryCityId)?.name}${
-                    cityIds.size ? ` + ${cityIds.size} more` : ''
-                  }`
-                : '—'
-            }
+        </Field>
+        <Field label="Description" hint="Roles & responsibilities, required skills, perks.">
+          <Textarea
+            id="description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={12}
+            placeholder={'About the role\n\nWhat the candidate will own.\n\nYou should have\n- 4+ years of…'}
           />
-          <SummaryRow
-            label="Experience"
-            value={
-              expMinYears !== '' || expMaxYears !== ''
-                ? `${expMinYears || 0}–${expMaxYears || '?'} yrs`
-                : '—'
-            }
-          />
-          <SummaryRow
-            label="Salary"
-            value={
-              salaryMinLpa !== '' || salaryMaxLpa !== ''
-                ? `₹${salaryMinLpa || '?'}–${salaryMaxLpa || '?'} LPA`
-                : '—'
-            }
-          />
-        </div>
-      )}
+        </Field>
+      </Section>
 
       {error && (
         <p role="alert" className="text-sm text-[var(--color-danger)]">
@@ -429,7 +536,7 @@ export function PostJobWizard({
         </p>
       )}
 
-      {exhausted && step === 5 && (
+      {exhausted && (
         <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-subtle)] p-4 text-sm">
           <p className="font-medium text-[var(--color-fg)]">Daily or monthly post limit reached.</p>
           <p className="mt-1 text-[var(--color-fg-muted)]">
@@ -440,31 +547,36 @@ export function PostJobWizard({
         </div>
       )}
 
-      <div className="flex items-center justify-between border-t border-[var(--color-border)] pt-4">
-        <Button variant="ghost" onClick={back} disabled={step === 0 || busy}>
-          ← Back
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border)] pt-5">
+        <Button variant="secondary" onClick={() => submit('DRAFT')} loading={busy} disabled={!titleOk}>
+          Save as draft
         </Button>
-        {step < 5 ? (
-          <Button variant="primary" onClick={next} disabled={!stepValid || busy}>
-            Continue →
-          </Button>
-        ) : (
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => submit('DRAFT')} loading={busy}>
-              Save draft
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => submit('PUBLISH')}
-              loading={busy}
-              disabled={exhausted}
-            >
-              Publish
-            </Button>
-          </div>
-        )}
+        <Button
+          variant="primary"
+          onClick={() => submit('PUBLISH')}
+          loading={busy}
+          disabled={!canPublish || exhausted}
+        >
+          Publish job
+        </Button>
       </div>
+      {!canPublish && titleOk && (
+        <p className="text-right text-xs text-[var(--color-fg-subtle)]">
+          To publish, add a department, title, description, openings, and a city.
+        </p>
+      )}
     </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-5">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-fg-muted)]">
+        {title}
+      </h2>
+      <div className="space-y-5">{children}</div>
+    </section>
   );
 }
 
@@ -474,7 +586,7 @@ function Field({
   children,
 }: {
   label: string;
-  hint?: string;
+  hint?: string | undefined;
   children: React.ReactNode;
 }) {
   return (
@@ -482,6 +594,40 @@ function Field({
       <Label>{label}</Label>
       {children}
       {hint && <p className="text-xs text-[var(--color-fg-subtle)]">{hint}</p>}
+    </div>
+  );
+}
+
+function Segmented({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="inline-flex flex-wrap gap-1 rounded-md border border-[var(--color-border)] p-1">
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            aria-pressed={active}
+            className={cn(
+              'rounded px-3 py-1.5 text-sm transition-colors',
+              active
+                ? 'bg-[var(--color-primary-600)] text-white'
+                : 'text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-muted)]',
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -522,15 +668,6 @@ function ChipPicker({
           </button>
         ))}
       </div>
-    </div>
-  );
-}
-
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid grid-cols-1 gap-1 sm:grid-cols-[140px_minmax(0,1fr)] sm:gap-4">
-      <dt className="text-sm text-[var(--color-fg-muted)]">{label}</dt>
-      <dd className="text-sm text-[var(--color-fg)]">{value || '—'}</dd>
     </div>
   );
 }

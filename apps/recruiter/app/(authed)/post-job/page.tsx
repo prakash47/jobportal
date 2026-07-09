@@ -80,8 +80,17 @@ export default async function PostJobPage() {
     );
   }
 
-  const [skills, cities, industries, functionalAreas, quota, pastJobsRaw, hotVacancyEnabled, smbEnabled] =
-    await Promise.all([
+  const [
+    skills,
+    cities,
+    localities,
+    industries,
+    functionalAreas,
+    quota,
+    pastJobsRaw,
+    hotVacancyEnabled,
+    smbEnabled,
+  ] = await Promise.all([
       prisma.skill.findMany({
         select: { id: true, slug: true, name: true },
         orderBy: { name: 'asc' },
@@ -89,6 +98,11 @@ export default async function PostJobPage() {
       }),
       prisma.city.findMany({
         select: { id: true, slug: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+      // Sub-city areas for the City → Area selector; filtered client-side by city.
+      prisma.locality.findMany({
+        select: { id: true, name: true, cityId: true },
         orderBy: { name: 'asc' },
       }),
       prisma.industry.findMany({
@@ -162,8 +176,10 @@ export default async function PostJobPage() {
       </header>
 
       <PostJobFlow
+        companyName={recruiter.company.name}
         skills={skills}
         cities={cities}
+        localities={localities}
         industries={industries}
         functionalAreas={functionalAreas}
         quota={quota}

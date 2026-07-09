@@ -114,9 +114,53 @@ export class RecruiterJobsService {
     }
   }
 
+  // Resolve the optional area/locality to an id. Either an existing localityId
+  // (validated to belong to the chosen city) or a free-typed localityName that
+  // is find-or-created as a City-scoped Locality. Returns null when neither is
+  // usable (e.g. a name with no city to scope it to).
+  private async resolveLocalityId(input: {
+    localityId?: number | undefined;
+    localityName?: string | undefined;
+    primaryCityId?: number | undefined;
+  }): Promise<number | null> {
+    if (input.localityId !== undefined) {
+      const loc = await prisma.locality.findUnique({
+        where: { id: input.localityId },
+        select: { id: true, cityId: true },
+      });
+      if (!loc) throw new BadRequestException('Unknown locality');
+      if (input.primaryCityId !== undefined && loc.cityId !== input.primaryCityId) {
+        throw new BadRequestException('Locality does not belong to the selected city');
+      }
+      return loc.id;
+    }
+    const name = input.localityName?.trim();
+    if (name && input.primaryCityId !== undefined) {
+      const city = await prisma.city.findUnique({
+        where: { id: input.primaryCityId },
+        select: { slug: true },
+      });
+      if (!city) throw new BadRequestException('Unknown city for locality');
+      const slug = `${city.slug}-${slugify(name)}`;
+      const loc = await prisma.locality.upsert({
+        where: { slug },
+        update: {},
+        create: { slug, name, cityId: input.primaryCityId },
+        select: { id: true },
+      });
+      return loc.id;
+    }
+    return null;
+  }
+
   async create(userId: number, input: CreateRecruiterJobInput): Promise<Job> {
     await this.assertPostingEnabled();
     const ctx = await this.resolveRecruiterContext(userId);
+    const localityId = await this.resolveLocalityId({
+      localityId: input.localityId,
+      localityName: input.localityName,
+      primaryCityId: input.primaryCityId,
+    });
     const willPublish = input.publishMode === 'PUBLISH';
 
     // Decide the final status BEFORE quota.consume so a moderation-on
@@ -154,11 +198,16 @@ export class RecruiterJobsService {
             functionalAreaId: input.functionalAreaId ?? null,
             employmentType: input.employmentType ?? 'FULL_TIME',
             workMode: input.workMode ?? 'ONSITE',
+            jobType: input.jobType ?? 'FREE',
             status: finalStatus,
             salaryMinPaise: input.salaryMinPaise ?? null,
             salaryMaxPaise: input.salaryMaxPaise ?? null,
             experienceMinYears: input.experienceMinYears ?? null,
             experienceMaxYears: input.experienceMaxYears ?? null,
+            openings: input.openings ?? null,
+            qualifications: input.qualifications ?? null,
+            localityId,
+            internshipDurationMonths: input.internshipDurationMonths ?? null,
             expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
           },
         });
@@ -219,6 +268,19 @@ export class RecruiterJobsService {
     if (input.experienceMinYears !== undefined) data.experienceMinYears = input.experienceMinYears;
     if (input.experienceMaxYears !== undefined) data.experienceMaxYears = input.experienceMaxYears;
     if (input.expiresAt !== undefined) data.expiresAt = new Date(input.expiresAt);
+    if (input.jobType !== undefined) data.jobType = input.jobType;
+    if (input.openings !== undefined) data.openings = input.openings;
+    if (input.qualifications !== undefined) data.qualifications = input.qualifications;
+    if (input.internshipDurationMonths !== undefined) {
+      data.internshipDurationMonths = input.internshipDurationMonths;
+    }
+    if (input.localityId !== undefined || input.localityName !== undefined) {
+      data.localityId = await this.resolveLocalityId({
+        localityId: input.localityId,
+        localityName: input.localityName,
+        primaryCityId: input.primaryCityId ?? existing.primaryCityId ?? undefined,
+      });
+    }
 
     const updated = await prisma.job.update({ where: { id }, data });
 
