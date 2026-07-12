@@ -129,7 +129,13 @@ export default async function AuthedLayout({ children }: { children: React.React
               />
             )}
           </header>
-          <div className="mx-auto max-w-3xl px-6 py-10">{children}</div>
+          {/* Content is capped at a comfortable reading width for forms/detail
+              pages. Data-table pages (e.g. the Jobs list) opt into the wider
+              content column by rendering a [data-wide] root, so a many-column
+              table fits without forcing the page to scroll horizontally. */}
+          <div className="mx-auto max-w-3xl px-6 py-10 has-[[data-wide]]:max-w-6xl">
+            {children}
+          </div>
         </main>
       </div>
     </div>

@@ -12,7 +12,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-[var(--color-bg)] font-sans antialiased text-[var(--color-fg)]">
+      {/* has-[[data-wide]]:overflow-x-clip — wide data-table pages (the Jobs list)
+          render a [data-wide] root; the table scrolls inside its own card, and
+          this stops that overflow from ever scrolling the whole document
+          horizontally (an inner-scroll app shell must never scroll at the root).
+          Scoped via :has so ordinary max-w-3xl pages are unaffected. */}
+      <body className="bg-[var(--color-bg)] font-sans antialiased text-[var(--color-fg)] has-[[data-wide]]:overflow-x-clip">
         {children}
       </body>
     </html>

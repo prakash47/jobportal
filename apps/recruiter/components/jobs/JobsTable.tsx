@@ -137,7 +137,9 @@ function MetricValue({
   metric: (typeof METRICS)[number];
 }) {
   const count = metricValue(row, metric.key);
-  const numClass = count === 0 ? 'text-[var(--color-fg-subtle)]' : 'text-[var(--color-fg)]';
+  // Zero uses fg-muted (not fg-subtle) so the number still meets WCAG AA contrast
+  // while reading as de-emphasised; non-zero plain (teammate) counts use full fg.
+  const numClass = count === 0 ? 'text-[var(--color-fg-muted)]' : 'text-[var(--color-fg)]';
 
   if (row.isOwn && count > 0) {
     return (
@@ -163,8 +165,15 @@ function MetricValue({
 export function JobsTable({ rows }: { rows: JobListRow[] }) {
   return (
     <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
-      {/* Desktop / tablet table */}
-      <div className="hidden overflow-x-auto md:block">
+      {/* Desktop / tablet table. Focusable region so the horizontal scroll (used
+          on narrow desktops / tablets, below min-w) is reachable by keyboard
+          even on teammate rows that have no focusable cell (WCAG 2.1.1). */}
+      <div
+        className="hidden overflow-x-auto md:block"
+        role="region"
+        aria-label="Jobs — scroll horizontally to see all columns"
+        tabIndex={0}
+      >
         <table className="w-full min-w-[880px] text-sm">
           <caption className="sr-only">Jobs posted by your company</caption>
           <thead>
@@ -178,7 +187,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
                   key={mt.key}
                   className={cn(
                     TH,
-                    'px-3 text-right',
+                    'px-2 text-right',
                     i === 0 && 'border-l border-[var(--color-border)]',
                   )}
                 >
@@ -229,7 +238,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
                   <td
                     key={mt.key}
                     className={cn(
-                      'px-3 py-3 text-right tabular-nums',
+                      'px-2 py-3 text-right tabular-nums',
                       i === 0 && 'border-l border-[var(--color-border)]',
                     )}
                   >
@@ -276,7 +285,9 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
                 </>
               )}
             </p>
-            <div className="mt-3 grid grid-cols-4 gap-2">
+            {/* 2×2 on narrow phones so long labels ("Shortlisted") never clip;
+                4-across once there's room (≥480px). */}
+            <div className="mt-3 grid grid-cols-2 gap-2 min-[480px]:grid-cols-4">
               {METRICS.map((mt) => {
                 const count = metricValue(r, mt.key);
                 const linked = r.isOwn && count > 0;
@@ -287,7 +298,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
                     <span
                       className={cn(
                         'block text-base font-semibold tabular-nums',
-                        count === 0 ? 'text-[var(--color-fg-subtle)]' : 'text-[var(--color-fg)]',
+                        count === 0 ? 'text-[var(--color-fg-muted)]' : 'text-[var(--color-fg)]',
                       )}
                     >
                       {count}

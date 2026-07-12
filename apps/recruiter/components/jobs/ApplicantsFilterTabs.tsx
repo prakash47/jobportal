@@ -3,7 +3,11 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@jobportal/ui';
-import { APPLICANT_FILTER_ORDER, APPLICANT_FILTER_LABELS } from './applicant-filter';
+import {
+  APPLICANT_FILTER_ORDER,
+  APPLICANT_FILTER_LABELS,
+  parseApplicantFilter,
+} from './applicant-filter';
 
 // URL-driven applicant filter. Mirrors ApplicantsSortToggle: sets/clears the
 // `filter` param and drops `page` on change so a deep page on the previous
@@ -16,7 +20,9 @@ const OPTIONS = [
 export function ApplicantsFilterTabs() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const current = searchParams.get('filter') ?? '';
+  // Narrow through the same parser the server uses, so an unrecognised ?filter=
+  // value highlights "All" — matching the unfiltered list the server renders.
+  const current = parseApplicantFilter(searchParams.get('filter')) ?? '';
 
   function buildHref(value: string): string {
     const params = new URLSearchParams(searchParams.toString());

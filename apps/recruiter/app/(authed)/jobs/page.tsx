@@ -200,7 +200,9 @@ export default async function JobsPage({ searchParams }: PageProps) {
   if (q) baseParams.set('q', q);
 
   return (
-    <div className="space-y-6">
+    // data-wide → the authed layout widens the content column so the multi-metric
+    // Jobs table fits without a horizontal page scroll (see (authed)/layout.tsx).
+    <div data-wide className="space-y-6">
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Jobs</h1>
