@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | | |
+| Developer | Branch | Building (feature + components) | Shared surfaces touched | Started |
+|---|---|---|---|---|
+| Jayesh | `feature/navbar-brand-centering` | Navbar brand polish: shrink logo (h-10→h-9), enlarge wordmark (text-sm→text-base), center the CQ mark over the "Career Queue" text (items-center + measured -2px glyph-asymmetry nudge, drop pl-1), shift nav links right (`lg:ml-6`). `SiteHeader.tsx` only. | none (single component; no schema/theme/barrel/flags) | 2026-07-12 |
 
 ---
 
