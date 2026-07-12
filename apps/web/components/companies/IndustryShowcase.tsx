@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@jobportal/ui';
 import { ChevronLeft, ChevronRight } from '@jobportal/ui/icons';
 
@@ -23,9 +24,21 @@ export function IndustryShowcase({
   items: IndustryShowcaseItem[];
   activeSlug: string | null;
 }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const scroller = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
+
+  // Preserve the active sort/hiring filters when switching industry (matches the
+  // sidebar); only reset the page.
+  function hrefFor(slug: string): string {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set('category', slug);
+    p.delete('page');
+    const qs = p.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  }
 
   const update = useCallback(() => {
     const el = scroller.current;
@@ -59,12 +72,8 @@ export function IndustryShowcase({
       aria-label="Browse companies by industry"
       className="relative rounded-2xl border border-[var(--color-border)] bg-[var(--color-primary-50)] px-3 py-3.5 sm:px-4"
     >
-      {canLeft && (
-        <ScrollButton dir="left" onClick={() => nudge(-1)} />
-      )}
-      {canRight && (
-        <ScrollButton dir="right" onClick={() => nudge(1)} />
-      )}
+      <ScrollButton dir="left" onClick={() => nudge(-1)} disabled={!canLeft} />
+      <ScrollButton dir="right" onClick={() => nudge(1)} disabled={!canRight} />
 
       <div
         ref={scroller}
@@ -75,11 +84,12 @@ export function IndustryShowcase({
           return (
             <Link
               key={it.slug}
-              href={`/companies?category=${it.slug}`}
+              href={hrefFor(it.slug)}
+              aria-current={active ? 'true' : undefined}
               className={cn(
                 'group flex min-w-[188px] snap-start flex-col justify-between gap-4 rounded-xl border bg-[var(--color-bg-elevated)] p-4 transition-colors sm:min-w-[204px]',
                 active
-                  ? 'border-[var(--color-accent-500)] ring-1 ring-[var(--color-accent-500)]'
+                  ? 'border-[var(--color-accent-600)] ring-1 ring-[var(--color-accent-600)]'
                   : 'border-[var(--color-border)] hover:border-[var(--color-border-strong)]',
               )}
             >
@@ -101,15 +111,29 @@ export function IndustryShowcase({
   );
 }
 
-function ScrollButton({ dir, onClick }: { dir: 'left' | 'right'; onClick: () => void }) {
+function ScrollButton({
+  dir,
+  onClick,
+  disabled,
+}: {
+  dir: 'left' | 'right';
+  onClick: () => void;
+  disabled: boolean;
+}) {
   const Icon = dir === 'left' ? ChevronLeft : ChevronRight;
+  // Kept mounted at the edges (disabled + hidden) rather than unmounted, so a
+  // keyboard user's focus is never dropped when the rail reaches an end.
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      aria-hidden={disabled || undefined}
+      tabIndex={disabled ? -1 : undefined}
       aria-label={dir === 'left' ? 'Scroll industries left' : 'Scroll industries right'}
       className={cn(
-        'absolute top-1/2 z-10 hidden size-9 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-fg-muted)] shadow-[var(--shadow-card)] transition-colors hover:text-[var(--color-fg)] sm:flex',
+        'absolute top-1/2 z-10 hidden size-9 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-fg-muted)] shadow-[var(--shadow-card)] transition-opacity hover:text-[var(--color-fg)] sm:flex',
+        disabled ? 'pointer-events-none opacity-0' : 'opacity-100',
         dir === 'left' ? 'left-1' : 'right-1',
       )}
     >

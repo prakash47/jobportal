@@ -68,7 +68,7 @@ export function CompanyCard({
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--color-border)] pt-3.5">
         <span className="inline-flex items-center gap-1.5 text-xs">
           <Briefcase
-            className={hiring ? 'size-3.5 text-[var(--color-accent-700)]' : 'size-3.5 text-[var(--color-fg-subtle)]'}
+            className={hiring ? 'size-3.5 text-[var(--color-accent-700)]' : 'size-3.5 text-[var(--color-fg-muted)]'}
             aria-hidden="true"
           />
           {hiring ? (
@@ -76,7 +76,7 @@ export function CompanyCard({
               {openingsCount} open {openingsCount === 1 ? 'role' : 'roles'}
             </span>
           ) : (
-            <span className="text-[var(--color-fg-subtle)]">No open roles</span>
+            <span className="text-[var(--color-fg-muted)]">No open roles</span>
           )}
         </span>
         <span className="text-xs font-medium text-[var(--color-fg-muted)] transition-colors group-hover:text-[var(--color-primary-700)]">

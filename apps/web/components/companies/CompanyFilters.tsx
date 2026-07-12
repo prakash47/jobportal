@@ -78,7 +78,7 @@ export function CompanyFilters({
       <FilterGroup title="Availability">
         <Link
           href={hiringHref}
-          aria-pressed={hiring}
+          aria-current={hiring ? 'true' : undefined}
           className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]"
         >
           <span
@@ -112,7 +112,7 @@ export function CompanyFilters({
 function FilterGroup({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-fg-subtle)]">
+      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-fg-muted)]">
         {title}
       </h3>
       <div className="space-y-0.5">{children}</div>
@@ -147,7 +147,7 @@ function OptionRow({
         <span
           className={cn(
             'shrink-0 text-xs tabular-nums',
-            active ? 'text-[var(--color-primary-700)]' : 'text-[var(--color-fg-subtle)]',
+            active ? 'text-[var(--color-primary-700)]' : 'text-[var(--color-fg-muted)]',
           )}
         >
           {count}

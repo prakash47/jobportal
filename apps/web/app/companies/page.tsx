@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { prisma, Prisma } from '@jobportal/db';
 import { Container } from '@jobportal/ui';
 import { Building2 } from '@jobportal/ui/icons';
@@ -43,12 +44,15 @@ export default async function CompaniesDirectoryPage({ searchParams }: PageProps
   if (filterIndustry) where.industryId = filterIndustry.id;
   if (hiring) where.jobs = { some: { status: 'ACTIVE' } };
 
+  // Every branch ends with a unique `id` tiebreaker so offset pagination is
+  // deterministic (name is not unique → adjacent skip/take calls could otherwise
+  // duplicate or drop a seam row).
   const orderBy: Prisma.CompanyOrderByWithRelationInput[] =
     sort === 'name'
-      ? [{ name: 'asc' }]
+      ? [{ name: 'asc' }, { id: 'asc' }]
       : sort === 'reviews'
-        ? [{ reviewCount: 'desc' }, { name: 'asc' }]
-        : [{ averageRating: { sort: 'desc', nulls: 'last' } }, { name: 'asc' }];
+        ? [{ reviewCount: 'desc' }, { name: 'asc' }, { id: 'asc' }]
+        : [{ averageRating: { sort: 'desc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }];
 
   const [rows, total, industryCounts] = await Promise.all([
     prisma.company.findMany({
@@ -90,6 +94,13 @@ export default async function CompaniesDirectoryPage({ searchParams }: PageProps
   for (const r of openCounts) openByCompany.set(r.companyId, r._count._all);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Over-range page (crafted or stale/shared URL): redirect to the last real
+  // page rather than render an empty grid beneath a positive company count.
+  if (page > totalPages) {
+    const overflowQs = buildDirectoryQuery({ category, sort, hiring, page: totalPages });
+    redirect(overflowQs ? `/companies?${overflowQs}` : '/companies');
+  }
 
   // Only surface industries that actually have companies (no dead filters).
   const withCounts = industriesRaw
@@ -172,7 +183,7 @@ export default async function CompaniesDirectoryPage({ searchParams }: PageProps
         {/* Filters (left) + results grid */}
         <div className="lg:grid lg:grid-cols-[248px_minmax(0,1fr)] lg:gap-8">
           <aside className="hidden lg:block">
-            <div className="sticky top-24">{filtersEl}</div>
+            <div className="sticky top-20">{filtersEl}</div>
           </aside>
 
           <div>
@@ -189,6 +200,7 @@ export default async function CompaniesDirectoryPage({ searchParams }: PageProps
               </div>
             </div>
 
+            <h2 className="sr-only">Companies</h2>
             {rows.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[var(--color-border)] p-12 text-center">
                 <p className="text-sm font-medium text-[var(--color-fg)]">No companies match</p>
@@ -234,7 +246,7 @@ export default async function CompaniesDirectoryPage({ searchParams }: PageProps
                   sort={sort}
                   hiring={hiring}
                 >
-                  ← Newer
+                  ← Previous
                 </PageLink>
                 <span className="text-[var(--color-fg-muted)]">
                   Page {page} of {totalPages}
@@ -246,7 +258,7 @@ export default async function CompaniesDirectoryPage({ searchParams }: PageProps
                   sort={sort}
                   hiring={hiring}
                 >
-                  Older →
+                  Next →
                 </PageLink>
               </nav>
             )}
