@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | | |
+| Developer | Branch | Building (feature + components) | Shared surfaces touched | Started |
+|---|---|---|---|---|
+| Jayesh | `feature/home-hero-copy` | Home hero copy rewrite (more emotion/trust): H1 + subtext in `Hero.tsx` → "Your dream job is out there. Let's find it." + honest trust subtext (no fabricated numbers). `apps/web/components/home/Hero.tsx` only. | none (single component; no schema/theme/barrel/flags) | 2026-07-12 |
 
 ---
 
