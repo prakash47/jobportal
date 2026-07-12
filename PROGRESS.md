@@ -52,6 +52,17 @@
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/navbar-brand-centering` — center CQ mark over wordmark, resize brand, shift nav right · 2026-07-12
+
+**Navbar brand polish** (SRS §4.1). CLI merge to `develop` (`--no-ff`). One code file — `apps/web/components/home/SiteHeader.tsx` (the shared `SiteHeader`, so it applies to every public page: home, `/jobs` + SEO SRPs, `/job/[slug]`, companies, career-advice). **No schema/migration/feature-flag/shared-surface-lock.** Owner asked for four things, all done and browser-measured:
+
+- **Logo a little smaller** — the CQ mark went `h-10` (40px) → **`h-9` (36px)**.
+- **Wordmark a little bigger** — "Career Queue" went `text-sm` (14px) → **`text-base` (16px)**.
+- **Mark centred over the text, equal space L/R** — the brand `<Link>` flex column went **`items-start` → `items-center`** (centres the logo box over the wordmark), the eyeballed **`pl-1` was dropped**, and a **measured `-translate-x-[2px]`** was added to the mark. Root cause the old `pl-1` hack was papering over: the visible glyph is *not* centred inside its own PNG — the opaque pixels of `cq-mark-color.png` (400×178) run x=52→368, i.e. **52px transparent padding on the left vs 32px on the right**, so the glyph's optical centre sits +10px (≈2.5% of width, ~2px at h-9) right of the box centre. The −2px cancels that, so the **visible** glyph lands on the text centre (browser-verified: glyph-centre − text-centre = **0.02px**). Measured the PNG's alpha bbox with Pillow rather than guessing.
+- **Nav links further right** — the `<nav>` gained **`lg:ml-6`**, taking the brand→nav gap **32px → 56px** (the links were reading as "too close" to the brand).
+
+**Verified in-browser** at 1320px + 375px: bar still 72px with symmetric 7px above the logo / 7px below the text; nav vertically centred; **no horizontal overflow** at either width; **no console errors/hydration warnings**; the fix holds at mobile (nav correctly hidden below `lg`, mark still centred). **Adversarial multi-agent review** (3 lenses — design/correctness, regression/isolation, a11y/responsive/dark-mode — each finding adversarially verified): **0 confirmed** (2 sub-pixel NITs refuted: the dark-mode white mark is actually *slightly better* centred with the shared nudge and is never rendered since dark mode is dormant; the fixed-px translate is already documented at the call site and worst-case ~0.25px over a full height step). **Gate (integrated with the teammate's `feature/recruiter-jobs-list-table`):** typecheck **11/11** · tests **API 584 + web 181** · build **4/4** apps. **Note:** `SiteHeader` is imported only within `apps/web`; recruiter/services untouched. **Follow-up (offered, not taken):** the durable fix for the glyph asymmetry is re-cropping the mark PNG to symmetric padding (removes the height-coupled translate entirely) — deferred as a brand-asset change out of scope for this CSS tweak.
+
 ### `feature/recruiter-jobs-list-table` — recruiter Jobs list → structured table + color-coded status badges · 2026-07-12
 
 **Recruiter `/jobs` list redesign** (SRS §4.9). CLI merge to `develop` (`--no-ff`). **Recruiter-only** — `apps/web` (job-seeker) + `apps/services` **byte-untouched** (`git diff develop -- apps/web apps/services` empty); **no schema/migration/feature-flag/shared-surface-lock**. No API change (the page reads Postgres directly in an RSC — the reads/writes split).
