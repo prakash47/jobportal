@@ -1,9 +1,8 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
-import { Badge, Button, Input, Label, type BadgeVariant } from '@jobportal/ui';
-
-type JobStatus = 'DRAFT' | 'PENDING_MODERATION' | 'ACTIVE' | 'EXPIRED' | 'CLOSED';
+import { Button, Input, Label } from '@jobportal/ui';
+import { JobStatusBadge, JOB_STATUS_META, type JobStatus } from './JobStatusBadge';
 
 export interface PastJobSummary {
   id: number;
@@ -12,14 +11,6 @@ export interface PastJobSummary {
   cityName: string | null;
   postedLabel: string; // formatted server-side (fixed IST) to avoid hydration drift
 }
-
-const STATUS_META: Record<JobStatus, { label: string; variant: BadgeVariant }> = {
-  ACTIVE: { label: 'Active', variant: 'success' },
-  DRAFT: { label: 'Draft', variant: 'neutral' },
-  PENDING_MODERATION: { label: 'In review', variant: 'warning' },
-  EXPIRED: { label: 'Expired', variant: 'neutral' },
-  CLOSED: { label: 'Closed', variant: 'danger' },
-};
 
 const SELECT_CLASS =
   'h-9 w-full rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-3 text-sm';
@@ -46,7 +37,7 @@ export function TemplatePicker({ pastJobs, onSelect, onBack, loadingId, error }:
   // Filter option lists derived from what the recruiter actually has.
   const statusOptions = useMemo(() => {
     const present = new Set(pastJobs.map((j) => j.status));
-    return (Object.keys(STATUS_META) as JobStatus[]).filter((s) => present.has(s));
+    return (Object.keys(JOB_STATUS_META) as JobStatus[]).filter((s) => present.has(s));
   }, [pastJobs]);
 
   const locationOptions = useMemo(() => {
@@ -106,7 +97,7 @@ export function TemplatePicker({ pastJobs, onSelect, onBack, loadingId, error }:
                 <option value="ALL">All statuses</option>
                 {statusOptions.map((s) => (
                   <option key={s} value={s}>
-                    {STATUS_META[s].label}
+                    {JOB_STATUS_META[s].label}
                   </option>
                 ))}
               </select>
@@ -146,7 +137,7 @@ export function TemplatePicker({ pastJobs, onSelect, onBack, loadingId, error }:
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-[var(--color-fg)]">{j.title}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--color-fg-muted)]">
-                      <Badge variant={STATUS_META[j.status].variant}>{STATUS_META[j.status].label}</Badge>
+                      <JobStatusBadge status={j.status} />
                       <span>{j.cityName ?? 'No location'}</span>
                       <span aria-hidden>·</span>
                       <span>{j.postedLabel}</span>
