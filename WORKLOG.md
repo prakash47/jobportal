@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | | |
+| Developer | Branch | Building (feature + components) | Shared surfaces touched | Started |
+|---|---|---|---|---|
+| rat145 | `feature/recruiter-jobs-filters` | Recruiter Jobs page **Filters & Search bar**: new `JobsFilterBar` (search by Title/Job-ID + Status/Category/Location/Posted-By dropdowns, URL-driven) on `apps/recruiter/app/(authed)/jobs/page.tsx`; broadens the Jobs list to **company-wide** scope (`companyId`) so Posted-By has options; folds `JobsStatusFilter` pills into the bar (retired). Recruiter-only. | none (no schema/theme/types/barrel/flags) | 2026-07-12 |
 
 ---
 
