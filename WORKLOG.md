@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | | |
+| Developer | Branch | Building | Shared surfaces |
+|---|---|---|---|
+| tech@testriq.com | `feature/recruiter-jobs-candidate-counts` | Recruiter `/jobs` **candidate-count columns** (Total Responses · New · Shortlisted · Matches), each clickable → applicants list. New `?filter=new\|shortlisted\|matched` deep-link on the applicants page + `ApplicantsFilterTabs`. Files: `jobs/page.tsx`, `JobsTable.tsx`, `applicants/page.tsx`, new `ApplicantsFilterTabs.tsx` + `applicant-filter.ts`. | **None** — recruiter-only, no schema/migration/flags/locks; `apps/web`+`apps/services` untouched. |
 
 ---
 
