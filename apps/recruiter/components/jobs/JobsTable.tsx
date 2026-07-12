@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { CloseJobButton, ReopenJobButton } from './JobActions';
 import { JobStatusBadge, type JobStatus } from './JobStatusBadge';
@@ -13,16 +14,74 @@ export interface JobListRow {
   cityName: string | null;
   localityName: string | null;
   applicantCount: number;
+  /**
+   * Whether the current recruiter posted this job. The list is company-wide, but
+   * the close/reopen API is own-jobs-only (`getOne` 404s otherwise), so those
+   * actions only render for the poster — no button that can't succeed.
+   */
+  isOwn: boolean;
 }
 
 const TH =
   'border-b border-[var(--color-border)] bg-[var(--color-bg-muted)] px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-[var(--color-fg-muted)]';
 
-/** Contextual status action — mirrors the old JobRow logic. */
-function RowActions({ id, title, status }: { id: number; title: string; status: JobStatus }) {
+/**
+ * Contextual status action — mirrors the old JobRow logic. Only rendered for the
+ * job's own poster: the list is company-wide but close/reopen are own-jobs-only
+ * at the API, so a teammate's job shows no action button (it would 404).
+ */
+function RowActions({
+  id,
+  title,
+  status,
+  isOwn,
+}: {
+  id: number;
+  title: string;
+  status: JobStatus;
+  isOwn: boolean;
+}) {
+  if (!isOwn) return null;
   if (status === 'ACTIVE') return <CloseJobButton id={id} title={title} />;
   if (status === 'CLOSED' || status === 'EXPIRED') return <ReopenJobButton id={id} title={title} />;
   return null;
+}
+
+/**
+ * Job title / applicant-count: a link to the applicants page ONLY for the job's
+ * own poster. The list is company-wide, but that page is owner-private (it 404s
+ * when `postedById !== session.sub`), so a teammate's row renders the same text
+ * unlinked (`ownClass` carries the interactive styling; `textClass` the plain).
+ */
+function JobLink({
+  id,
+  isOwn,
+  ownClass,
+  textClass,
+  title,
+  ariaLabel,
+  children,
+}: {
+  id: number;
+  isOwn: boolean;
+  ownClass: string;
+  textClass: string;
+  title?: string;
+  ariaLabel?: string;
+  children: ReactNode;
+}) {
+  if (isOwn) {
+    return (
+      <Link href={`/jobs/${id}/applicants`} title={title} aria-label={ariaLabel} className={ownClass}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <span title={title} className={textClass}>
+      {children}
+    </span>
+  );
 }
 
 /**
@@ -36,7 +95,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
     <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
       {/* Desktop / tablet table */}
       <table className="hidden w-full text-sm md:table">
-        <caption className="sr-only">Your posted jobs</caption>
+        <caption className="sr-only">Jobs posted by your company</caption>
         <thead>
           <tr className="text-left">
             <th className={TH}>Job Title</th>
@@ -56,13 +115,15 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
               className="border-b border-[var(--color-border)] transition-colors last:border-b-0 hover:bg-[var(--color-bg-muted)]"
             >
               <td className="max-w-[24rem] px-4 py-3">
-                <Link
-                  href={`/jobs/${r.id}/applicants`}
+                <JobLink
+                  id={r.id}
+                  isOwn={r.isOwn}
                   title={r.title}
-                  className="block truncate font-medium text-[var(--color-fg)] hover:underline"
+                  ownClass="block truncate font-medium text-[var(--color-fg)] hover:underline"
+                  textClass="block truncate font-medium text-[var(--color-fg)]"
                 >
                   {r.title}
-                </Link>
+                </JobLink>
               </td>
               <td className="px-4 py-3 text-[var(--color-fg-muted)]">
                 {formatJobLocation({
@@ -83,16 +144,18 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
                 <JobStatusBadge status={r.status} />
               </td>
               <td className="px-4 py-3 text-right">
-                <Link
-                  href={`/jobs/${r.id}/applicants`}
-                  aria-label={`${r.applicantCount} ${r.applicantCount === 1 ? 'applicant' : 'applicants'}`}
-                  className="tabular-nums text-[var(--color-fg-muted)] hover:text-[var(--color-primary-600)] hover:underline"
+                <JobLink
+                  id={r.id}
+                  isOwn={r.isOwn}
+                  ariaLabel={`${r.applicantCount} ${r.applicantCount === 1 ? 'applicant' : 'applicants'}`}
+                  ownClass="tabular-nums text-[var(--color-fg-muted)] hover:text-[var(--color-primary-600)] hover:underline"
+                  textClass="tabular-nums text-[var(--color-fg-muted)]"
                 >
                   {r.applicantCount}
-                </Link>
+                </JobLink>
               </td>
               <td className="px-4 py-3 text-right">
-                <RowActions id={r.id} title={r.title} status={r.status} />
+                <RowActions id={r.id} title={r.title} status={r.status} isOwn={r.isOwn} />
               </td>
             </tr>
           ))}
@@ -104,13 +167,15 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
         {rows.map((r) => (
           <li key={r.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
-              <Link
-                href={`/jobs/${r.id}/applicants`}
+              <JobLink
+                id={r.id}
+                isOwn={r.isOwn}
                 title={r.title}
-                className="min-w-0 flex-1 truncate font-medium text-[var(--color-fg)] hover:underline"
+                ownClass="min-w-0 flex-1 truncate font-medium text-[var(--color-fg)] hover:underline"
+                textClass="min-w-0 flex-1 truncate font-medium text-[var(--color-fg)]"
               >
                 {r.title}
-              </Link>
+              </JobLink>
               <JobStatusBadge status={r.status} />
             </div>
             <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
@@ -129,13 +194,16 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
               )}
             </p>
             <div className="mt-2 flex items-center justify-between gap-2">
-              <Link
-                href={`/jobs/${r.id}/applicants`}
-                className="-my-1 inline-block py-1 text-xs font-medium text-[var(--color-primary-600)] hover:underline"
+              <JobLink
+                id={r.id}
+                isOwn={r.isOwn}
+                ownClass="-my-1 inline-block py-1 text-xs font-medium text-[var(--color-primary-600)] hover:underline"
+                textClass="text-xs font-medium text-[var(--color-fg-muted)]"
               >
-                {r.applicantCount} {r.applicantCount === 1 ? 'applicant' : 'applicants'} →
-              </Link>
-              <RowActions id={r.id} title={r.title} status={r.status} />
+                {r.applicantCount} {r.applicantCount === 1 ? 'applicant' : 'applicants'}
+                {r.isOwn ? ' →' : ''}
+              </JobLink>
+              <RowActions id={r.id} title={r.title} status={r.status} isOwn={r.isOwn} />
             </div>
           </li>
         ))}
