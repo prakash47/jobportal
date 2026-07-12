@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { prisma, type JobStatus, type Prisma } from '@jobportal/db';
 import { Button } from '@jobportal/ui';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
-import { JobRow } from '../../../components/jobs/JobRow';
+import { JobsTable } from '../../../components/jobs/JobsTable';
 import { JobsStatusFilter } from '../../../components/jobs/JobsStatusFilter';
 
 const PAGE_SIZE = 20;
@@ -53,6 +53,9 @@ export default async function JobsPage({ searchParams }: PageProps) {
         status: true,
         postedAt: true,
         expiresAt: true,
+        workMode: true,
+        primaryCity: { select: { name: true } },
+        locality: { select: { name: true } },
         _count: { select: { applications: true } },
       },
     }),
@@ -92,19 +95,19 @@ export default async function JobsPage({ searchParams }: PageProps) {
           </p>
         </div>
       ) : (
-        <div className="rounded-md border border-[var(--color-border)] px-4">
-          {rows.map((r) => (
-            <JobRow
-              key={r.id}
-              id={r.id}
-              title={r.title}
-              status={r.status}
-              postedAt={r.postedAt}
-              expiresAt={r.expiresAt}
-              applicantCount={r._count.applications}
-            />
-          ))}
-        </div>
+        <JobsTable
+          rows={rows.map((r) => ({
+            id: r.id,
+            title: r.title,
+            status: r.status,
+            postedAt: r.postedAt,
+            expiresAt: r.expiresAt,
+            workMode: r.workMode,
+            cityName: r.primaryCity?.name ?? null,
+            localityName: r.locality?.name ?? null,
+            applicantCount: r._count.applications,
+          }))}
+        />
       )}
 
       {totalPages > 1 && (

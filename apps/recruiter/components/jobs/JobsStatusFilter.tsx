@@ -6,7 +6,7 @@ import { cn } from '@jobportal/ui';
 
 const FILTERS = [
   { value: 'ALL', label: 'All' },
-  { value: 'ACTIVE', label: 'Active' },
+  { value: 'ACTIVE', label: 'Open' },
   { value: 'PENDING_MODERATION', label: 'Pending' },
   { value: 'DRAFT', label: 'Draft' },
   { value: 'EXPIRED', label: 'Expired' },
