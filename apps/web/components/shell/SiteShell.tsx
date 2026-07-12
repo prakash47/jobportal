@@ -5,9 +5,10 @@ import { SiteFooter } from '../home/SiteFooter';
 // Shared public site chrome: the sticky header + the footer wrapping one <main>
 // content slot. Reuses the polished homepage header/footer so the job-search
 // pages (and any other public page that opts in) present one consistent,
-// professional frame instead of the old bare SRP stub. The header resolves
-// signed-in state on the client, so this stays safe inside statically
-// revalidated pages (it never reads cookies server-side).
+// professional frame instead of the old bare SRP stub. SiteHeader/SiteFooter
+// resolve signed-in state SERVER-SIDE (cookies, via getHeaderUser), so any route
+// wrapped in SiteShell renders dynamically — a page here must not rely on static
+// ISR/`revalidate` (the personalised header can't be shared-edge-cached).
 export function SiteShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-[var(--color-bg)] text-[var(--color-fg)]">
