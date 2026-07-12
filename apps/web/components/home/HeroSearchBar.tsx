@@ -142,10 +142,10 @@ export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
       ref={formRef}
       onSubmit={onSubmit}
       role="search"
-      className="glass-lg mx-auto flex w-full max-w-3xl flex-col gap-2 rounded-2xl p-2 transition-[border-color] duration-[var(--duration-base)] ease-[var(--ease-out)] focus-within:border-[var(--color-primary-400)] sm:flex-row sm:items-center sm:gap-0 sm:rounded-full sm:p-2"
+      className="glass-lg mx-auto flex w-full max-w-4xl flex-col gap-2 rounded-2xl p-2 transition-[border-color] duration-[var(--duration-base)] ease-[var(--ease-out)] focus-within:border-[var(--color-primary-400)] sm:flex-row sm:items-center sm:gap-0 sm:rounded-full sm:p-2"
     >
-      {/* What */}
-      <div className="relative flex-1">
+      {/* What (given more width than Where so the longer placeholder fits) */}
+      <div className="relative flex-[1.4]">
         <div className="flex items-center gap-2.5 px-4">
           <Search className="size-5 shrink-0 text-[var(--color-fg-subtle)]" aria-hidden="true" />
           <input
@@ -156,7 +156,7 @@ export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
             placeholder="Job title, skills, or company"
             aria-label="Job title, skills, or company"
             autoComplete="off"
-            className="h-14 w-full bg-transparent text-sm text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none"
+            className="h-14 w-full bg-transparent text-base font-semibold text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none"
           />
         </div>
         {open === 'what' && roleMatches.length > 0 && (
@@ -195,7 +195,7 @@ export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
             placeholder="City or 'Remote'"
             aria-label="Location"
             autoComplete="off"
-            className="h-14 w-full bg-transparent text-sm text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none"
+            className="h-14 w-full bg-transparent text-base font-semibold text-[var(--color-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none"
           />
         </div>
         {open === 'where' && cityMatches.length > 0 && (
@@ -223,13 +223,13 @@ export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
       <div className="hidden h-8 w-px bg-[var(--color-border)] sm:block" aria-hidden="true" />
 
       {/* Experience */}
-      <div className="relative sm:w-56">
+      <div className="relative sm:w-64">
         <button
           type="button"
           onClick={() => setOpen(open === 'exp' ? null : 'exp')}
           aria-haspopup="listbox"
           aria-expanded={open === 'exp'}
-          className="flex h-14 w-full items-center gap-2.5 px-4 text-sm text-[var(--color-fg)] focus:outline-none"
+          className="flex h-14 w-full items-center gap-2.5 px-4 text-base font-semibold text-[var(--color-fg)] focus:outline-none"
         >
           <Briefcase className="size-5 shrink-0 text-[var(--color-fg-subtle)]" aria-hidden="true" />
           <span className={exp ? '' : 'text-[var(--color-fg-subtle)]'}>{expLabel}</span>
