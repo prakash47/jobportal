@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | | |
+| Developer | Branch | Building | Shared surfaces | Since |
+|---|---|---|---|---|
+| rat145 | `feature/recruiter-jobs-list-table` | Recruiter `/jobs` list → structured **table** (`JobsTable`, `JobStatusBadge`) with columns Title · Location · Date Posted · Status (+Applicants/Actions) and **color-coded status badges** (Open/Draft/Expired/Closed). Widens the page's Prisma read for location; `apps/web`+`apps/services` untouched. | none (apps/recruiter only — no schema/theme/types/flags/barrels) | 2026-07-12 |
 
 ---
 
