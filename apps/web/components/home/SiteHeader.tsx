@@ -45,15 +45,25 @@ export async function SiteHeader() {
         <Link
           href={brandHref}
           aria-label={isSeeker ? 'Career Queue — dashboard' : 'Career Queue — home'}
-          className="flex shrink-0 flex-col items-start justify-center gap-1.5 leading-none"
+          className="flex shrink-0 flex-col items-center justify-center gap-1.5 leading-none"
         >
-          <Logo variant="mark" priority className="h-10 w-auto" />
-          <span className="pl-1 text-sm font-semibold leading-none tracking-tight text-[var(--color-primary-600)]">
+          {/*
+            The CQ mark is centred over the wordmark below it (items-center centres
+            each child's box on the same axis). But the visible glyph is NOT centred
+            inside its own PNG: the opaque pixels of cq-mark-color.png (400×178) run
+            x=52→368, i.e. 52px transparent padding on the left vs 32px on the right,
+            so the glyph's optical centre sits +10px (≈2.5% of width) right of the box
+            centre → ~2px at h-9. `-translate-x-[2px]` cancels that so the *visible*
+            glyph is truly centred over the text (equal space L/R). Replaces the old
+            eyeballed `pl-1` nudge. (Measured, not guessed.)
+          */}
+          <Logo variant="mark" priority className="h-9 w-auto -translate-x-[2px]" />
+          <span className="text-base font-semibold leading-none tracking-tight text-[var(--color-primary-600)]">
             Career Queue
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-6 lg:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-6 lg:ml-6 lg:flex" aria-label="Primary">
           {NAV_LINKS.map((l) => (
             <Link key={l.href} href={l.href} className={navLinkClass}>
               {l.label}
