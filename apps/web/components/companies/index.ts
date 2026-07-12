@@ -1,5 +1,7 @@
 export { CompanyAbout, type CompanyAboutProps } from './CompanyAbout';
 export { CompanyCard, type CompanyCardProps } from './CompanyCard';
+export { CompanyFilters, type CompanyFiltersProps } from './CompanyFilters';
+export { IndustryShowcase, type IndustryShowcaseItem } from './IndustryShowcase';
 export { CompanyHero, type CompanyHeroProps } from './CompanyHero';
 export { CompanyLogo, type CompanyLogoProps } from './CompanyLogo';
 export { CompanyOpenings } from './CompanyOpenings';
