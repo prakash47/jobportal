@@ -78,9 +78,19 @@ function slugify(input: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
+export function HeroSearchBar({
+  cities,
+  initialWhat = '',
+  onSearch,
+}: {
+  cities: HeroCity[];
+  /** Prefill the keyword field — used when the SRP search bar pops out into this. */
+  initialWhat?: string;
+  /** Called right after a successful search submit (e.g. to collapse the SRP popover). */
+  onSearch?: () => void;
+}) {
   const router = useRouter();
-  const [what, setWhat] = useState('');
+  const [what, setWhat] = useState(initialWhat);
   const [where, setWhere] = useState('');
   const [exp, setExp] = useState('');
   const [open, setOpen] = useState<Field | null>(null);
@@ -135,6 +145,7 @@ export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
     );
     const qs = sorted.toString();
     router.push(qs ? `/jobs?${qs}` : '/jobs');
+    onSearch?.();
   }
 
   return (
