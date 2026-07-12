@@ -5,6 +5,22 @@
 export type WorkMode = 'ONSITE' | 'REMOTE' | 'HYBRID';
 
 /**
+ * Posting product/type (Prisma enum `JobType`). Surfaced as the "Category"
+ * filter on the Jobs list. FREE is the only type live on Day 0; HOT_VACANCY +
+ * SMB are the paid products (gated OFF), INTERNSHIP is its own track. The label
+ * map is the single source of truth for both the filter dropdown and the
+ * server-side param allow-list, so the two can never drift.
+ */
+export type JobCategory = 'FREE' | 'HOT_VACANCY' | 'SMB' | 'INTERNSHIP';
+
+export const JOB_TYPE_LABELS: Record<JobCategory, string> = {
+  FREE: 'Free',
+  HOT_VACANCY: 'Hot Vacancy',
+  SMB: 'SMB',
+  INTERNSHIP: 'Internship',
+};
+
+/**
  * Human-readable location for a posting, given its work mode + resolved
  * city/locality names (the recruiter page resolves these via a Prisma join).
  *
