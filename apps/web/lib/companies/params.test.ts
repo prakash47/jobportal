@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { parseDirectoryParams } from './params';
+import { buildDirectoryQuery, parseDirectoryParams } from './params';
 
 describe('parseDirectoryParams', () => {
   it('returns defaults on an empty query', () => {
-    expect(parseDirectoryParams({})).toEqual({ category: null, page: 1 });
+    expect(parseDirectoryParams({})).toEqual({
+      category: null,
+      sort: 'rating',
+      hiring: false,
+      page: 1,
+    });
   });
 
   it('reads ?category as a single slug', () => {
@@ -25,6 +30,20 @@ describe('parseDirectoryParams', () => {
     });
   });
 
+  it('reads ?sort from the whitelist, else defaults to rating', () => {
+    expect(parseDirectoryParams({ sort: 'reviews' })).toMatchObject({ sort: 'reviews' });
+    expect(parseDirectoryParams({ sort: 'name' })).toMatchObject({ sort: 'name' });
+    expect(parseDirectoryParams({ sort: 'bogus' })).toMatchObject({ sort: 'rating' });
+    expect(parseDirectoryParams({})).toMatchObject({ sort: 'rating' });
+  });
+
+  it('reads ?hiring as a boolean flag', () => {
+    expect(parseDirectoryParams({ hiring: '1' })).toMatchObject({ hiring: true });
+    expect(parseDirectoryParams({ hiring: 'true' })).toMatchObject({ hiring: true });
+    expect(parseDirectoryParams({ hiring: '0' })).toMatchObject({ hiring: false });
+    expect(parseDirectoryParams({})).toMatchObject({ hiring: false });
+  });
+
   it('?page defaults to 1', () => {
     expect(parseDirectoryParams({})).toMatchObject({ page: 1 });
     expect(parseDirectoryParams({ page: '0' })).toMatchObject({ page: 1 });
@@ -39,5 +58,25 @@ describe('parseDirectoryParams', () => {
 
   it('?page floors floats', () => {
     expect(parseDirectoryParams({ page: '3.7' })).toMatchObject({ page: 3 });
+  });
+});
+
+describe('buildDirectoryQuery', () => {
+  it('drops defaults', () => {
+    expect(buildDirectoryQuery({})).toBe('');
+    expect(buildDirectoryQuery({ sort: 'rating', hiring: false, page: 1 })).toBe('');
+  });
+
+  it('serializes non-default values', () => {
+    expect(buildDirectoryQuery({ category: 'fintech' })).toBe('category=fintech');
+    expect(buildDirectoryQuery({ sort: 'reviews' })).toBe('sort=reviews');
+    expect(buildDirectoryQuery({ hiring: true })).toBe('hiring=1');
+    expect(buildDirectoryQuery({ page: 3 })).toBe('page=3');
+  });
+
+  it('combines params in a stable order', () => {
+    expect(
+      buildDirectoryQuery({ category: 'fintech', sort: 'name', hiring: true, page: 2 }),
+    ).toBe('category=fintech&sort=name&hiring=1&page=2');
   });
 });

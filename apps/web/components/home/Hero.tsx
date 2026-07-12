@@ -6,10 +6,11 @@ interface HeroProps {
   cities: HeroCity[];
 }
 
-// Full-viewport centered hero — the headline + glass search console are the
-// whole show, lifted on a centred navy→cyan aurora. Light theme, bold display
-// type, one gradient keyword. Background lives in its own clipped layer so the
-// search dropdowns can overflow the section without being cut.
+// Content-driven hero, top-weighted — the headline + glass search console are
+// the whole show, sized to their content (no forced full-viewport height, so no
+// empty void below). Light theme, bold display type, PLAIN brand colours only
+// (no gradients per brand). A subtle neutral dot texture lives in its own clipped
+// layer so the search dropdowns can overflow the section without being cut.
 
 const QUICK_FILTERS: ReadonlyArray<{ label: string; href: string }> = [
   { label: 'Remote', href: '/jobs?mode=remote' },
@@ -24,41 +25,33 @@ const GUARANTEES = ['No ads', 'Free for job seekers', 'No spam alerts'];
 
 export function Hero({ cities }: HeroProps) {
   return (
-    <section className="relative flex min-h-[calc(100svh-72px)] flex-col items-center justify-center border-b border-[var(--color-border)] px-4 py-12 sm:px-6">
-      {/* Background layers, clipped to the section. Kept separate from the
-          content so the search dropdowns can overflow without being clipped. */}
+    <section className="relative flex flex-col items-center border-b border-[var(--color-border)] px-4 pb-20 pt-16 sm:px-6 sm:pb-24 sm:pt-24">
+      {/* Background: a subtle NEUTRAL dot texture only. The navy→cyan gradient
+          mesh + cyan aurora glow were removed (brand: flat colours, no gradients).
+          Kept separate from the content so search dropdowns overflow uncut. The
+          dot pattern is one flat border colour — no colour gradient. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div
           className="absolute inset-0"
           style={{
             backgroundImage: 'radial-gradient(var(--color-border) 1px, transparent 1px)',
             backgroundSize: '22px 22px',
-            maskImage: 'radial-gradient(ellipse 62% 52% at 50% 36%, #000 24%, transparent 72%)',
-            WebkitMaskImage: 'radial-gradient(ellipse 62% 52% at 50% 36%, #000 24%, transparent 72%)',
+            maskImage: 'radial-gradient(ellipse 62% 52% at 50% 30%, #000 24%, transparent 72%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 62% 52% at 50% 30%, #000 24%, transparent 72%)',
             opacity: 0.45,
           }}
         />
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: 'var(--gradient-mesh)',
-            maskImage: 'radial-gradient(ellipse 90% 80% at 50% 38%, #000 50%, transparent 85%)',
-            WebkitMaskImage: 'radial-gradient(ellipse 90% 80% at 50% 38%, #000 50%, transparent 85%)',
-          }}
-        />
-        <div className="absolute left-1/2 top-[30%] size-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--color-accent-500)] opacity-[0.06] blur-[130px]" />
       </div>
 
       <div className="relative z-10 mx-auto w-full max-w-6xl text-center">
-        <h1 className="rise text-balance text-4xl font-bold leading-[1.05] tracking-[-0.02em] text-[var(--color-fg)] sm:text-5xl lg:text-6xl xl:text-7xl">
-          Find work that <span className="gradient-text">fits</span> your life.
+        <h1 className="rise text-balance text-3xl font-bold leading-[1.08] tracking-[-0.02em] text-[var(--color-fg)] sm:text-4xl lg:text-5xl">
+          Where great <span className="text-[var(--color-accent-600)]">careers</span> begin.
         </h1>
         <p
           className="rise mx-auto mt-6 max-w-3xl text-balance text-lg leading-relaxed text-[var(--color-fg-muted)]"
           style={{ animationDelay: '60ms' }}
         >
-          A calmer way to search jobs across India. No ads, no clutter — just
-          openings that match your skills, city, and experience.
+          Real jobs, real companies. No ads.
         </p>
 
         {/* z-30 so the search + its dropdowns sit above the chips/guarantees below. */}
