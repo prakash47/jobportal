@@ -52,6 +52,21 @@
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/home-hero-copy` — home hero rework · 2026-07-12
+
+**Reworked the home hero** — headline, subtext, colour, size, layout, and search bar (SRS §4.1). CLI merge to `develop` (`--no-ff`). `apps/web` only — two files (`components/home/Hero.tsx` + `HeroSearchBar.tsx`); no schema/migration/feature-flag/shared-surface-lock. Iterated live with the owner over several rounds.
+
+**What shipped:**
+- **Headline** → **"Where great careers begin."** — the word "careers" is emphasised in **flat brand cyan** (`--color-accent-600`, `#0087be`, 4.03:1 AA; the exact brand `accent-500`/`#22A0DA` measured 2.95:1, just under the 3:1 large-text floor). The old `gradient-text` keyword is **removed** (owner banned gradients). Display size reduced from up-to-**72px → 48px** (`text-3xl sm:text-4xl lg:text-5xl`) at the owner's request ("too big").
+- **Subtext** → **"Real jobs, real companies. No ads."** (honest trust signals, no fabricated stat — the owner's "5 lakh+" reference would have been false against the demo data).
+- **Background de-gradiented** — removed the navy→cyan `--gradient-mesh` layer + the cyan aurora blur; kept only the neutral dot texture (flat brand colours only, per the standing no-gradients preference).
+- **Layout top-weighted** — the hero was a full-viewport (`min-h-[calc(100svh-72px)]`) vertically-centred block; it's now **content-driven** (no forced height) so shifting the content up doesn't leave a large empty void beneath it.
+- **`HeroSearchBar`** — the segmented search bar is **wider** (`max-w-3xl`→`max-w-4xl`, 768→896px), input labels are **16px semibold** (were 14px regular), and the "what" field was widened relative to "location" so the full placeholder fits without clipping.
+
+**Gate (integrated with `develop` incl. companies-redesign + recruiter-jobs-filters):** typecheck **11/11** · tests **API 584 + web 186** · build **4/4** apps. **Browser-verified** at 1320px + 375px (single-line headline at both widths, cyan accent AA, wider search bar, no horizontal overflow, console clean).
+
+**Deferred / follow-ups:** the header/navbar and the `/companies` redesign shipped on their own branches; this branch is hero-only.
+
 ### `feature/companies-directory-redesign` — full `/companies` seeker directory redesign · 2026-07-12
 
 **Full redesign of the job-seeker companies directory** `/companies` (SRS §4.7). CLI merge to `develop` (`--no-ff`). `apps/web` only — **no schema/migration/feature-flag**; the only shared surfaces are the `components/companies/index.ts` barrel (append-only, then reverted to keep the client components deep-imported) + a one-line stale-comment fix in `components/shell/SiteShell.tsx`.
