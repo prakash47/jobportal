@@ -13,13 +13,34 @@ export interface JobListRow {
   cityName: string | null;
   localityName: string | null;
   applicantCount: number;
+  /**
+   * Whether the current recruiter posted this job. The list is company-wide, but
+   * the close/reopen API is own-jobs-only (`getOne` 404s otherwise), so those
+   * actions only render for the poster — no button that can't succeed.
+   */
+  isOwn: boolean;
 }
 
 const TH =
   'border-b border-[var(--color-border)] bg-[var(--color-bg-muted)] px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-[var(--color-fg-muted)]';
 
-/** Contextual status action — mirrors the old JobRow logic. */
-function RowActions({ id, title, status }: { id: number; title: string; status: JobStatus }) {
+/**
+ * Contextual status action — mirrors the old JobRow logic. Only rendered for the
+ * job's own poster: the list is company-wide but close/reopen are own-jobs-only
+ * at the API, so a teammate's job shows no action button (it would 404).
+ */
+function RowActions({
+  id,
+  title,
+  status,
+  isOwn,
+}: {
+  id: number;
+  title: string;
+  status: JobStatus;
+  isOwn: boolean;
+}) {
+  if (!isOwn) return null;
   if (status === 'ACTIVE') return <CloseJobButton id={id} title={title} />;
   if (status === 'CLOSED' || status === 'EXPIRED') return <ReopenJobButton id={id} title={title} />;
   return null;
@@ -36,7 +57,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
     <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
       {/* Desktop / tablet table */}
       <table className="hidden w-full text-sm md:table">
-        <caption className="sr-only">Your posted jobs</caption>
+        <caption className="sr-only">Jobs posted by your company</caption>
         <thead>
           <tr className="text-left">
             <th className={TH}>Job Title</th>
@@ -92,7 +113,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
                 </Link>
               </td>
               <td className="px-4 py-3 text-right">
-                <RowActions id={r.id} title={r.title} status={r.status} />
+                <RowActions id={r.id} title={r.title} status={r.status} isOwn={r.isOwn} />
               </td>
             </tr>
           ))}
@@ -135,7 +156,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
               >
                 {r.applicantCount} {r.applicantCount === 1 ? 'applicant' : 'applicants'} →
               </Link>
-              <RowActions id={r.id} title={r.title} status={r.status} />
+              <RowActions id={r.id} title={r.title} status={r.status} isOwn={r.isOwn} />
             </div>
           </li>
         ))}

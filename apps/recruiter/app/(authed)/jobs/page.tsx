@@ -3,9 +3,14 @@ import { prisma, type JobStatus, type Prisma } from '@jobportal/db';
 import { Button } from '@jobportal/ui';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
 import { JobsTable } from '../../../components/jobs/JobsTable';
-import { JobsStatusFilter } from '../../../components/jobs/JobsStatusFilter';
+import { JobsFilterBar } from '../../../components/jobs/JobsFilterBar';
+import { JOB_TYPE_LABELS, type JobCategory } from '../../../components/jobs/job-list-format';
 
 const PAGE_SIZE = 20;
+
+// Postgres `Int` (int4) upper bound — a numeric search/param above this would
+// overflow the column type and error, so we reject it during parsing.
+const PG_INT_MAX = 2147483647;
 
 const VALID_STATUSES: ReadonlySet<string> = new Set([
   'DRAFT',
@@ -15,33 +20,86 @@ const VALID_STATUSES: ReadonlySet<string> = new Set([
   'CLOSED',
 ]);
 
+const VALID_CATEGORIES: ReadonlySet<string> = new Set(Object.keys(JOB_TYPE_LABELS));
+
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-function readPage(sp: Record<string, string | string[] | undefined>): number {
-  const raw = Array.isArray(sp['page']) ? sp['page'][0] : sp['page'];
-  const n = Number(raw);
+type Sp = Record<string, string | string[] | undefined>;
+
+function firstParam(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
+
+function readPage(sp: Sp): number {
+  const n = Number(firstParam(sp['page']));
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
 }
 
-function readStatus(sp: Record<string, string | string[] | undefined>): JobStatus | null {
-  const raw = Array.isArray(sp['status']) ? sp['status'][0] : sp['status'];
+function readStatus(sp: Sp): JobStatus | null {
+  const raw = firstParam(sp['status']);
   if (!raw || raw === 'ALL') return null;
-  if (VALID_STATUSES.has(raw)) return raw as JobStatus;
-  return null;
+  return VALID_STATUSES.has(raw) ? (raw as JobStatus) : null;
+}
+
+function readCategory(sp: Sp): JobCategory | null {
+  const raw = firstParam(sp['category']);
+  if (!raw) return null;
+  return VALID_CATEGORIES.has(raw) ? (raw as JobCategory) : null;
+}
+
+/** A positive int within the Postgres int4 range, else null. */
+function readIntId(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= PG_INT_MAX ? n : null;
+}
+
+function readSearch(sp: Sp): string | null {
+  const raw = firstParam(sp['q'])?.trim();
+  return raw ? raw.slice(0, 100) : null;
 }
 
 export default async function JobsPage({ searchParams }: PageProps) {
   const session = (await readUserFromCookie())!;
   const sp = await searchParams;
+
   const page = readPage(sp);
   const status = readStatus(sp);
+  const category = readCategory(sp);
+  const cityId = readIntId(firstParam(sp['city']));
+  const postedById = readIntId(firstParam(sp['postedBy']));
+  const q = readSearch(sp);
 
-  const where: Prisma.JobWhereInput = { postedById: session.sub };
+  // The Jobs list is company-wide (every teammate's postings) so the Posted By
+  // filter has options to choose from. Fall back to the recruiter's own jobs if
+  // no company record resolves (defensive — the authed shell requires one).
+  const recruiter = await prisma.recruiter.findUnique({
+    where: { userId: session.sub },
+    select: { companyId: true },
+  });
+  const baseScope: Prisma.JobWhereInput = recruiter
+    ? { companyId: recruiter.companyId }
+    : { postedById: session.sub };
+
+  const where: Prisma.JobWhereInput = { ...baseScope };
   if (status) where.status = status;
+  if (category) where.jobType = category;
+  if (cityId) where.primaryCityId = cityId;
+  if (postedById) where.postedById = postedById;
+  if (q) {
+    // Title substring (case-insensitive) OR, when the query is a plain number,
+    // an exact Job ID match.
+    const or: Prisma.JobWhereInput[] = [{ title: { contains: q, mode: 'insensitive' } }];
+    if (/^\d+$/.test(q)) {
+      const asId = Number(q);
+      if (Number.isSafeInteger(asId) && asId >= 1 && asId <= PG_INT_MAX) or.push({ id: asId });
+    }
+    where.OR = or;
+  }
 
-  const [rows, total] = await Promise.all([
+  const [rows, total, cityRows, posterRows] = await Promise.all([
     prisma.job.findMany({
       where,
       orderBy: { postedAt: 'desc' },
@@ -54,16 +112,52 @@ export default async function JobsPage({ searchParams }: PageProps) {
         postedAt: true,
         expiresAt: true,
         workMode: true,
+        postedById: true,
         primaryCity: { select: { name: true } },
         locality: { select: { name: true } },
         _count: { select: { applications: true } },
       },
     }),
     prisma.job.count({ where }),
+    // Dropdown option lists — derived from the company's ENTIRE job set (the
+    // base scope, not the active filters) so the dropdowns never collapse as
+    // you narrow the list. Sorted in JS to avoid distinct + relation-orderBy.
+    prisma.job.findMany({
+      where: { ...baseScope, primaryCityId: { not: null } },
+      select: { primaryCityId: true, primaryCity: { select: { name: true } } },
+      distinct: ['primaryCityId'],
+    }),
+    prisma.job.findMany({
+      where: { ...baseScope, postedById: { not: null } },
+      select: { postedById: true, postedBy: { select: { name: true } } },
+      distinct: ['postedById'],
+    }),
   ]);
 
+  const locations = cityRows
+    .flatMap((r) =>
+      r.primaryCityId != null && r.primaryCity ? [{ id: r.primaryCityId, name: r.primaryCity.name }] : [],
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const posters = posterRows
+    .flatMap((r) =>
+      r.postedById != null && r.postedBy ? [{ id: r.postedById, name: r.postedBy.name }] : [],
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const filtered = status !== null;
+  const filtered =
+    status !== null || category !== null || cityId !== null || postedById !== null || q !== null;
+
+  // Every active filter must survive pagination — the old PageLink only carried
+  // page + status, which would have silently dropped the new filters.
+  const baseParams = new URLSearchParams();
+  if (status) baseParams.set('status', status);
+  if (category) baseParams.set('category', category);
+  if (cityId) baseParams.set('city', String(cityId));
+  if (postedById) baseParams.set('postedBy', String(postedById));
+  if (q) baseParams.set('q', q);
 
   return (
     <div className="space-y-6">
@@ -73,8 +167,8 @@ export default async function JobsPage({ searchParams }: PageProps) {
           <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
             {total === 0
               ? filtered
-                ? 'Nothing matches this filter.'
-                : 'You haven’t posted any jobs yet.'
+                ? 'No jobs match these filters.'
+                : 'No jobs posted yet.'
               : `${total} ${total === 1 ? 'job' : 'jobs'}.`}
           </p>
         </div>
@@ -83,15 +177,15 @@ export default async function JobsPage({ searchParams }: PageProps) {
         </Button>
       </header>
 
-      <JobsStatusFilter />
+      <JobsFilterBar locations={locations} posters={posters} />
 
       {rows.length === 0 ? (
         <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">
           <p className="text-sm font-medium text-[var(--color-fg)]">
-            {filtered ? 'Nothing matches this filter' : 'No jobs yet'}
+            {filtered ? 'No jobs match these filters' : 'No jobs yet'}
           </p>
           <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-            {filtered ? 'Try a different status or clear the filter.' : 'Post your first opening.'}
+            {filtered ? 'Try adjusting or clearing the filters.' : 'Post your first opening.'}
           </p>
         </div>
       ) : (
@@ -106,19 +200,20 @@ export default async function JobsPage({ searchParams }: PageProps) {
             cityName: r.primaryCity?.name ?? null,
             localityName: r.locality?.name ?? null,
             applicantCount: r._count.applications,
+            isOwn: r.postedById === session.sub,
           }))}
         />
       )}
 
       {totalPages > 1 && (
         <nav aria-label="Pagination" className="flex items-center justify-between text-sm">
-          <PageLink page={page - 1} disabled={page <= 1} status={status}>
+          <PageLink page={page - 1} disabled={page <= 1} baseParams={baseParams}>
             ← Newer
           </PageLink>
           <span className="text-[var(--color-fg-muted)]">
             Page {page} of {totalPages}
           </span>
-          <PageLink page={page + 1} disabled={page >= totalPages} status={status}>
+          <PageLink page={page + 1} disabled={page >= totalPages} baseParams={baseParams}>
             Older →
           </PageLink>
         </nav>
@@ -130,18 +225,17 @@ export default async function JobsPage({ searchParams }: PageProps) {
 function PageLink({
   page,
   disabled,
-  status,
+  baseParams,
   children,
 }: {
   page: number;
   disabled: boolean;
-  status: JobStatus | null;
+  baseParams: URLSearchParams;
   children: React.ReactNode;
 }) {
   if (disabled) return <span className="text-[var(--color-fg-subtle)]">{children}</span>;
-  const params = new URLSearchParams();
+  const params = new URLSearchParams(baseParams);
   params.set('page', String(page));
-  if (status) params.set('status', status);
   return (
     <Link
       href={`/jobs?${params.toString()}`}
