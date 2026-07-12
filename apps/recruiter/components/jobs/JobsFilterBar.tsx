@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ChevronDown, Search, X } from '@jobportal/ui/icons';
-import { Input, Label } from '@jobportal/ui';
+import { cn, Input, Label } from '@jobportal/ui';
 import { JOB_STATUS_META, type JobStatus } from './JobStatusBadge';
 import { JOB_TYPE_LABELS, type JobCategory } from './job-list-format';
 
@@ -55,11 +55,27 @@ export function JobsFilterBar({ locations, posters }: JobsFilterBarProps) {
   const postedBy = searchParams.get('postedBy') ?? '';
   const urlQuery = searchParams.get('q') ?? '';
 
+  // Latest searchParams, read at debounce-fire time (not the render-time
+  // snapshot) so a trailing search commit MERGES with — rather than clobbers —
+  // a dropdown change the user made during the debounce window.
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
+
   // The search box is a controlled client input debounced into the URL, so it
   // keeps focus + cursor while the RSC re-renders. The URL stays the source of
-  // truth: sync the local value when it changes externally (e.g. Clear all).
+  // truth, but we only re-sync the input on a GENUINE external change (Clear
+  // all, back/forward) — tracked via the last value THIS component committed —
+  // so the URL catching up to the user's own typing never reverts the input
+  // (which would strip trailing spaces / jump the caret).
   const [query, setQuery] = useState(urlQuery);
-  useEffect(() => setQuery(urlQuery), [urlQuery]);
+  const lastCommittedQueryRef = useRef(urlQuery);
+  useEffect(() => {
+    if (urlQuery !== lastCommittedQueryRef.current) {
+      lastCommittedQueryRef.current = urlQuery;
+      setQuery(urlQuery);
+    }
+  }, [urlQuery]);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
@@ -72,7 +88,7 @@ export function JobsFilterBar({ locations, posters }: JobsFilterBarProps) {
   }
 
   function setParam(key: string, value: string) {
-    const params = new URLSearchParams(searchParams.toString());
+    const params = new URLSearchParams(searchParamsRef.current.toString());
     if (value) params.set(key, value);
     else params.delete(key);
     commit(params);
@@ -81,11 +97,16 @@ export function JobsFilterBar({ locations, posters }: JobsFilterBarProps) {
   function onSearchChange(value: string) {
     setQuery(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setParam('q', value.trim()), SEARCH_DEBOUNCE_MS);
+    debounceRef.current = setTimeout(() => {
+      const trimmed = value.trim();
+      lastCommittedQueryRef.current = trimmed;
+      setParam('q', trimmed);
+    }, SEARCH_DEBOUNCE_MS);
   }
 
   function clearAll() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    lastCommittedQueryRef.current = '';
     setQuery('');
     router.replace(pathname, { scroll: false });
   }
@@ -225,7 +246,10 @@ function FilterSelect({
         </select>
         <ChevronDown
           aria-hidden
-          className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-fg-subtle)]"
+          className={cn(
+            'pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-fg-subtle)]',
+            disabled && 'opacity-50',
+          )}
         />
       </div>
     </div>

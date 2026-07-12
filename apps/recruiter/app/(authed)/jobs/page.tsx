@@ -164,7 +164,8 @@ export default async function JobsPage({ searchParams }: PageProps) {
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Jobs</h1>
-          <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
+          {/* role=status → the new match count is announced when filters change. */}
+          <p role="status" className="mt-1 text-sm text-[var(--color-fg-muted)]">
             {total === 0
               ? filtered
                 ? 'No jobs match these filters.'
