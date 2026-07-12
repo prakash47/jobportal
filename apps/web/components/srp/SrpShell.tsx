@@ -3,7 +3,7 @@ import { Container } from '@jobportal/ui';
 import { Filter } from '@jobportal/ui/icons';
 import type { SearchJobsResult } from '@jobportal/search';
 import { SiteShell } from '../shell/SiteShell';
-import { SearchInput } from '../header/SearchInput';
+import { SrpSearchExpand } from './SrpSearchExpand';
 import { JobCard } from './JobCard';
 import { FilterSidebar, type FilterOption } from './FilterSidebar';
 import { SortSelect } from './SortSelect';
@@ -114,8 +114,12 @@ export async function SrpShell({
             Search button, and one-tap popular searches. */}
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{pageTitle}</h1>
 
-        <div className="mt-4 max-w-3xl">
-          <SearchInput size="lg" withButton {...(searchQuery ? { initialValue: searchQuery } : {})} />
+        <div className="mt-4">
+          <SrpSearchExpand
+            key={searchQuery ?? ''}
+            cities={cities}
+            {...(searchQuery ? { initialQuery: searchQuery } : {})}
+          />
         </div>
 
         <QuickSearches className="mt-3.5" />
