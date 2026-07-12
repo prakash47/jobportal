@@ -78,11 +78,22 @@ function slugify(input: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-export function HeroSearchBar({ cities }: { cities: HeroCity[] }) {
+export function HeroSearchBar({
+  cities,
+  initialWhat = '',
+  initialWhere = '',
+  initialExp = '',
+}: {
+  cities: HeroCity[];
+  /** Prefill the three fields — used when the SRP search bar pops out into this. */
+  initialWhat?: string;
+  initialWhere?: string;
+  initialExp?: string;
+}) {
   const router = useRouter();
-  const [what, setWhat] = useState('');
-  const [where, setWhere] = useState('');
-  const [exp, setExp] = useState('');
+  const [what, setWhat] = useState(initialWhat);
+  const [where, setWhere] = useState(initialWhere);
+  const [exp, setExp] = useState(initialExp);
   const [open, setOpen] = useState<Field | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
