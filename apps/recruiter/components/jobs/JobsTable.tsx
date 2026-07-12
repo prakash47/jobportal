@@ -58,6 +58,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
               <td className="max-w-[24rem] px-4 py-3">
                 <Link
                   href={`/jobs/${r.id}/applicants`}
+                  title={r.title}
                   className="block truncate font-medium text-[var(--color-fg)] hover:underline"
                 >
                   {r.title}
@@ -84,6 +85,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
               <td className="px-4 py-3 text-right">
                 <Link
                   href={`/jobs/${r.id}/applicants`}
+                  aria-label={`${r.applicantCount} ${r.applicantCount === 1 ? 'applicant' : 'applicants'}`}
                   className="tabular-nums text-[var(--color-fg-muted)] hover:text-[var(--color-primary-600)] hover:underline"
                 >
                   {r.applicantCount}
@@ -104,6 +106,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
             <div className="flex items-start justify-between gap-3">
               <Link
                 href={`/jobs/${r.id}/applicants`}
+                title={r.title}
                 className="min-w-0 flex-1 truncate font-medium text-[var(--color-fg)] hover:underline"
               >
                 {r.title}
@@ -128,7 +131,7 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
             <div className="mt-2 flex items-center justify-between gap-2">
               <Link
                 href={`/jobs/${r.id}/applicants`}
-                className="text-xs font-medium text-[var(--color-primary-600)] hover:underline"
+                className="-my-1 inline-block py-1 text-xs font-medium text-[var(--color-primary-600)] hover:underline"
               >
                 {r.applicantCount} {r.applicantCount === 1 ? 'applicant' : 'applicants'} →
               </Link>
