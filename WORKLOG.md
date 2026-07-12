@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | | |
+| Developer | Branch | Building (feature + components) | Shared surfaces touched | Started |
+|---|---|---|---|---|
+| Jayesh | `feature/companies-directory-redesign` | Full redesign of `/companies` landing: wrap in `SiteShell` (header+footer), add a **left filter sidebar** (industry + sort + hiring toggle; mobile sheet), an **industry category-cards** showcase row (per-industry counts, brand colours), and a **redesigned `CompanyCard`**. New `CompaniesShell`/`CompanyFilters`/`IndustryShowcase`; reworks `companies/page.tsx` + `lib/companies/params.ts`. `apps/web` only. | `apps/web/components/companies/index.ts` (append-only) — no schema/theme/flags | 2026-07-12 |
 
 ---
 
