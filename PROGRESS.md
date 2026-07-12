@@ -52,6 +52,25 @@
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/companies-directory-redesign` — full `/companies` seeker directory redesign · 2026-07-12
+
+**Full redesign of the job-seeker companies directory** `/companies` (SRS §4.7). CLI merge to `develop` (`--no-ff`). `apps/web` only — **no schema/migration/feature-flag**; the only shared surfaces are the `components/companies/index.ts` barrel (append-only, then reverted to keep the client components deep-imported) + a one-line stale-comment fix in `components/shell/SiteShell.tsx`.
+
+**Architectural note:** the page was a bare `<main>` with `revalidate = 3600` (edge ISR). It's now wrapped in `SiteShell`, whose header/footer resolve auth **server-side** (cookies via `getHeaderUser`), so the route renders **dynamically** like the rest of the public site (home / SRP / job-detail) and `revalidate` was dropped — a personalised header can't be shared-edge-cached. (Recorded the same on `SiteShell`'s doc comment, which had gone stale claiming client-side auth.)
+
+**What shipped:**
+- **Shared chrome** — the directory now carries the real `SiteHeader` + `SiteFooter` (was headerless/footerless).
+- **`IndustryShowcase`** (new client component) — a horizontally-scrollable "browse by industry" rail of category cards on a faint brand-navy band (`primary-50`), each showing the **real** per-industry company count (a `company.groupBy(industryId)`) in brand cyan, linking to the filtered directory. Scroll arrows appear only on overflow (kept mounted+disabled at the edges so keyboard focus is never dropped); touch/keyboard scroll everywhere. No fabricated numbers.
+- **`CompanyFilters`** (new client component) — an elevated faceted-filter **card** in a sticky sidebar: **Sort** (Top rated / Most reviewed / A–Z) + **Availability** (Currently hiring) + **Industry**, single-select groups as radio rows, hiring as a checkbox, an iconed header with a navy **active-filter count badge** + Clear all, and count pills. All URL-driven `<Link>`s (no client state). Renders **bare** inside the reused `MobileFilterSheet` on mobile (no card-in-card).
+- **Redesigned `CompanyCard`** — **"The Ledger"** data-console tile, selected via a 4-concept design judge-panel. Signature = a hairline-divided semantic `<dl>` of the three facts a seeker scans (**Open roles / Rating / Location**), big tabular values baseline-aligned over whisper uppercase labels on a flat navy tint; a bold headline with a navy **kicker-tick** that widens on hover; a cyan **"Hiring"** tag; a ghost **"View jobs"** affordance. Whole card is one `<Link>` with a composed aria-label; flat brand colours only, one hover-lift, strict AA. Amber star reuses `RatingStars`' oklch value (no new token).
+- **`lib/companies/params.ts`** — gains `sort` (`rating`|`name`|`reviews`) + `hiring` (bool) parsing and `buildDirectoryQuery` (drops defaults, preserves filters across pagination). Page adds a deterministic `{ id: 'asc' }` orderBy tiebreaker and an **over-range `?page` → last-page 307 redirect**. +12 params unit tests (web now 186).
+
+**Adversarial review** (4 lenses — correctness / SSR-boundary / a11y / responsive-brand, each finding verified): **15 raised, 14 fixed, 1 accepted** (per-industry counts are intentionally unfiltered totals, documented). Fixes incl. the page-clamp redirect, deterministic pagination, sort-neutral "Previous/Next" labels, showcase links preserving `sort`+`hiring`, `aria-current` (not invalid `aria-pressed`) on the hiring toggle, `fg-subtle`→`fg-muted` on meaningful text (2.57→7.79:1 AA), active showcase border `accent-500`→`accent-600` (3:1 non-text floor), scroll-arrows kept mounted, `sr-only` results heading, and matching the SRP's `top-20` sticky offset.
+
+**Gate (integrated with the teammate's `feature/recruiter-jobs-filters`):** typecheck **11/11** · tests **API 584 + web 186** · build **4/4** apps (`/companies` builds `ƒ` dynamic). **Browser-verified** at 1320px + 375px + **320px** (industry rail + data-console cards + filter card, filtering end-to-end, mobile sheet bare/single-title, composed aria-label, zero horizontal overflow, console clean).
+
+**Deferred / follow-ups:** an "Open roles"-based sort would need a job-count aggregation for ordering (not a column) — left out; per-industry facet counts don't reflect the active `hiring` filter (intentional browsing aid); live hover micro-interactions couldn't be measured in the headless preview (standard app-wide `group-hover` pattern, verified structurally).
+
 ### `feature/recruiter-jobs-filters` — recruiter Jobs list Filters & Search bar · 2026-07-12
 
 **Recruiter Jobs `/jobs` Filters & Search bar** (SRS §4.9). CLI merge to `develop` (`--no-ff`). **Recruiter-only** — `apps/web` (job-seeker) + `apps/services` **byte-untouched** (`git diff develop…HEAD -- apps/web apps/services` empty); **no schema/migration/feature-flag/shared-surface-lock**. No API change (the page reads Postgres directly in an RSC — reads/writes split).
