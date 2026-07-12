@@ -131,6 +131,7 @@ export default async function CompaniesDirectoryPage({ searchParams }: PageProps
       activeSort={sort}
       hiring={hiring}
       showTitle={false}
+      bare
     />
   );
 

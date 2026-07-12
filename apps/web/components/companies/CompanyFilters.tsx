@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@jobportal/ui';
-import { Check } from '@jobportal/ui/icons';
+import { Check, Filter } from '@jobportal/ui/icons';
 import type { DirectorySort } from '../../lib/companies/params';
 
 export interface CompanyFiltersProps {
@@ -11,9 +11,12 @@ export interface CompanyFiltersProps {
   activeCategory: string | null;
   activeSort: DirectorySort;
   hiring: boolean;
-  /** Show the "Filters" heading. Off inside the mobile sheet (the DialogTitle
-   *  already reads "Filters"), on for the desktop sidebar. Default true. */
+  /** Show the iconed "Filters" header. Off inside the mobile sheet (its
+   *  DialogTitle already reads "Filters"), on for the desktop sidebar. */
   showTitle?: boolean;
+  /** Render bare (no card chrome) — used inside the mobile sheet, which is
+   *  already an elevated panel. Desktop renders the elevated card. */
+  bare?: boolean;
 }
 
 const SORT_OPTIONS: ReadonlyArray<{ value: DirectorySort; label: string }> = [
@@ -22,16 +25,18 @@ const SORT_OPTIONS: ReadonlyArray<{ value: DirectorySort; label: string }> = [
   { value: 'name', label: 'A–Z' },
 ];
 
-// The directory filter panel — rendered both in the sticky desktop sidebar and
-// inside the mobile <MobileFilterSheet>. Every control is a URL-driven <Link>
-// (no client state), so it works server-rendered and keeps the URL shareable.
-// Changing any filter resets ?page to 1.
+// The directory filter panel — an elevated, modern faceted-filter card rendered
+// in the sticky desktop sidebar, and bare inside the mobile <MobileFilterSheet>.
+// Single-select groups (sort, industry) use radio affordances; the hiring
+// toggle is a checkbox. Every control is a URL-driven <Link> (no client state),
+// so it works server-rendered and stays shareable. Any change resets ?page.
 export function CompanyFilters({
   industries,
   activeCategory,
   activeSort,
   hiring,
   showTitle = true,
+  bare = false,
 }: CompanyFiltersProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -39,7 +44,7 @@ export function CompanyFilters({
   function hrefWith(mut: (p: URLSearchParams) => void): string {
     const p = new URLSearchParams(searchParams.toString());
     mut(p);
-    p.delete('page'); // any filter change resets to page 1
+    p.delete('page');
     const qs = p.toString();
     return qs ? `${pathname}?${qs}` : pathname;
   }
@@ -49,29 +54,25 @@ export function CompanyFilters({
     hrefWith((p) => (slug ? p.set('category', slug) : p.delete('category')));
   const hiringHref = hrefWith((p) => (hiring ? p.delete('hiring') : p.set('hiring', '1')));
 
-  const hasActiveFilter = activeCategory !== null || hiring || activeSort !== 'rating';
+  const activeCount = (activeCategory !== null ? 1 : 0) + (hiring ? 1 : 0) + (activeSort !== 'rating' ? 1 : 0);
 
-  return (
-    <div className="space-y-6">
-      {(showTitle || hasActiveFilter) && (
-        <div className={cn('flex items-center', showTitle ? 'justify-between' : 'justify-end')}>
-          {showTitle && <h2 className="text-sm font-semibold text-[var(--color-fg)]">Filters</h2>}
-          {hasActiveFilter && (
-            <Link
-              href={pathname}
-              className="text-xs font-medium text-[var(--color-accent-700)] hover:underline"
-            >
-              Clear all
-            </Link>
-          )}
-        </div>
-      )}
+  const clearAll =
+    activeCount > 0 ? (
+      <Link
+        href={pathname}
+        className="text-xs font-medium text-[var(--color-accent-700)] hover:underline"
+      >
+        Clear all
+      </Link>
+    ) : null;
 
+  const body = (
+    <div className="space-y-5">
       <FilterGroup title="Sort by">
         {SORT_OPTIONS.map((o) => (
-          <OptionRow key={o.value} href={sortHref(o.value)} active={activeSort === o.value}>
+          <RadioRow key={o.value} href={sortHref(o.value)} active={activeSort === o.value}>
             {o.label}
-          </OptionRow>
+          </RadioRow>
         ))}
       </FilterGroup>
 
@@ -79,9 +80,10 @@ export function CompanyFilters({
         <Link
           href={hiringHref}
           aria-current={hiring ? 'true' : undefined}
-          className="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]"
+          className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]"
         >
           <span
+            aria-hidden="true"
             className={cn(
               'flex size-4 shrink-0 items-center justify-center rounded border transition-colors',
               hiring
@@ -96,15 +98,52 @@ export function CompanyFilters({
       </FilterGroup>
 
       <FilterGroup title="Industry">
-        <OptionRow href={categoryHref(null)} active={activeCategory === null}>
+        <RadioRow href={categoryHref(null)} active={activeCategory === null}>
           All industries
-        </OptionRow>
+        </RadioRow>
         {industries.map((i) => (
-          <OptionRow key={i.slug} href={categoryHref(i.slug)} active={activeCategory === i.slug} count={i.count}>
+          <RadioRow
+            key={i.slug}
+            href={categoryHref(i.slug)}
+            active={activeCategory === i.slug}
+            count={i.count}
+          >
             {i.name}
-          </OptionRow>
+          </RadioRow>
         ))}
       </FilterGroup>
+    </div>
+  );
+
+  const header = showTitle ? (
+    <div className="mb-4 flex items-center justify-between border-b border-[var(--color-border)] pb-4">
+      <div className="flex items-center gap-2">
+        <Filter className="size-4 text-[var(--color-primary-600)]" aria-hidden="true" />
+        <h2 className="text-sm font-semibold text-[var(--color-fg)]">Filters</h2>
+        {activeCount > 0 && (
+          <span className="rounded-full bg-[var(--color-primary-600)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+            {activeCount}
+          </span>
+        )}
+      </div>
+      {clearAll}
+    </div>
+  ) : clearAll ? (
+    <div className="mb-3 flex justify-end">{clearAll}</div>
+  ) : null;
+
+  if (bare) {
+    return (
+      <div>
+        {header}
+        {body}
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-5">
+      {header}
+      {body}
     </div>
   );
 }
@@ -120,7 +159,8 @@ function FilterGroup({ title, children }: { title: string; children: React.React
   );
 }
 
-function OptionRow({
+// Single-select row with a radio affordance + optional count pill.
+function RadioRow({
   href,
   active,
   count,
@@ -136,18 +176,29 @@ function OptionRow({
       href={href}
       aria-current={active ? 'true' : undefined}
       className={cn(
-        'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors',
+        'flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors',
         active
-          ? 'bg-[var(--color-primary-50)] font-medium text-[var(--color-primary-700)]'
+          ? 'text-[var(--color-fg)]'
           : 'text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]',
       )}
     >
-      <span className="min-w-0 flex-1 truncate">{children}</span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          'flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors',
+          active ? 'border-[var(--color-primary-600)]' : 'border-[var(--color-border-strong)]',
+        )}
+      >
+        {active && <span className="size-1.5 rounded-full bg-[var(--color-primary-600)]" />}
+      </span>
+      <span className={cn('min-w-0 flex-1 truncate', active && 'font-medium')}>{children}</span>
       {typeof count === 'number' && (
         <span
           className={cn(
-            'shrink-0 text-xs tabular-nums',
-            active ? 'text-[var(--color-primary-700)]' : 'text-[var(--color-fg-muted)]',
+            'shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
+            active
+              ? 'bg-[var(--color-primary-100)] text-[var(--color-primary-700)]'
+              : 'bg-[var(--color-bg-muted)] text-[var(--color-fg-muted)]',
           )}
         >
           {count}
