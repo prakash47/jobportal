@@ -52,6 +52,18 @@
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/srp-expanding-search` — SRP click-to-expand search · 2026-07-12
+
+**Click-to-expand search on the SRP** `/jobs` (+ all `[...path]` SEO landings via `SrpShell`) — SRS §4.1. CLI merge to `develop` (`--no-ff`). `apps/web` only — no schema/migration/feature-flag/shared-surface-lock.
+
+**What shipped:** a new client component `SrpSearchExpand` (`components/srp`) replaces the compact `SearchInput` in the SRP header. At rest it renders a trigger styled exactly like the current segmented `withButton` search bar (search icon + current query + navy "Search" button). Clicking it **pops out** — opacity 0→1 + scale 0.97→1, 200ms ease-out, elevated as a popover (`--shadow-float`) — into the **home hero's three-field `HeroSearchBar`** (skills / location / experience + Search), **prefilled with the current query** (`initialWhat`) and its first field auto-focused. It collapses on **outside mousedown / Escape** (Escape returns focus to the trigger) **/ a new search** (the component is keyed by `searchQuery`, so it remounts collapsed). The popover is **always mounted** and toggled with the `inert` attribute + opacity/scale, so the motion is smooth in both directions and its fields stay out of the tab order + off screen readers while shut. It **pops out wider** (`max-w-4xl` ≈ 896px) than the 768px resting bar so the three fields don't clip their placeholders (and it sells the effect). `HeroSearchBar` gained optional `initial{What,Where,Exp}` props (default empty → the home hero is byte-unchanged); `SrpShell` swaps `SearchInput` → `SrpSearchExpand` and drops the `max-w-3xl` wrapper (the trigger now owns its width).
+
+**Gate:** typecheck **11/11** · tests **API 584 + web 186** · build **4/4** apps. **Browser-verified**: rest state (trigger + inert/opacity-0 panel); open (panel opacity target 1, scale-100, inert removed, pointer-events auto, prefilled "react" focused, 869px wider popover, placeholders fit); outside-mousedown + collapse (back to inert/opacity-0); mobile 375px stacks; zero horizontal overflow at 1320px + 375px; console clean (no React `inert` warning).
+
+**Implementation note:** an early `requestAnimationFrame` guard for the enter transition was removed — the always-mounted popover is painted at opacity-0 for many frames before the click, so the opacity transition fires cleanly on toggle without rAF. (The headless preview runs as a *hidden* tab, which pauses rAF + freezes CSS transitions; the animation *end-states* were verified via kill-transition and the motion runs in a real visible tab.)
+
+**Deferred / follow-ups:** adversarial review was in-flight at merge time — any confirmed findings will be a fast-follow on this branch. The rest-state trigger's "Search" button expands rather than submits (consistent with clicking anywhere on the bar); the popover uses `HeroSearchBar`'s curated role list rather than the old live `/api/search/suggest` typeahead (that was the compact bar's behaviour) — an accepted trade for reusing the exact hero search.
+
 ### `feature/home-hero-copy` — home hero rework · 2026-07-12
 
 **Reworked the home hero** — headline, subtext, colour, size, layout, and search bar (SRS §4.1). CLI merge to `develop` (`--no-ff`). `apps/web` only — two files (`components/home/Hero.tsx` + `HeroSearchBar.tsx`); no schema/migration/feature-flag/shared-surface-lock. Iterated live with the owner over several rounds.
