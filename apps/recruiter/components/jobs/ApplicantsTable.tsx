@@ -64,16 +64,27 @@ export interface ApplicantRow {
   };
 }
 
-export function ApplicantsTable({ rows }: { rows: ApplicantRow[] }) {
+export function ApplicantsTable({
+  rows,
+  emptyTitle,
+}: {
+  rows: ApplicantRow[];
+  /** Filter-aware empty title; when set, the empty state reflects the active filter. */
+  emptyTitle?: string | undefined;
+}) {
   const [openId, setOpenId] = useState<number | null>(null);
   const open = rows.find((r) => r.id === openId) ?? null;
 
   if (rows.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">
-        <p className="text-sm font-medium text-[var(--color-fg)]">No applicants yet</p>
+        <p className="text-sm font-medium text-[var(--color-fg)]">
+          {emptyTitle ?? 'No applicants yet'}
+        </p>
         <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          When a candidate applies, they show up here with their headline, experience, and resume.
+          {emptyTitle
+            ? 'Try a different filter, or view All to see everyone.'
+            : 'When a candidate applies, they show up here with their headline, experience, and resume.'}
         </p>
       </div>
     );
