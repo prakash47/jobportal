@@ -115,7 +115,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
         postedById: true,
         primaryCity: { select: { name: true } },
         locality: { select: { name: true } },
-        _count: { select: { applications: true } },
+        skillIds: true,
       },
     }),
     prisma.job.count({ where }),
@@ -133,6 +133,46 @@ export default async function JobsPage({ searchParams }: PageProps) {
       distinct: ['postedById'],
     }),
   ]);
+
+  // Candidate-count metrics for the current page. One grouped query yields
+  // Total Responses / New (APPLIED) / Shortlisted (SHORTLISTED) for every job on
+  // the page; the "Matches" metric (applicants whose candidate skills overlap
+  // the job's required skills) is a bounded set of per-job counts, run in
+  // parallel and skipped for jobs that declare no required skills.
+  const jobIds = rows.map((r) => r.id);
+
+  const statusCounts =
+    jobIds.length > 0
+      ? await prisma.application.groupBy({
+          by: ['jobId', 'status'],
+          where: { jobId: { in: jobIds } },
+          _count: { _all: true },
+        })
+      : [];
+
+  const metricsByJob = new Map<number, { total: number; newCount: number; shortlisted: number }>(
+    jobIds.map((jid) => [jid, { total: 0, newCount: 0, shortlisted: 0 }]),
+  );
+  for (const c of statusCounts) {
+    const m = metricsByJob.get(c.jobId);
+    if (!m) continue;
+    const n = c._count._all;
+    m.total += n;
+    if (c.status === 'APPLIED') m.newCount += n;
+    else if (c.status === 'SHORTLISTED') m.shortlisted += n;
+  }
+
+  const matchedByJob = new Map<number, number>(
+    await Promise.all(
+      rows.map(async (r): Promise<[number, number]> => {
+        if (r.skillIds.length === 0) return [r.id, 0];
+        const matched = await prisma.application.count({
+          where: { jobId: r.id, user: { candidate: { skillIds: { hasSome: r.skillIds } } } },
+        });
+        return [r.id, matched];
+      }),
+    ),
+  );
 
   const locations = cityRows
     .flatMap((r) =>
@@ -160,7 +200,9 @@ export default async function JobsPage({ searchParams }: PageProps) {
   if (q) baseParams.set('q', q);
 
   return (
-    <div className="space-y-6">
+    // data-wide → the authed layout widens the content column so the multi-metric
+    // Jobs table fits without a horizontal page scroll (see (authed)/layout.tsx).
+    <div data-wide className="space-y-6">
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Jobs</h1>
@@ -191,18 +233,24 @@ export default async function JobsPage({ searchParams }: PageProps) {
         </div>
       ) : (
         <JobsTable
-          rows={rows.map((r) => ({
-            id: r.id,
-            title: r.title,
-            status: r.status,
-            postedAt: r.postedAt,
-            expiresAt: r.expiresAt,
-            workMode: r.workMode,
-            cityName: r.primaryCity?.name ?? null,
-            localityName: r.locality?.name ?? null,
-            applicantCount: r._count.applications,
-            isOwn: r.postedById === session.sub,
-          }))}
+          rows={rows.map((r) => {
+            const m = metricsByJob.get(r.id) ?? { total: 0, newCount: 0, shortlisted: 0 };
+            return {
+              id: r.id,
+              title: r.title,
+              status: r.status,
+              postedAt: r.postedAt,
+              expiresAt: r.expiresAt,
+              workMode: r.workMode,
+              cityName: r.primaryCity?.name ?? null,
+              localityName: r.locality?.name ?? null,
+              isOwn: r.postedById === session.sub,
+              totalResponses: m.total,
+              newCount: m.newCount,
+              shortlistedCount: m.shortlisted,
+              matchedCount: matchedByJob.get(r.id) ?? 0,
+            };
+          })}
         />
       )}
 

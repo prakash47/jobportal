@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { prisma } from '@jobportal/db';
+import { prisma, type Prisma } from '@jobportal/db';
 import { readUserFromCookie } from '../../../../../lib/auth/server-session';
 import { ApplicantsTable, type ApplicantRow } from '../../../../../components/jobs/ApplicantsTable';
 import { ApplicantsSortToggle } from '../../../../../components/jobs/ApplicantsSortToggle';
+import { ApplicantsFilterTabs } from '../../../../../components/jobs/ApplicantsFilterTabs';
+import { parseApplicantFilter, type ApplicantFilter } from '../../../../../components/jobs/applicant-filter';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +29,22 @@ function readSort(sp: Record<string, string | string[] | undefined>): SortKey {
   return raw === 'status' ? 'status' : 'date';
 }
 
+/** Human count for the sub-header, e.g. "5 new" / "3 shortlisted" / "8 matches". */
+function countLabel(total: number, filter: ApplicantFilter | null): string {
+  if (filter === 'new') return `${total} new`;
+  if (filter === 'shortlisted') return `${total} shortlisted`;
+  if (filter === 'matched') return `${total} ${total === 1 ? 'match' : 'matches'}`;
+  return `${total} ${total === 1 ? 'applicant' : 'applicants'}`;
+}
+
+/** Filter-aware empty-state title (only used when a filter is active). */
+function emptyTitleFor(filter: ApplicantFilter | null): string | undefined {
+  if (filter === 'new') return 'No new applications';
+  if (filter === 'shortlisted') return 'No shortlisted applicants';
+  if (filter === 'matched') return 'No matching candidates';
+  return undefined;
+}
+
 export default async function ApplicantsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const jobId = Number(id);
@@ -36,18 +54,33 @@ export default async function ApplicantsPage({ params, searchParams }: PageProps
   const sp = await searchParams;
   const page = readPage(sp);
   const sort = readSort(sp);
+  const filter = parseApplicantFilter(sp['filter']);
 
   // Owner-scoped lookup. Cross-recruiter access produces 404 (no leak),
-  // matching the API ownership pattern.
+  // matching the API ownership pattern. `skillIds` powers the "matched" filter.
   const job = await prisma.job.findUnique({
     where: { id: jobId },
-    select: { id: true, title: true, postedById: true, status: true },
+    select: { id: true, title: true, postedById: true, status: true, skillIds: true },
   });
   if (!job || job.postedById !== session.sub) notFound();
 
+  // Base scope + the active filter. `new`/`shortlisted` map to a status; the
+  // `matched` filter mirrors the Jobs-list "Matches" column — applicants whose
+  // candidate skills overlap the job's required skills (empty ⇒ nothing matches).
+  const where: Prisma.ApplicationWhereInput = { jobId };
+  if (filter === 'new') where.status = 'APPLIED';
+  else if (filter === 'shortlisted') where.status = 'SHORTLISTED';
+  else if (filter === 'matched') {
+    if (job.skillIds.length > 0) {
+      where.user = { candidate: { skillIds: { hasSome: job.skillIds } } };
+    } else {
+      where.id = { in: [] }; // job declares no required skills → no matches
+    }
+  }
+
   const [applicants, total] = await Promise.all([
     prisma.application.findMany({
-      where: { jobId },
+      where,
       orderBy:
         sort === 'status' ? [{ status: 'asc' }, { appliedAt: 'desc' }] : { appliedAt: 'desc' },
       skip: (page - 1) * PAGE_SIZE,
@@ -75,7 +108,7 @@ export default async function ApplicantsPage({ params, searchParams }: PageProps
         },
       },
     }),
-    prisma.application.count({ where: { jobId } }),
+    prisma.application.count({ where }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -103,28 +136,27 @@ export default async function ApplicantsPage({ params, searchParams }: PageProps
         <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
           {job.title}
         </h1>
-        <p className="text-sm text-[var(--color-fg-muted)]">
-          {total} {total === 1 ? 'applicant' : 'applicants'}
-        </p>
+        <p className="text-sm text-[var(--color-fg-muted)]">{countLabel(total, filter)}</p>
       </header>
 
-      {total > 0 && (
-        <div className="flex items-center justify-end">
+      {(filter !== null || total > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <ApplicantsFilterTabs />
           <ApplicantsSortToggle />
         </div>
       )}
 
-      <ApplicantsTable rows={rows} />
+      <ApplicantsTable rows={rows} emptyTitle={emptyTitleFor(filter)} />
 
       {totalPages > 1 && (
         <nav aria-label="Pagination" className="flex items-center justify-between text-sm">
-          <PageLink page={page - 1} disabled={page <= 1} sort={sort}>
+          <PageLink page={page - 1} disabled={page <= 1} sort={sort} filter={filter}>
             ← Newer
           </PageLink>
           <span className="text-[var(--color-fg-muted)]">
             Page {page} of {totalPages}
           </span>
-          <PageLink page={page + 1} disabled={page >= totalPages} sort={sort}>
+          <PageLink page={page + 1} disabled={page >= totalPages} sort={sort} filter={filter}>
             Older →
           </PageLink>
         </nav>
@@ -137,17 +169,20 @@ function PageLink({
   page,
   disabled,
   sort,
+  filter,
   children,
 }: {
   page: number;
   disabled: boolean;
   sort: SortKey;
+  filter: ApplicantFilter | null;
   children: React.ReactNode;
 }) {
   if (disabled) return <span className="text-[var(--color-fg-subtle)]">{children}</span>;
   const params = new URLSearchParams();
   params.set('page', String(page));
   if (sort !== 'date') params.set('sort', sort);
+  if (filter) params.set('filter', filter);
   return (
     <Link
       href={`?${params.toString()}`}
