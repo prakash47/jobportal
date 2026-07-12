@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | | |
+| Developer | Branch | Building (feature + components) | Shared surfaces touched | Started |
+|---|---|---|---|---|
+| Jayesh | `feature/srp-expanding-search` | SRP `/jobs` search: click the compact bar → it **pops out** into the home hero's 3-field `HeroSearchBar` (skills/location/exp), collapses on outside-click/Escape. New `SrpSearchExpand` (components/srp); `HeroSearchBar` gains optional `initial*` props (backward-compatible); wire into `SrpShell`. `apps/web` only. | none (additive props on HeroSearchBar; no schema/theme/barrel/flags) | 2026-07-12 |
 
 ---
 
