@@ -54,7 +54,11 @@ export function JobsPagination({ page, totalPages, total, perPage }: JobsPaginat
   }
 
   return (
-    <div className="flex flex-col gap-3 min-[480px]:flex-row min-[480px]:items-center min-[480px]:justify-between">
+    // flex-wrap at both levels: with 8+ pages the nav's min-content is ~320px of
+    // fixed-size links, so it must be able to drop below the per-page group
+    // (480–580px + narrow-md widths) and the page numbers must be able to flow
+    // to a second row at 320px (WCAG 1.4.10 reflow) instead of overflowing the pane.
+    <div className="flex flex-col gap-3 min-[480px]:flex-row min-[480px]:flex-wrap min-[480px]:items-center min-[480px]:justify-between">
       <div className="flex items-center gap-2">
         <Label htmlFor={perPageId} className="shrink-0 font-normal text-[var(--color-fg-muted)]">
           Results per page
@@ -81,7 +85,7 @@ export function JobsPagination({ page, totalPages, total, perPage }: JobsPaginat
 
       {totalPages > 1 && (
         <nav aria-label="Pagination">
-          <ul className="flex items-center gap-1">
+          <ul className="flex flex-wrap items-center gap-1">
             <li>
               <EdgeLink
                 href={hrefFor(page - 1)}
@@ -91,9 +95,11 @@ export function JobsPagination({ page, totalPages, total, perPage }: JobsPaginat
               />
             </li>
             {pageItems(page, totalPages).map((item, i) => (
-              <li key={item === 'ellipsis' ? `e${i}` : item}>
+              // aria-hidden on the ellipsis LI (not just the glyph) so screen
+              // readers don't count a blank list item they can't perceive.
+              <li key={item === 'ellipsis' ? `e${i}` : item} aria-hidden={item === 'ellipsis' || undefined}>
                 {item === 'ellipsis' ? (
-                  <span aria-hidden className="inline-flex size-8 items-center justify-center text-sm text-[var(--color-fg-muted)]">
+                  <span className="inline-flex size-8 items-center justify-center text-sm text-[var(--color-fg-muted)]">
                     …
                   </span>
                 ) : (
@@ -143,8 +149,16 @@ function EdgeLink({
 }) {
   const base = 'inline-flex size-8 items-center justify-center rounded-md';
   if (disabled) {
+    // role="link" so the aria-label/aria-disabled are honoured — ARIA prohibits
+    // naming a role-less (generic) span, which would leave this announced as a
+    // blank list item. No href/tabindex keeps it out of the tab order.
     return (
-      <span aria-disabled="true" aria-label={label} className={cn(base, 'cursor-not-allowed text-[var(--color-fg-subtle)]')}>
+      <span
+        role="link"
+        aria-disabled="true"
+        aria-label={label}
+        className={cn(base, 'cursor-not-allowed text-[var(--color-fg-subtle)]')}
+      >
         <Icon aria-hidden className="size-4" />
       </span>
     );

@@ -33,7 +33,10 @@ export function JobsSortSelect() {
     else params.set('sort', next);
     params.delete('page');
     const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    // push (not replace) — the desktop sort headers are <Link>s, so the same
+    // action must create a history entry on mobile too (Back returns to the
+    // previous sort, not the previous page/route).
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
   return (

@@ -57,9 +57,16 @@ function firstParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
+// Upper cap on `?page=` — far above any real job count, and it keeps
+// `(page - 1) * perPage` well inside Prisma's signed-64-bit `skip` bound
+// (an uncapped 1e19 would throw client-side BEFORE the over-range redirect
+// could rescue the request). Anything between the real last page and this cap
+// falls through to the redirect as designed.
+const MAX_PAGE = 1_000_000;
+
 function readPage(sp: Sp): number {
   const n = Number(firstParam(sp['page']));
-  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), MAX_PAGE) : 1;
 }
 
 function readStatus(sp: Sp): JobStatus | null {
