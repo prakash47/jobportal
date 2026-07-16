@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -27,6 +28,11 @@ const MODERATION_FLAG = 'moderation.jobs.enabled';
 // admin flips it ON, create() rejects with 503 (matching the /post-job page's
 // L2 404). Only the posting action is gated — edit/close/reopen still work.
 const POST_JOB_KILLSWITCH_FLAG = 'killswitch.recruiter_post_job';
+// Killswitch (L3) for job deletion (Jobs list → 3-dot menu → Delete). Seeded
+// OFF ⇒ deletion LIVE; flipping it ON makes delete() reject with 503 (the
+// Jobs list hides the Delete item at L2). Deletion is additionally restricted
+// to jobs with zero applications — see delete().
+const JOB_DELETE_KILLSWITCH_FLAG = 'killswitch.recruiter_job_delete';
 
 // Title-only slug; final value is appended with the row id post-insert.
 function slugify(s: string): string {
@@ -343,7 +349,11 @@ export class RecruiterJobsService {
     if (input.internshipDurationMonths !== undefined) {
       data.internshipDurationMonths = input.internshipDurationMonths;
     }
-    if (input.localityId !== undefined || input.localityName !== undefined) {
+    if (input.localityId === null) {
+      // Explicit clear (the edit form's "no area selected") — skip the resolver,
+      // whose input type only understands a concrete id or a free-typed name.
+      data.localityId = null;
+    } else if (input.localityId !== undefined || input.localityName !== undefined) {
       data.localityId = await this.resolveLocalityId({
         localityId: input.localityId,
         localityName: input.localityName,
@@ -358,6 +368,37 @@ export class RecruiterJobsService {
       this.firePublishSideEffects(updated);
     }
     return updated;
+  }
+
+  // Recruiter-driven hard delete (Jobs list → 3-dot menu → Delete). Owner
+  // decision (2026-07-16): only jobs with ZERO applications are deletable —
+  // Application rows cascade on Job delete, and destroying candidates'
+  // application history is never acceptable; jobs with responses must be
+  // closed instead. The status doesn't matter (an unwanted ACTIVE posting with
+  // no responses is deletable). SavedJob rows do cascade (a deleted job simply
+  // leaves seekers' saved lists).
+  async delete(userId: number, id: number): Promise<void> {
+    if (await isFlagEnabled(JOB_DELETE_KILLSWITCH_FLAG)) {
+      throw new ServiceUnavailableException('Job deletion is temporarily unavailable');
+    }
+    const existing = await this.getOne(userId, id); // ownership 404
+    // Single-statement delete guarded on `applications: none` — atomic, so an
+    // application arriving between the ownership check and the delete can't be
+    // cascade-destroyed (a separate count+delete would race).
+    const res = await prisma.job.deleteMany({
+      where: { id, postedById: userId, applications: { none: {} } },
+    });
+    if (res.count === 0) {
+      // Disambiguate: count 0 means either an application arrived since the
+      // ownership check (409, "close instead") or the row vanished in a
+      // concurrent delete (404 — a "has applications" message would mislead).
+      const still = await prisma.job.findUnique({ where: { id }, select: { id: true } });
+      if (!still) throw new NotFoundException('Job not found');
+      throw new ConflictException(
+        'Jobs with applications cannot be deleted — close the job instead',
+      );
+    }
+    this.fireRemoveSideEffects(existing);
   }
 
   // Recruiter-driven close. Removes from ES, purges cache. Idempotent.

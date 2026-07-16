@@ -71,6 +71,12 @@ export interface PostJobWizardProps {
   jobType?: JobType;
   // Prefill from a chosen template (past job). Undefined = blank new job.
   initialValues?: WizardInitialValues | undefined;
+  // 'edit' repurposes the form for an existing job: single "Save changes"
+  // button PATCHing /recruiter/jobs/:jobId (no publishMode, no quota — status
+  // transitions stay on the dedicated close/reopen endpoints). jobType is
+  // display framing only in edit and is never sent.
+  mode?: 'create' | 'edit';
+  jobId?: number;
 }
 
 function lpaToPaise(lpa: number | ''): number | null {
@@ -121,10 +127,13 @@ export function PostJobWizard({
   quota,
   jobType = 'FREE',
   initialValues,
+  mode = 'create',
+  jobId,
 }: PostJobWizardProps) {
   const router = useRouter();
   const iv = initialValues ?? {};
   const isInternship = jobType === 'INTERNSHIP';
+  const isEdit = mode === 'edit';
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,9 +143,19 @@ export function PostJobWizard({
   const [functionalAreaId, setFunctionalAreaId] = useState<number | ''>(iv.functionalAreaId ?? '');
   const [industryId, setIndustryId] = useState<number | ''>(iv.industryId ?? '');
   const [employmentType, setEmploymentType] = useState<EmploymentType>(
-    isInternship ? 'INTERN' : iv.employmentType && iv.employmentType !== 'INTERN' ? iv.employmentType : 'FULL_TIME',
+    isInternship
+      ? // Internships offer INTERN/PART_TIME — honour a PART_TIME prefill
+        // (editing one must not silently rewrite it to INTERN).
+        iv.employmentType === 'PART_TIME'
+        ? 'PART_TIME'
+        : 'INTERN'
+      : iv.employmentType && iv.employmentType !== 'INTERN'
+        ? iv.employmentType
+        : 'FULL_TIME',
   );
-  const [openings, setOpenings] = useState<number | ''>(iv.openings ?? 1);
+  // New jobs default to 1 opening; editing keeps an unset value unset (a
+  // silent openings=1 write on save would fabricate data).
+  const [openings, setOpenings] = useState<number | ''>(iv.openings ?? (isEdit ? '' : 1));
   const [durationMonths, setDurationMonths] = useState<number | ''>(iv.internshipDurationMonths ?? '');
 
   // Location
@@ -175,7 +194,9 @@ export function PostJobWizard({
     return base.slice(0, 60);
   }, [skillQuery, skills]);
 
+  // Quota only gates NEW publishes — editing an existing job never consumes.
   const exhausted =
+    !isEdit &&
     quota !== null &&
     !quota.unlimited &&
     (quota.daily.count >= quota.daily.limit || quota.monthly.count >= quota.monthly.limit);
@@ -190,6 +211,16 @@ export function PostJobWizard({
     openings !== '' &&
     Number(openings) >= 1 &&
     primaryCityId !== '';
+
+  // Edit mode: a required-for-publish field the job already has can't be
+  // blanked — PATCH omits blanks (they're non-nullable server-side), so saving
+  // would silently keep the old value while the form showed it cleared. Block
+  // the save instead of lying.
+  const blankedRequired =
+    isEdit &&
+    ((iv.functionalAreaId != null && functionalAreaId === '') ||
+      (iv.primaryCityId != null && primaryCityId === '') ||
+      (iv.openings != null && openings === ''));
 
   function onCityChange(v: number | '') {
     setPrimaryCityId(v);
@@ -300,6 +331,69 @@ export function PostJobWizard({
     }
   }
 
+  // Edit mode — PATCH the existing job. Unlike create's omit-when-blank, a
+  // blanked clearable field sends an explicit `null` (PATCH semantics:
+  // omitted = unchanged, null = clear) so the recruiter can actually remove a
+  // salary/area/etc. Status, publishMode and jobType are never sent — status
+  // transitions stay on close/reopen, and the job keeps its purchased type.
+  async function saveEdit() {
+    if (jobId === undefined) return;
+    setBusy(true);
+    setError(null);
+
+    const md = description.trim();
+    const plain = stripMarkdown(md);
+    const body: Record<string, unknown> = {
+      title: title.trim(),
+      description: plain.length >= 10 ? plain : md,
+      descriptionMarkdown: md,
+      employmentType,
+      workMode,
+      shortDescription: shortDescription.trim() ? shortDescription.trim() : null,
+      industryId: industryId === '' ? null : industryId,
+      qualifications: qualifications.trim() ? qualifications.trim() : null,
+      experienceMinYears: expMinYears === '' ? null : Number(expMinYears),
+      experienceMaxYears: expMaxYears === '' ? null : Number(expMaxYears),
+      salaryMinPaise: lpaToPaise(salaryMinLpa),
+      salaryMaxPaise: lpaToPaise(salaryMaxLpa),
+      skillIds: [...skillIds],
+    };
+    // Required-for-publish fields are non-nullable on PATCH — blank means
+    // "leave unchanged" rather than "clear".
+    if (functionalAreaId !== '') body['functionalAreaId'] = functionalAreaId;
+    if (openings !== '') body['openings'] = Number(openings);
+    if (primaryCityId !== '') body['primaryCityId'] = primaryCityId;
+    if (isInternship) {
+      body['internshipDurationMonths'] = durationMonths === '' ? null : Number(durationMonths);
+    }
+    if (useOtherLocality && localityOther.trim()) {
+      body['localityName'] = localityOther.trim();
+    } else if (localityId !== '') {
+      body['localityId'] = localityId;
+    } else {
+      body['localityId'] = null; // area deselected → clear it
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/recruiter/jobs/${jobId}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errBody = (await res.json().catch(() => ({}))) as { message?: string };
+        throw new Error(errBody.message ?? `Failed to save changes (${res.status})`);
+      }
+      router.push('/jobs');
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save changes');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
       <div className="min-w-0 space-y-8">
@@ -308,12 +402,15 @@ export function PostJobWizard({
         <Field label="Company">
           <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)]/40 px-3 py-2">
             <span className="text-sm font-medium text-[var(--color-fg)]">{companyName}</span>
-            <Link
-              href="/profile"
-              className="text-xs text-[var(--color-primary-600)] hover:underline"
-            >
-              Change
-            </Link>
+            {/* A posted job can't move between companies — no Change while editing. */}
+            {!isEdit && (
+              <Link
+                href="/profile"
+                className="text-xs text-[var(--color-primary-600)] hover:underline"
+              >
+                Change
+              </Link>
+            )}
           </div>
         </Field>
 
@@ -619,21 +716,45 @@ export function PostJobWizard({
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border)] pt-5">
-        <Button variant="secondary" onClick={() => submit('DRAFT')} loading={busy} disabled={!titleOk}>
-          Save as draft
-        </Button>
-        <Button
-          variant="primary"
-          onClick={() => submit('PUBLISH')}
-          loading={busy}
-          disabled={!canPublish || exhausted}
-        >
-          Publish job
-        </Button>
+        {isEdit ? (
+          <>
+            <Button asChild variant="secondary">
+              <Link href="/jobs">Cancel</Link>
+            </Button>
+            <Button
+              variant="primary"
+              onClick={saveEdit}
+              loading={busy}
+              disabled={!titleOk || !descriptionOk || blankedRequired}
+            >
+              Save changes
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={() => submit('DRAFT')} loading={busy} disabled={!titleOk}>
+              Save as draft
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => submit('PUBLISH')}
+              loading={busy}
+              disabled={!canPublish || exhausted}
+            >
+              Publish job
+            </Button>
+          </>
+        )}
       </div>
-      {!canPublish && titleOk && (
+      {!isEdit && !canPublish && titleOk && (
         <p className="text-right text-xs text-[var(--color-fg-subtle)]">
           To publish, add a department, title, description, openings, and a city.
+        </p>
+      )}
+      {blankedRequired && (
+        <p className="text-right text-xs text-[var(--color-fg-muted)]">
+          Department, city, and openings can’t be removed from an existing job — set a value to
+          save.
         </p>
       )}
       </div>

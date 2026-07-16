@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@jobportal/ui';
 import { jobTypeMeta, type JobType } from '../../lib/job-types';
+import { jobToWizardInitialValues, type JobFormSource } from '../../lib/jobs/wizard-values';
 import { PostJobWizard, type PostJobWizardProps, type WizardInitialValues } from './PostJobWizard';
 import { JobTypeSelector } from './JobTypeSelector';
 import { TemplatePicker, type PastJobSummary } from './TemplatePicker';
@@ -10,29 +11,6 @@ import { TemplatePicker, type PastJobSummary } from './TemplatePicker';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 type Stage = 'start' | 'template' | 'type' | 'form';
-
-// Shape of GET /recruiter/jobs/:id we consume for template prefill.
-interface FetchedJob {
-  title: string;
-  description: string;
-  descriptionMarkdown: string | null;
-  shortDescription: string | null;
-  skillIds: number[];
-  primaryCityId: number | null;
-  cityIds: number[];
-  industryId: number | null;
-  functionalAreaId: number | null;
-  localityId: number | null;
-  employmentType: 'FULL_TIME' | 'PART_TIME' | 'CONTRACTOR' | 'INTERN';
-  workMode: 'ONSITE' | 'REMOTE' | 'HYBRID';
-  openings: number | null;
-  qualifications: string | null;
-  internshipDurationMonths: number | null;
-  experienceMinYears: number | null;
-  experienceMaxYears: number | null;
-  salaryMinPaise: number | null;
-  salaryMaxPaise: number | null;
-}
 
 type WizardPassthrough = Pick<
   PostJobWizardProps,
@@ -42,13 +20,25 @@ type WizardPassthrough = Pick<
 interface PostJobFlowProps extends WizardPassthrough {
   pastJobs: PastJobSummary[];
   availability: Record<JobType, boolean>;
+  /** Deep link (`/post-job?duplicate=<id>` — Jobs list ⋮ → Duplicate): jumps
+   * straight into the template deep-copy path for that job. */
+  initialTemplateJobId?: number | undefined;
 }
 
 // Orchestrates the pre-wizard steps: Start → (Create new → Job type) OR
 // (Start from a previous job → Template picker) → the posting form. Holds the
 // chosen job type + any template prefill, then hands off to PostJobWizard.
-export function PostJobFlow({ pastJobs, availability, ...wizardProps }: PostJobFlowProps) {
-  const [stage, setStage] = useState<Stage>('start');
+export function PostJobFlow({
+  pastJobs,
+  availability,
+  initialTemplateJobId,
+  ...wizardProps
+}: PostJobFlowProps) {
+  // A duplicate deep-link starts on the template stage (no one-frame Start
+  // flash before the auto-load effect fires).
+  const [stage, setStage] = useState<Stage>(
+    initialTemplateJobId !== undefined ? 'template' : 'start',
+  );
   const [jobType, setJobType] = useState<JobType>('FREE');
   const [initialValues, setInitialValues] = useState<WizardInitialValues | undefined>(undefined);
   const [templateJobId, setTemplateJobId] = useState<number | null>(null);
@@ -78,30 +68,12 @@ export function PostJobFlow({ pastJobs, availability, ...wizardProps }: PostJobF
         cache: 'no-store',
       });
       if (!res.ok) throw new Error(`Could not load that job (${res.status})`);
-      const job = (await res.json()) as FetchedJob;
-      setInitialValues({
-        title: job.title,
-        description: job.description,
-        descriptionMarkdown: job.descriptionMarkdown,
-        shortDescription: job.shortDescription,
-        skillIds: job.skillIds ?? [],
-        primaryCityId: job.primaryCityId,
-        cityIds: job.cityIds ?? [],
-        industryId: job.industryId,
-        functionalAreaId: job.functionalAreaId,
-        localityId: job.localityId,
-        employmentType: job.employmentType,
-        workMode: job.workMode,
-        openings: job.openings,
-        qualifications: job.qualifications,
-        internshipDurationMonths: job.internshipDurationMonths,
-        experienceMinYears: job.experienceMinYears,
-        experienceMaxYears: job.experienceMaxYears,
-        salaryMinPaise: job.salaryMinPaise,
-        salaryMaxPaise: job.salaryMaxPaise,
-      });
-      // No jobType column yet (Phase 3) — infer Internship from an INTERN
-      // employment type, else default to Free.
+      const job = (await res.json()) as JobFormSource;
+      setInitialValues(jobToWizardInitialValues(job));
+      // Copies always land on a free product: infer Internship from an INTERN
+      // employment type, else Free — deliberately NOT the source job's
+      // (possibly paid) jobType, which would sidestep the selector's
+      // Hot Vacancy / SMB gating.
       setJobType(job.employmentType === 'INTERN' ? 'INTERNSHIP' : 'FREE');
       setTemplateJobId(jobId);
       setStage('form');
@@ -111,6 +83,19 @@ export function PostJobFlow({ pastJobs, availability, ...wizardProps }: PostJobF
       setLoadingId(null);
     }
   }
+
+  // Auto-run the duplicate deep link exactly once. Lands on the template stage
+  // first so a slow/failed fetch has a home (TemplatePicker shows the spinner
+  // row + any error) instead of a dead start screen.
+  const autoLoadedRef = useRef(false);
+  useEffect(() => {
+    if (initialTemplateJobId === undefined || autoLoadedRef.current) return;
+    autoLoadedRef.current = true;
+    setStage('template');
+    void onTemplateSelect(initialTemplateJobId);
+    // onTemplateSelect is stable-enough for a run-once bootstrap (ref-guarded).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTemplateJobId]);
 
   if (stage === 'start') {
     const hasPast = pastJobs.length > 0;

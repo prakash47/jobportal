@@ -106,6 +106,11 @@ const flags: FlagSeed[] = [
   // up. Seeded OFF so the feature is LIVE by default; flipping it ON disables
   // posting without a redeploy.
   { key: 'killswitch.recruiter_post_job', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter job posting (kill)' },
+  // Recruiter job deletion (Jobs list → 3-dot menu → Delete). Deletion is
+  // already restricted to own jobs with zero applications; this kill switch
+  // stops even that: when ON the DELETE endpoint rejects with 503 (L3) and the
+  // menu hides Delete (L2). Seeded OFF so the action is LIVE by default.
+  { key: 'killswitch.recruiter_job_delete', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter job deletion (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {
