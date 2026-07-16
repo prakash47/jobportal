@@ -6,11 +6,26 @@ import { prisma } from '@jobportal/db';
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { Button } from '@jobportal/ui';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { loadJobFormCatalogues } from '../../../lib/jobs/catalogues';
 import { PostJobFlow } from '../../../components/jobs/PostJobFlow';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export const dynamic = 'force-dynamic';
+
+interface PageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+// `?duplicate=<jobId>` (Jobs list ⋮ → Duplicate) — a positive int, else
+// ignored. Ownership isn't checked here: the flow's GET /recruiter/jobs/:id
+// fetch 404s for a teammate's job, surfacing an error in the template picker.
+function readDuplicateId(sp: Record<string, string | string[] | undefined>): number | undefined {
+  const raw = Array.isArray(sp['duplicate']) ? sp['duplicate'][0] : sp['duplicate'];
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 2147483647 ? n : undefined;
+}
 
 interface QuotaState {
   daily: { count: number; limit: number };
@@ -40,10 +55,11 @@ async function readQuota(): Promise<QuotaState | null> {
 // the top — if an admin flips it ON the page 404s (the API create() is the L3
 // boundary). Then gates on workEmailVerified (hard gate per SRS §4.9.5),
 // pre-fetches the catalogues the wizard needs, and derives the L2 quota hint.
-export default async function PostJobPage() {
+export default async function PostJobPage({ searchParams }: PageProps) {
   if (await isFlagEnabled('killswitch.recruiter_post_job')) notFound();
 
   const session = (await readUserFromCookie())!;
+  const duplicateJobId = readDuplicateId(await searchParams);
   const recruiter = await prisma.recruiter.findUnique({
     where: { userId: session.sub },
     select: {
@@ -81,38 +97,15 @@ export default async function PostJobPage() {
   }
 
   const [
-    skills,
-    cities,
-    localities,
-    industries,
-    functionalAreas,
+    catalogues,
     quota,
     pastJobsRaw,
     hotVacancyEnabled,
     smbEnabled,
   ] = await Promise.all([
-      prisma.skill.findMany({
-        select: { id: true, slug: true, name: true },
-        orderBy: { name: 'asc' },
-        take: 500,
-      }),
-      prisma.city.findMany({
-        select: { id: true, slug: true, name: true },
-        orderBy: { name: 'asc' },
-      }),
-      // Sub-city areas for the City → Area selector; filtered client-side by city.
-      prisma.locality.findMany({
-        select: { id: true, name: true, cityId: true },
-        orderBy: { name: 'asc' },
-      }),
-      prisma.industry.findMany({
-        select: { id: true, slug: true, name: true },
-        orderBy: { name: 'asc' },
-      }),
-      prisma.functionalArea.findMany({
-        select: { id: true, slug: true, name: true },
-        orderBy: { name: 'asc' },
-      }),
+      // City/area/skill/department/industry reference lists — shared with the
+      // /jobs/[id]/edit page via lib/jobs/catalogues.ts.
+      loadJobFormCatalogues(),
       readQuota(),
       // The recruiter's own past jobs — the "start from a previous job"
       // template list. Lightweight fields only; the full job is fetched on
@@ -177,14 +170,15 @@ export default async function PostJobPage() {
 
       <PostJobFlow
         companyName={recruiter.company.name}
-        skills={skills}
-        cities={cities}
-        localities={localities}
-        industries={industries}
-        functionalAreas={functionalAreas}
+        skills={catalogues.skills}
+        cities={catalogues.cities}
+        localities={catalogues.localities}
+        industries={catalogues.industries}
+        functionalAreas={catalogues.functionalAreas}
         quota={quota}
         pastJobs={pastJobs}
         availability={availability}
+        initialTemplateJobId={duplicateJobId}
       />
     </div>
   );
