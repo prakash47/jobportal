@@ -1,12 +1,37 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { prisma, type JobStatus, type Prisma } from '@jobportal/db';
 import { Button } from '@jobportal/ui';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
 import { JobsTable } from '../../../components/jobs/JobsTable';
 import { JobsFilterBar } from '../../../components/jobs/JobsFilterBar';
+import { JobsPagination } from '../../../components/jobs/JobsPagination';
+import { JobsSortSelect } from '../../../components/jobs/JobsSortSelect';
 import { JOB_TYPE_LABELS, type JobCategory } from '../../../components/jobs/job-list-format';
+import {
+  JOBS_SORT_DEFAULT,
+  PER_PAGE_DEFAULT,
+  parseJobsSort,
+  parsePerPage,
+  type JobsSortKey,
+} from '../../../components/jobs/jobs-list-params';
 
-const PAGE_SIZE = 20;
+/**
+ * Sort key → Prisma ordering. Non-unique sort columns get tiebreakers ending in
+ * the unique `id` so adjacent skip/take pages never duplicate or drop a row at
+ * the page seam (the companies-directory rule). Status sorts by the enum's
+ * declaration order — DRAFT → PENDING_MODERATION → ACTIVE → EXPIRED → CLOSED —
+ * a natural lifecycle order (a custom order would need raw SQL); ties fall
+ * back to newest-first.
+ */
+const ORDER_BY: Record<JobsSortKey, Prisma.JobOrderByWithRelationInput[]> = {
+  posted_desc: [{ postedAt: 'desc' }, { id: 'desc' }],
+  posted_asc: [{ postedAt: 'asc' }, { id: 'asc' }],
+  title_asc: [{ title: 'asc' }, { id: 'asc' }],
+  title_desc: [{ title: 'desc' }, { id: 'desc' }],
+  status_asc: [{ status: 'asc' }, { postedAt: 'desc' }, { id: 'desc' }],
+  status_desc: [{ status: 'desc' }, { postedAt: 'desc' }, { id: 'desc' }],
+};
 
 // Postgres `Int` (int4) upper bound — a numeric search/param above this would
 // overflow the column type and error, so we reject it during parsing.
@@ -32,9 +57,16 @@ function firstParam(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
+// Upper cap on `?page=` — far above any real job count, and it keeps
+// `(page - 1) * perPage` well inside Prisma's signed-64-bit `skip` bound
+// (an uncapped 1e19 would throw client-side BEFORE the over-range redirect
+// could rescue the request). Anything between the real last page and this cap
+// falls through to the redirect as designed.
+const MAX_PAGE = 1_000_000;
+
 function readPage(sp: Sp): number {
   const n = Number(firstParam(sp['page']));
-  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), MAX_PAGE) : 1;
 }
 
 function readStatus(sp: Sp): JobStatus | null {
@@ -71,6 +103,8 @@ export default async function JobsPage({ searchParams }: PageProps) {
   const cityId = readIntId(firstParam(sp['city']));
   const postedById = readIntId(firstParam(sp['postedBy']));
   const q = readSearch(sp);
+  const sort = parseJobsSort(sp['sort']);
+  const perPage = parsePerPage(sp['perPage']);
 
   // The Jobs list is company-wide (every teammate's postings) so the Posted By
   // filter has options to choose from. Fall back to the recruiter's own jobs if
@@ -102,9 +136,9 @@ export default async function JobsPage({ searchParams }: PageProps) {
   const [rows, total, cityRows, posterRows] = await Promise.all([
     prisma.job.findMany({
       where,
-      orderBy: { postedAt: 'desc' },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      orderBy: ORDER_BY[sort],
+      skip: (page - 1) * perPage,
+      take: perPage,
       select: {
         id: true,
         title: true,
@@ -133,6 +167,30 @@ export default async function JobsPage({ searchParams }: PageProps) {
       distinct: ['postedById'],
     }),
   ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+
+  // Canonical query string for the current list state — every active filter
+  // plus any non-default sort / page size. The client controls (filter bar,
+  // sort headers, pagination) build their own hrefs from the live URL; this
+  // one serves the over-range redirect below.
+  const baseParams = new URLSearchParams();
+  if (status) baseParams.set('status', status);
+  if (category) baseParams.set('category', category);
+  if (cityId) baseParams.set('city', String(cityId));
+  if (postedById) baseParams.set('postedBy', String(postedById));
+  if (q) baseParams.set('q', q);
+  if (sort !== JOBS_SORT_DEFAULT) baseParams.set('sort', sort);
+  if (perPage !== PER_PAGE_DEFAULT) baseParams.set('perPage', String(perPage));
+
+  // A deep link can point past the end (stale bookmark, or a larger page size
+  // shrinking the page count). Land on the real last page instead of a
+  // confusing empty table — the same rule as the companies directory.
+  if (page > totalPages) {
+    if (totalPages > 1) baseParams.set('page', String(totalPages));
+    const qs = baseParams.toString();
+    redirect(qs ? `/jobs?${qs}` : '/jobs');
+  }
 
   // Candidate-count metrics for the current page. One grouped query yields
   // Total Responses / New (APPLIED) / Shortlisted (SHORTLISTED) for every job on
@@ -186,18 +244,8 @@ export default async function JobsPage({ searchParams }: PageProps) {
     )
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const filtered =
     status !== null || category !== null || cityId !== null || postedById !== null || q !== null;
-
-  // Every active filter must survive pagination — the old PageLink only carried
-  // page + status, which would have silently dropped the new filters.
-  const baseParams = new URLSearchParams();
-  if (status) baseParams.set('status', status);
-  if (category) baseParams.set('category', category);
-  if (cityId) baseParams.set('city', String(cityId));
-  if (postedById) baseParams.set('postedBy', String(postedById));
-  if (q) baseParams.set('q', q);
 
   return (
     // data-wide → the authed layout widens the content column so the multi-metric
@@ -232,65 +280,37 @@ export default async function JobsPage({ searchParams }: PageProps) {
           </p>
         </div>
       ) : (
-        <JobsTable
-          rows={rows.map((r) => {
-            const m = metricsByJob.get(r.id) ?? { total: 0, newCount: 0, shortlisted: 0 };
-            return {
-              id: r.id,
-              title: r.title,
-              status: r.status,
-              postedAt: r.postedAt,
-              expiresAt: r.expiresAt,
-              workMode: r.workMode,
-              cityName: r.primaryCity?.name ?? null,
-              localityName: r.locality?.name ?? null,
-              isOwn: r.postedById === session.sub,
-              totalResponses: m.total,
-              newCount: m.newCount,
-              shortlistedCount: m.shortlisted,
-              matchedCount: matchedByJob.get(r.id) ?? 0,
-            };
-          })}
-        />
+        <>
+          {/* Below md the card layout has no column headers — sorting gets a
+              dedicated select there (hidden at md+ where the headers take over). */}
+          <JobsSortSelect />
+          <JobsTable
+            sort={sort}
+            rows={rows.map((r) => {
+              const m = metricsByJob.get(r.id) ?? { total: 0, newCount: 0, shortlisted: 0 };
+              return {
+                id: r.id,
+                title: r.title,
+                status: r.status,
+                postedAt: r.postedAt,
+                expiresAt: r.expiresAt,
+                workMode: r.workMode,
+                cityName: r.primaryCity?.name ?? null,
+                localityName: r.locality?.name ?? null,
+                isOwn: r.postedById === session.sub,
+                totalResponses: m.total,
+                newCount: m.newCount,
+                shortlistedCount: m.shortlisted,
+                matchedCount: matchedByJob.get(r.id) ?? 0,
+              };
+            })}
+          />
+        </>
       )}
 
-      {totalPages > 1 && (
-        <nav aria-label="Pagination" className="flex items-center justify-between text-sm">
-          <PageLink page={page - 1} disabled={page <= 1} baseParams={baseParams}>
-            ← Newer
-          </PageLink>
-          <span className="text-[var(--color-fg-muted)]">
-            Page {page} of {totalPages}
-          </span>
-          <PageLink page={page + 1} disabled={page >= totalPages} baseParams={baseParams}>
-            Older →
-          </PageLink>
-        </nav>
-      )}
+      {/* Per-page select + Previous / numbered pages / Next. Self-hides when
+          there is nothing to paginate or resize (≤ the smallest page size). */}
+      <JobsPagination page={page} totalPages={totalPages} total={total} perPage={perPage} />
     </div>
-  );
-}
-
-function PageLink({
-  page,
-  disabled,
-  baseParams,
-  children,
-}: {
-  page: number;
-  disabled: boolean;
-  baseParams: URLSearchParams;
-  children: React.ReactNode;
-}) {
-  if (disabled) return <span className="text-[var(--color-fg-subtle)]">{children}</span>;
-  const params = new URLSearchParams(baseParams);
-  params.set('page', String(page));
-  return (
-    <Link
-      href={`/jobs?${params.toString()}`}
-      className="text-[var(--color-fg)] hover:text-[var(--color-primary-600)] hover:underline"
-    >
-      {children}
-    </Link>
   );
 }

@@ -22,7 +22,8 @@ const CATEGORY_ORDER: JobCategory[] = ['FREE', 'HOT_VACANCY', 'SMB', 'INTERNSHIP
 // `appearance-none` (+ our own chevron) so the token background/foreground fully
 // control the control in BOTH themes — a native-styled <select> lets the UA
 // paint its own (light) background in dark mode. Mirrors packages/ui `Select`.
-const SELECT_CLASS =
+// Exported: JobsSortSelect + JobsPagination reuse it for their selects.
+export const SELECT_CLASS =
   'h-9 w-full appearance-none rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] pl-3 pr-9 text-sm text-[var(--color-fg)] ' +
   'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)] ' +
   'disabled:cursor-not-allowed disabled:opacity-50';
@@ -108,7 +109,12 @@ export function JobsFilterBar({ locations, posters }: JobsFilterBarProps) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     lastCommittedQueryRef.current = '';
     setQuery('');
-    router.replace(pathname, { scroll: false });
+    // Clear ONLY the filter keys this bar owns. Sort order and page size are
+    // display preferences, not filters — "Clear all filters" must not reset
+    // them (and `commit` strips `page` as with any other filter change).
+    const params = new URLSearchParams(searchParamsRef.current.toString());
+    for (const key of ['q', 'status', 'category', 'city', 'postedBy']) params.delete(key);
+    commit(params);
   }
 
   return (

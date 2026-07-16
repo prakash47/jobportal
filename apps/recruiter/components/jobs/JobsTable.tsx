@@ -5,6 +5,8 @@ import { CloseJobButton, ReopenJobButton } from './JobActions';
 import { JobStatusBadge, type JobStatus } from './JobStatusBadge';
 import { formatJobLocation, formatListDate, type WorkMode } from './job-list-format';
 import type { ApplicantFilter } from './applicant-filter';
+import { JobsSortHeader } from './JobsSortHeader';
+import { JOBS_SORT_COLUMNS, type JobsSortColumn, type JobsSortKey } from './jobs-list-params';
 
 export interface JobListRow {
   id: number;
@@ -68,6 +70,18 @@ function applicantsHref(id: number, filter: ApplicantFilter | ''): string {
 /** Close/Reopen only apply for these states, and only to the job's own poster. */
 function hasRowAction(status: JobStatus, isOwn: boolean): boolean {
   return isOwn && (status === 'ACTIVE' || status === 'CLOSED' || status === 'EXPIRED');
+}
+
+/**
+ * `aria-sort` for a sortable column header, derived from the same shared sort
+ * keys the client header links parse — so the announced state and the link
+ * behaviour can't drift. Omitted (undefined) on columns not currently sorted.
+ */
+function ariaSortFor(column: JobsSortColumn, sort: JobsSortKey): 'ascending' | 'descending' | undefined {
+  const col = JOBS_SORT_COLUMNS[column];
+  if (sort === col.asc) return 'ascending';
+  if (sort === col.desc) return 'descending';
+  return undefined;
 }
 
 /**
@@ -159,10 +173,13 @@ function MetricValue({
  * Structured list of the company's posted jobs.
  * Desktop (md+): a real table — Job Title · Location · Date Posted · Status ·
  * Responses · New · Shortlisted · Matches · Actions (scrolls horizontally on
- * narrow desktops rather than breaking the layout). Mobile: the same fields
- * stacked as cards, with the four metrics as a compact tile grid.
+ * narrow desktops rather than breaking the layout). The Title / Date Posted /
+ * Status headers are clickable sort controls (`sort` drives their aria-sort;
+ * mobile gets a separate JobsSortSelect since cards have no headers). Mobile:
+ * the same fields stacked as cards, with the four metrics as a compact tile
+ * grid.
  */
-export function JobsTable({ rows }: { rows: JobListRow[] }) {
+export function JobsTable({ rows, sort }: { rows: JobListRow[]; sort: JobsSortKey }) {
   return (
     <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
       {/* Desktop / tablet table. Focusable region so the horizontal scroll (used
@@ -178,10 +195,16 @@ export function JobsTable({ rows }: { rows: JobListRow[] }) {
           <caption className="sr-only">Jobs posted by your company</caption>
           <thead>
             <tr className="text-left">
-              <th className={TH}>Job Title</th>
+              <th className={TH} aria-sort={ariaSortFor('title', sort)}>
+                <JobsSortHeader column="title" label="Job Title" />
+              </th>
               <th className={TH}>Location</th>
-              <th className={TH}>Date Posted</th>
-              <th className={TH}>Status</th>
+              <th className={TH} aria-sort={ariaSortFor('posted', sort)}>
+                <JobsSortHeader column="posted" label="Date Posted" />
+              </th>
+              <th className={TH} aria-sort={ariaSortFor('status', sort)}>
+                <JobsSortHeader column="status" label="Status" />
+              </th>
               {METRICS.map((mt, i) => (
                 <th
                   key={mt.key}
