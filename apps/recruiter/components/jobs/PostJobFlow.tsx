@@ -34,7 +34,11 @@ export function PostJobFlow({
   initialTemplateJobId,
   ...wizardProps
 }: PostJobFlowProps) {
-  const [stage, setStage] = useState<Stage>('start');
+  // A duplicate deep-link starts on the template stage (no one-frame Start
+  // flash before the auto-load effect fires).
+  const [stage, setStage] = useState<Stage>(
+    initialTemplateJobId !== undefined ? 'template' : 'start',
+  );
   const [jobType, setJobType] = useState<JobType>('FREE');
   const [initialValues, setInitialValues] = useState<WizardInitialValues | undefined>(undefined);
   const [templateJobId, setTemplateJobId] = useState<number | null>(null);

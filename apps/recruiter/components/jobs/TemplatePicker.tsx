@@ -67,6 +67,14 @@ export function TemplatePicker({ pastJobs, onSelect, onBack, loadingId, error }:
         </p>
       </div>
 
+      {/* Above the empty/list ternary so a duplicate-deep-link fetch error is
+          visible even when the recruiter has no past jobs to list. */}
+      {error && (
+        <p role="alert" className="text-sm text-[var(--color-danger)]">
+          {error}
+        </p>
+      )}
+
       {pastJobs.length === 0 ? (
         <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">
           <p className="text-sm font-medium text-[var(--color-fg)]">No previous jobs yet</p>
@@ -119,12 +127,6 @@ export function TemplatePicker({ pastJobs, onSelect, onBack, loadingId, error }:
               </select>
             </div>
           </div>
-
-          {error && (
-            <p role="alert" className="text-sm text-[var(--color-danger)]">
-              {error}
-            </p>
-          )}
 
           {filtered.length === 0 ? (
             <p className="rounded-md border border-dashed border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-fg-muted)]">

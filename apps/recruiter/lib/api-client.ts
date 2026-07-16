@@ -8,15 +8,29 @@ export type ApiResult<T> =
   | { ok: true; data: T }
   | { ok: false; status: number; message: string };
 
+// A rejected fetch (API down, offline, DNS) surfaces as status 0 with a
+// friendly message instead of throwing — callers' loading/error states stay
+// coherent without every dialog needing its own try/catch.
+const NETWORK_ERROR = {
+  ok: false,
+  status: 0,
+  message: 'Network error — please check your connection and try again.',
+} as const;
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<ApiResult<T>> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch {
+    return NETWORK_ERROR;
+  }
   if (res.status === 204) return { ok: true, data: undefined as T };
   let body: unknown;
   try {
@@ -35,11 +49,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<ApiR
 // Multipart variant — does NOT set Content-Type so the browser fills in the
 // boundary parameter. Used by the logo uploader.
 export async function apiMultipart<T>(path: string, formData: FormData): Promise<ApiResult<T>> {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    body: formData,
-    credentials: 'include',
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+  } catch {
+    return NETWORK_ERROR;
+  }
   let body: unknown;
   try {
     body = await res.json();

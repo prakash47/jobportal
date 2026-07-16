@@ -389,6 +389,11 @@ export class RecruiterJobsService {
       where: { id, postedById: userId, applications: { none: {} } },
     });
     if (res.count === 0) {
+      // Disambiguate: count 0 means either an application arrived since the
+      // ownership check (409, "close instead") or the row vanished in a
+      // concurrent delete (404 — a "has applications" message would mislead).
+      const still = await prisma.job.findUnique({ where: { id }, select: { id: true } });
+      if (!still) throw new NotFoundException('Job not found');
       throw new ConflictException(
         'Jobs with applications cannot be deleted — close the job instead',
       );

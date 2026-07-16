@@ -143,9 +143,19 @@ export function PostJobWizard({
   const [functionalAreaId, setFunctionalAreaId] = useState<number | ''>(iv.functionalAreaId ?? '');
   const [industryId, setIndustryId] = useState<number | ''>(iv.industryId ?? '');
   const [employmentType, setEmploymentType] = useState<EmploymentType>(
-    isInternship ? 'INTERN' : iv.employmentType && iv.employmentType !== 'INTERN' ? iv.employmentType : 'FULL_TIME',
+    isInternship
+      ? // Internships offer INTERN/PART_TIME — honour a PART_TIME prefill
+        // (editing one must not silently rewrite it to INTERN).
+        iv.employmentType === 'PART_TIME'
+        ? 'PART_TIME'
+        : 'INTERN'
+      : iv.employmentType && iv.employmentType !== 'INTERN'
+        ? iv.employmentType
+        : 'FULL_TIME',
   );
-  const [openings, setOpenings] = useState<number | ''>(iv.openings ?? 1);
+  // New jobs default to 1 opening; editing keeps an unset value unset (a
+  // silent openings=1 write on save would fabricate data).
+  const [openings, setOpenings] = useState<number | ''>(iv.openings ?? (isEdit ? '' : 1));
   const [durationMonths, setDurationMonths] = useState<number | ''>(iv.internshipDurationMonths ?? '');
 
   // Location
@@ -201,6 +211,16 @@ export function PostJobWizard({
     openings !== '' &&
     Number(openings) >= 1 &&
     primaryCityId !== '';
+
+  // Edit mode: a required-for-publish field the job already has can't be
+  // blanked — PATCH omits blanks (they're non-nullable server-side), so saving
+  // would silently keep the old value while the form showed it cleared. Block
+  // the save instead of lying.
+  const blankedRequired =
+    isEdit &&
+    ((iv.functionalAreaId != null && functionalAreaId === '') ||
+      (iv.primaryCityId != null && primaryCityId === '') ||
+      (iv.openings != null && openings === ''));
 
   function onCityChange(v: number | '') {
     setPrimaryCityId(v);
@@ -705,7 +725,7 @@ export function PostJobWizard({
               variant="primary"
               onClick={saveEdit}
               loading={busy}
-              disabled={!titleOk || !descriptionOk}
+              disabled={!titleOk || !descriptionOk || blankedRequired}
             >
               Save changes
             </Button>
@@ -729,6 +749,12 @@ export function PostJobWizard({
       {!isEdit && !canPublish && titleOk && (
         <p className="text-right text-xs text-[var(--color-fg-subtle)]">
           To publish, add a department, title, description, openings, and a city.
+        </p>
+      )}
+      {blankedRequired && (
+        <p className="text-right text-xs text-[var(--color-fg-muted)]">
+          Department, city, and openings can’t be removed from an existing job — set a value to
+          save.
         </p>
       )}
       </div>

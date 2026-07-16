@@ -20,7 +20,9 @@ interface PageProps {
 export default async function EditJobPage({ params }: PageProps) {
   const { id } = await params;
   const jobId = Number(id);
-  if (!Number.isFinite(jobId)) notFound();
+  // Integer within Postgres int4 — a float ('1.5') or an over-range id would
+  // throw inside Prisma (500) instead of the 404 an unknown id deserves.
+  if (!Number.isInteger(jobId) || jobId < 1 || jobId > 2147483647) notFound();
 
   const session = (await readUserFromCookie())!;
 

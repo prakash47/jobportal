@@ -19,9 +19,15 @@ import { DeleteJobDialog } from './DeleteJobDialog';
 import { JobStatusDialog } from './JobStatusDialog';
 import { ShareJobDialog } from './ShareJobDialog';
 
+// Keyboard focus keeps a real ring (WCAG 2.4.7) — inset so it stays inside the
+// popover's p-1 padding; the muted background is a secondary cue only.
 const ITEM_CLASS =
-  'flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left text-sm text-[var(--color-fg)] outline-none transition-colors hover:bg-[var(--color-bg-muted)] focus:bg-[var(--color-bg-muted)]';
+  'flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left text-sm text-[var(--color-fg)] transition-colors hover:bg-[var(--color-bg-muted)] focus:bg-[var(--color-bg-muted)] focus-visible:outline-2 focus-visible:outline-[var(--color-ring)] focus-visible:-outline-offset-2';
 const ICON_CLASS = 'size-4 shrink-0 text-[var(--color-fg-muted)]';
+// The base danger token is 14px-normal-text AA-insufficient on the elevated
+// popover surface (~4.0:1) — darken it locally, same color-mix approach as the
+// NotificationBell badge (shared theme.css deliberately untouched).
+const DANGER_TEXT = 'text-[color-mix(in_oklch,var(--color-danger),black_18%)]';
 
 type DialogKind = 'close' | 'reopen' | 'delete' | 'share';
 
@@ -191,6 +197,13 @@ export function JobRowMenu({
         // to the trigger via Radix, then Tab proceeds naturally).
         setOpen(false);
         break;
+      case ' ':
+        // Menu convention: Space activates the focused item. Links have no
+        // native Space activation (the page would scroll behind the menu);
+        // preventDefault + click() covers links and buttons uniformly.
+        e.preventDefault();
+        (document.activeElement as HTMLElement | null)?.click();
+        break;
       default:
         break;
     }
@@ -211,13 +224,18 @@ export function JobRowMenu({
         <PopoverContent
           align="end"
           className="w-60 p-1"
+          // The popup container itself is the menu (overrides Radix Popover's
+          // role="dialog", matching the trigger's aria-haspopup="menu").
+          role="menu"
+          aria-label={`Actions for ${title}`}
+          onKeyDown={onMenuKeyDown}
           onOpenAutoFocus={(e) => {
             // Focus the first item, not the container (menu convention).
             e.preventDefault();
             menuItems()[0]?.focus();
           }}
         >
-          <div ref={menuRef} role="menu" aria-label={`Actions for ${title}`} onKeyDown={onMenuKeyDown}>
+          <div ref={menuRef}>
             {entries.map((entry, i) =>
               entry === 'separator' ? (
                 <div
@@ -266,8 +284,11 @@ export function JobRowMenu({
                   }}
                   className={cn(
                     ITEM_CLASS,
-                    entry.danger && 'text-[var(--color-danger)]',
-                    entry.disabled && 'cursor-not-allowed opacity-60 hover:bg-transparent focus:bg-[var(--color-bg-muted)]',
+                    entry.danger && !entry.disabled && DANGER_TEXT,
+                    // Disabled conveys via muted grey at full opacity — an
+                    // opacity dim would drop the hint below legibility.
+                    entry.disabled &&
+                      'cursor-not-allowed text-[var(--color-fg-muted)] hover:bg-transparent focus:bg-[var(--color-bg-muted)]',
                   )}
                 >
                   {entry.icon}
@@ -295,6 +316,9 @@ export function JobRowMenu({
           action={dialog}
           open
           onOpenChange={(o) => !o && setDialog(null)}
+          // Reopen doesn't reset expiresAt — an EXPIRED job needs its date
+          // extended or the nightly sweep re-expires it.
+          showExpiryNote={status === 'EXPIRED'}
         />
       )}
       {dialog === 'delete' && (

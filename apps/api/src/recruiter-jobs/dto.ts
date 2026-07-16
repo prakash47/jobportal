@@ -77,7 +77,24 @@ export const UpdateRecruiterJobDto = baseFields
     localityId: z.number().int().positive().nullable().optional(),
     internshipDurationMonths: z.number().int().min(1).max(36).nullable().optional(),
   })
-  .strict();
+  .strict()
+  // Same ordering guards as create, null-aware (null = clearing that side).
+  // The edit form always sends both sides of each range, so this fully covers
+  // the UI path; a hand-rolled one-sided PATCH can still invert against the
+  // stored other side (accepted — same trust level as the other partial
+  // fields, and the form never produces it).
+  .refine(
+    (v) =>
+      v.salaryMinPaise == null || v.salaryMaxPaise == null || v.salaryMinPaise <= v.salaryMaxPaise,
+    { message: 'salaryMin must be <= salaryMax' },
+  )
+  .refine(
+    (v) =>
+      v.experienceMinYears == null ||
+      v.experienceMaxYears == null ||
+      v.experienceMinYears <= v.experienceMaxYears,
+    { message: 'experienceMin must be <= experienceMax' },
+  );
 export type UpdateRecruiterJobInput = z.infer<typeof UpdateRecruiterJobDto>;
 
 export const ListRecruiterJobsQueryDto = z

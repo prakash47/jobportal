@@ -32,6 +32,11 @@ const COPY = {
   },
 };
 
+// Reopening doesn't reset the expiry date, so a reopened EXPIRED job would be
+// re-expired by the next nightly sweep unless the recruiter extends it.
+const EXPIRY_NOTE =
+  'This job’s expiry date has already passed — extend it from Edit after reopening, or the nightly sweep will expire it again.';
+
 /**
  * Confirm dialog for the close/reopen status transitions (Jobs list 3-dot
  * menu). Replaces the old window.confirm in JobActions.tsx with the app's
@@ -44,12 +49,15 @@ export function JobStatusDialog({
   action,
   open,
   onOpenChange,
+  showExpiryNote = false,
 }: {
   id: number;
   title: string;
   action: 'close' | 'reopen';
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  /** Reopening an EXPIRED job — warn that the past expiry date still applies. */
+  showExpiryNote?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +85,12 @@ export function JobStatusDialog({
           <DialogTitle>{copy.title(title)}</DialogTitle>
           <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
+
+        {action === 'reopen' && showExpiryNote && (
+          <p className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)] px-3 py-2 text-sm text-[var(--color-fg-muted)]">
+            {EXPIRY_NOTE}
+          </p>
+        )}
 
         {error && (
           <p role="alert" className="text-sm text-[var(--color-danger)]">

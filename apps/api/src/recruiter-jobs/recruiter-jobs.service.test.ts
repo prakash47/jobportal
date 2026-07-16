@@ -369,11 +369,21 @@ describe('RecruiterJobsService', () => {
         status: 'ACTIVE',
         canonicalSlug: 'foo-5',
       });
-      // The atomic `applications: none` guard matched no row.
+      // The atomic `applications: none` guard matched no row (job still exists
+      // → the second findUnique disambiguation returns it → 409).
       mocked.job.deleteMany.mockResolvedValue({ count: 0 });
       await expect(service.delete(42, 5)).rejects.toBeInstanceOf(ConflictException);
       expect(mockedSync).not.toHaveBeenCalled();
       expect(fakeCachePurge.purgeJob).not.toHaveBeenCalled();
+    });
+
+    it('row vanished in a concurrent delete → NotFoundException, not a misleading 409', async () => {
+      mocked.job.findUnique
+        .mockResolvedValueOnce({ id: 5, postedById: 42, status: 'DRAFT', canonicalSlug: 'foo-5' })
+        .mockResolvedValueOnce(null); // gone by the time deleteMany ran
+      mocked.job.deleteMany.mockResolvedValue({ count: 0 });
+      await expect(service.delete(42, 5)).rejects.toBeInstanceOf(NotFoundException);
+      expect(mockedSync).not.toHaveBeenCalled();
     });
 
     it('own job with zero applications → deleted + ES remove + cache purge', async () => {
