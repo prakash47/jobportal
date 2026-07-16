@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { prisma, type JobStatus, type Prisma } from '@jobportal/db';
+import { isFlagEnabled } from '@jobportal/feature-flags';
 import { Button } from '@jobportal/ui';
 import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { buildPublicJobUrl } from '../../../lib/jobs/public-url';
 import { JobsTable } from '../../../components/jobs/JobsTable';
 import { JobsFilterBar } from '../../../components/jobs/JobsFilterBar';
 import { JobsPagination } from '../../../components/jobs/JobsPagination';
@@ -133,7 +135,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
     where.OR = or;
   }
 
-  const [rows, total, cityRows, posterRows] = await Promise.all([
+  const [rows, total, cityRows, posterRows, deleteKilled] = await Promise.all([
     prisma.job.findMany({
       where,
       orderBy: ORDER_BY[sort],
@@ -142,6 +144,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
       select: {
         id: true,
         title: true,
+        canonicalSlug: true,
         status: true,
         postedAt: true,
         expiresAt: true,
@@ -166,6 +169,9 @@ export default async function JobsPage({ searchParams }: PageProps) {
       select: { postedById: true, postedBy: { select: { name: true } } },
       distinct: ['postedById'],
     }),
+    // L2 of killswitch.recruiter_job_delete — hides the ⋮ menu's Delete item.
+    // The DELETE endpoint's L3 check is the trust boundary.
+    isFlagEnabled('killswitch.recruiter_job_delete'),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
@@ -286,6 +292,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
           <JobsSortSelect />
           <JobsTable
             sort={sort}
+            deleteEnabled={!deleteKilled}
             rows={rows.map((r) => {
               const m = metricsByJob.get(r.id) ?? { total: 0, newCount: 0, shortlisted: 0 };
               return {
@@ -298,6 +305,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
                 cityName: r.primaryCity?.name ?? null,
                 localityName: r.locality?.name ?? null,
                 isOwn: r.postedById === session.sub,
+                publicUrl: buildPublicJobUrl(r.canonicalSlug),
                 totalResponses: m.total,
                 newCount: m.newCount,
                 shortlistedCount: m.shortlisted,

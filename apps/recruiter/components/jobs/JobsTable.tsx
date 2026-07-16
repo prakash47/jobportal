@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { cn } from '@jobportal/ui';
-import { CloseJobButton, ReopenJobButton } from './JobActions';
+import { JobRowMenu } from './JobRowMenu';
 import { JobStatusBadge, type JobStatus } from './JobStatusBadge';
 import { formatJobLocation, formatListDate, type WorkMode } from './job-list-format';
 import type { ApplicantFilter } from './applicant-filter';
@@ -23,11 +23,15 @@ export interface JobListRow {
   shortlistedCount: number;
   matchedCount: number;
   /**
-   * Whether the current recruiter posted this job. The list is company-wide, but
-   * the close/reopen API is own-jobs-only (`getOne` 404s otherwise), so those
-   * actions only render for the poster — no button that can't succeed.
+   * Whether the current recruiter posted this job. The list is company-wide,
+   * but every job mutation is own-jobs-only at the API (`getOne` 404s
+   * otherwise), so the ⋮ menu shows mutations only for the poster — teammate
+   * rows get the read-only items (Preview / View public page / Share).
    */
   isOwn: boolean;
+  /** Absolute seeker-site URL (`{WEB_URL}/job/<canonicalSlug>`) for
+   * Preview / View public page / Share. Built server-side in the page RSC. */
+  publicUrl: string;
 }
 
 const TH =
@@ -67,11 +71,6 @@ function applicantsHref(id: number, filter: ApplicantFilter | ''): string {
   return filter ? `/jobs/${id}/applicants?filter=${filter}` : `/jobs/${id}/applicants`;
 }
 
-/** Close/Reopen only apply for these states, and only to the job's own poster. */
-function hasRowAction(status: JobStatus, isOwn: boolean): boolean {
-  return isOwn && (status === 'ACTIVE' || status === 'CLOSED' || status === 'EXPIRED');
-}
-
 /**
  * `aria-sort` for a sortable column header, derived from the same shared sort
  * keys the client header links parse — so the announced state and the link
@@ -84,26 +83,19 @@ function ariaSortFor(column: JobsSortColumn, sort: JobsSortKey): 'ascending' | '
   return undefined;
 }
 
-/**
- * Contextual status action — mirrors the old JobRow logic. Only rendered for the
- * job's own poster: the list is company-wide but close/reopen are own-jobs-only
- * at the API, so a teammate's job shows no action button (it would 404).
- */
-function RowActions({
-  id,
-  title,
-  status,
-  isOwn,
-}: {
-  id: number;
-  title: string;
-  status: JobStatus;
-  isOwn: boolean;
-}) {
-  if (!isOwn) return null;
-  if (status === 'ACTIVE') return <CloseJobButton id={id} title={title} />;
-  if (status === 'CLOSED' || status === 'EXPIRED') return <ReopenJobButton id={id} title={title} />;
-  return null;
+/** The per-row ⋮ action menu (see JobRowMenu for the item matrix). */
+function RowMenu({ row, deleteEnabled }: { row: JobListRow; deleteEnabled: boolean }) {
+  return (
+    <JobRowMenu
+      id={row.id}
+      title={row.title}
+      status={row.status}
+      isOwn={row.isOwn}
+      publicUrl={row.publicUrl}
+      hasApplications={row.totalResponses > 0}
+      deleteEnabled={deleteEnabled}
+    />
+  );
 }
 
 /**
@@ -179,7 +171,16 @@ function MetricValue({
  * the same fields stacked as cards, with the four metrics as a compact tile
  * grid.
  */
-export function JobsTable({ rows, sort }: { rows: JobListRow[]; sort: JobsSortKey }) {
+export function JobsTable({
+  rows,
+  sort,
+  deleteEnabled,
+}: {
+  rows: JobListRow[];
+  sort: JobsSortKey;
+  /** L2 of killswitch.recruiter_job_delete (server-evaluated in the page RSC). */
+  deleteEnabled: boolean;
+}) {
   return (
     <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
       {/* Desktop / tablet table. Focusable region so the horizontal scroll (used
@@ -269,7 +270,7 @@ export function JobsTable({ rows, sort }: { rows: JobListRow[]; sort: JobsSortKe
                   </td>
                 ))}
                 <td className="px-4 py-3 text-right">
-                  <RowActions id={r.id} title={r.title} status={r.status} isOwn={r.isOwn} />
+                  <RowMenu row={r} deleteEnabled={deleteEnabled} />
                 </td>
               </tr>
             ))}
@@ -291,7 +292,13 @@ export function JobsTable({ rows, sort }: { rows: JobListRow[]; sort: JobsSortKe
               >
                 {r.title}
               </JobLink>
-              <JobStatusBadge status={r.status} />
+              <div className="flex shrink-0 items-center gap-1.5">
+                <JobStatusBadge status={r.status} />
+                {/* -my-1 keeps the 32px icon button from inflating the title row. */}
+                <div className="-my-1">
+                  <RowMenu row={r} deleteEnabled={deleteEnabled} />
+                </div>
+              </div>
             </div>
             <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
               {formatJobLocation({
@@ -350,11 +357,6 @@ export function JobsTable({ rows, sort }: { rows: JobListRow[]; sort: JobsSortKe
                 );
               })}
             </div>
-            {hasRowAction(r.status, r.isOwn) && (
-              <div className="mt-3 flex justify-end">
-                <RowActions id={r.id} title={r.title} status={r.status} isOwn={r.isOwn} />
-              </div>
-            )}
           </li>
         ))}
       </ul>

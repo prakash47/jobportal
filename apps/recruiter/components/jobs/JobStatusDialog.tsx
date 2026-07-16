@@ -1,0 +1,98 @@
+'use client';
+
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@jobportal/ui';
+import { api } from '../../lib/api-client';
+
+const COPY = {
+  close: {
+    title: (t: string) => `Close “${t}”?`,
+    description:
+      'Candidates will no longer see this job or be able to apply. You can reopen it from this menu later.',
+    confirm: 'Close job',
+    variant: 'danger' as const,
+    fallbackError: 'Could not close this job.',
+  },
+  reopen: {
+    title: (t: string) => `Reopen “${t}”?`,
+    description:
+      'The job goes live again immediately — it reappears in search and starts accepting applications.',
+    confirm: 'Reopen job',
+    variant: 'primary' as const,
+    fallbackError: 'Could not reopen this job.',
+  },
+};
+
+/**
+ * Confirm dialog for the close/reopen status transitions (Jobs list 3-dot
+ * menu). Replaces the old window.confirm in JobActions.tsx with the app's
+ * canonical confirm pattern (see users/RemoveUserDialog) — including an inline
+ * error the native confirm could never show.
+ */
+export function JobStatusDialog({
+  id,
+  title,
+  action,
+  open,
+  onOpenChange,
+}: {
+  id: number;
+  title: string;
+  action: 'close' | 'reopen';
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [, startTransition] = useTransition();
+  const copy = COPY[action];
+
+  async function onConfirm() {
+    setError(null);
+    setLoading(true);
+    const res = await api(`/recruiter/jobs/${id}/${action}`, { method: 'POST' });
+    setLoading(false);
+    if (!res.ok) {
+      setError(res.message || copy.fallbackError);
+      return;
+    }
+    onOpenChange(false);
+    startTransition(() => router.refresh());
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{copy.title(title)}</DialogTitle>
+          <DialogDescription>{copy.description}</DialogDescription>
+        </DialogHeader>
+
+        {error && (
+          <p role="alert" className="text-sm text-[var(--color-danger)]">
+            {error}
+          </p>
+        )}
+
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" variant={copy.variant} loading={loading} onClick={onConfirm}>
+            {copy.confirm}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

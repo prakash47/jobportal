@@ -42,6 +42,7 @@ export {
   MoreVertical,
   Pencil,
   Plus,
+  RotateCcw,
   Search,
   Settings,
   Share2,
