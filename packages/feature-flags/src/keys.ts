@@ -94,6 +94,15 @@ export const FLAG = {
   // admin flipping this ON disables posting without a redeploy. As a
   // `killswitch.*` key it is auto-classified critical (Slack + confirm modal).
   KILL_RECRUITER_POST_JOB: 'killswitch.recruiter_post_job',
+  // Recruiter job deletion (the Jobs list 3-dot menu → Delete). Emergency stop
+  // for the destructive action: when ON, DELETE /recruiter/jobs/:id rejects
+  // with 503 (L3) and the Jobs list hides the Delete menu item (L2). Deletion
+  // is already restricted to own jobs with zero applications — this switch is
+  // the no-deploy off button on top of that. Seeded enabled:false, so deletion
+  // is LIVE by default; an admin flipping this ON disables it without a
+  // redeploy. As a `killswitch.*` key it is auto-classified critical (Slack +
+  // confirm modal).
+  KILL_RECRUITER_JOB_DELETE: 'killswitch.recruiter_job_delete',
 } as const;
 
 export type FlagKey = (typeof FLAG)[keyof typeof FLAG];
