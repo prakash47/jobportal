@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Developer | Feature | Branch | Artifacts / surfaces |
+|---|---|---|---|
+| Claude (for owner) | **Recruiter Jobs list — sort + pagination controls** (sort by Posted Date / Title / Status via clickable column headers + mobile sort select; numbered pagination with Prev/Next + results-per-page 10/20/50) | `feature/recruiter-jobs-sort-pagination` | Recruiter-only. New `apps/recruiter/components/jobs/`: `jobs-list-params.ts`, `JobsSortHeader.tsx`, `JobsSortSelect.tsx`, `JobsPagination.tsx`. Modified: `jobs/page.tsx`, `JobsTable.tsx`, `JobsFilterBar.tsx` (clearAll only). **No schema / no flags / no shared-surface locks**; `apps/web` + `apps/services` untouched. Started 2026-07-16. |
 
 ---
 
