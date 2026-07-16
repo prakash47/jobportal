@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -101,6 +102,17 @@ export class RecruiterJobsController {
     const parsed = UpdateRecruiterJobDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
     return this.service.update(user.sub, id, parsed.data);
+  }
+
+  // Hard delete — own jobs with zero applications only (409 otherwise); L3
+  // killswitch killswitch.recruiter_job_delete rejects with 503 when flipped ON.
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @CurrentUser() user: AccessClaims,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    await this.service.delete(user.sub, id);
   }
 
   @Post(':id/close')

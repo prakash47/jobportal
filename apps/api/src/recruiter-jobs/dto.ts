@@ -60,7 +60,24 @@ export type CreateRecruiterJobInput = z.infer<typeof CreateRecruiterJobDto>;
 
 // PATCH allows the same shape minus publishMode; status transitions go via
 // dedicated /close /reopen endpoints to keep the surface explicit.
-export const UpdateRecruiterJobDto = baseFields.partial();
+// Clearable optional fields additionally accept `null` so the edit form can
+// blank a previously-set value (PATCH semantics: omitted = unchanged,
+// null = clear). Required-for-publish fields (title, description,
+// primaryCityId, functionalAreaId…) stay non-nullable — omit to keep them.
+export const UpdateRecruiterJobDto = baseFields
+  .partial()
+  .extend({
+    shortDescription: z.string().max(280).nullable().optional(),
+    industryId: z.number().int().positive().nullable().optional(),
+    salaryMinPaise: z.number().int().min(0).nullable().optional(),
+    salaryMaxPaise: z.number().int().min(0).nullable().optional(),
+    experienceMinYears: z.number().int().min(0).max(60).nullable().optional(),
+    experienceMaxYears: z.number().int().min(0).max(60).nullable().optional(),
+    qualifications: z.string().max(2000).nullable().optional(),
+    localityId: z.number().int().positive().nullable().optional(),
+    internshipDurationMonths: z.number().int().min(1).max(36).nullable().optional(),
+  })
+  .strict();
 export type UpdateRecruiterJobInput = z.infer<typeof UpdateRecruiterJobDto>;
 
 export const ListRecruiterJobsQueryDto = z

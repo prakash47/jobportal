@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
   ServiceUnavailableException,
@@ -17,6 +18,7 @@ vi.mock('@jobportal/db', () => ({
       count: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      deleteMany: vi.fn(),
     },
     locality: { findUnique: vi.fn(), upsert: vi.fn() },
     city: { findUnique: vi.fn() },
@@ -44,6 +46,7 @@ const mocked = prisma as unknown as {
     count: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    deleteMany: ReturnType<typeof vi.fn>;
   };
   locality: { findUnique: ReturnType<typeof vi.fn>; upsert: ReturnType<typeof vi.fn> };
   city: { findUnique: ReturnType<typeof vi.fn> };
@@ -340,6 +343,57 @@ describe('RecruiterJobsService', () => {
     it('reopen on DRAFT → BadRequestException', async () => {
       mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 42, status: 'DRAFT' });
       await expect(service.reopen(42, 5)).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('delete', () => {
+    const JOB_DELETE_KILLSWITCH = 'killswitch.recruiter_job_delete';
+
+    it('killswitch ON → ServiceUnavailableException before any DB work', async () => {
+      flagState[JOB_DELETE_KILLSWITCH] = true;
+      await expect(service.delete(42, 5)).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(mocked.job.findUnique).not.toHaveBeenCalled();
+      expect(mocked.job.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("teammate's job → NotFoundException (ownership, no leak)", async () => {
+      mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 99 });
+      await expect(service.delete(42, 5)).rejects.toBeInstanceOf(NotFoundException);
+      expect(mocked.job.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('job with applications → ConflictException, nothing deleted, no side effects', async () => {
+      mocked.job.findUnique.mockResolvedValue({
+        id: 5,
+        postedById: 42,
+        status: 'ACTIVE',
+        canonicalSlug: 'foo-5',
+      });
+      // The atomic `applications: none` guard matched no row.
+      mocked.job.deleteMany.mockResolvedValue({ count: 0 });
+      await expect(service.delete(42, 5)).rejects.toBeInstanceOf(ConflictException);
+      expect(mockedSync).not.toHaveBeenCalled();
+      expect(fakeCachePurge.purgeJob).not.toHaveBeenCalled();
+    });
+
+    it('own job with zero applications → deleted + ES remove + cache purge', async () => {
+      mocked.job.findUnique.mockResolvedValue({
+        id: 5,
+        postedById: 42,
+        status: 'DRAFT',
+        canonicalSlug: 'foo-5',
+      });
+      mocked.job.deleteMany.mockResolvedValue({ count: 1 });
+      await expect(service.delete(42, 5)).resolves.toBeUndefined();
+      const args = mocked.job.deleteMany.mock.calls[0]?.[0] as { where: Record<string, unknown> };
+      expect(args.where).toMatchObject({
+        id: 5,
+        postedById: 42,
+        applications: { none: {} },
+      });
+      await Promise.resolve();
+      expect(mockedSync).toHaveBeenCalledWith(5, 'remove');
+      expect(fakeCachePurge.purgeJob).toHaveBeenCalledWith('foo-5');
     });
   });
 
