@@ -38,7 +38,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | rat145 | `feature/recruiter-jobs-action-menu` | 2026-07-16 | Adding `killswitch.recruiter_job_delete`. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
-| rat145 | `feature/recruiter-jobs-action-menu` | Recruiter `/jobs` per-row **3-dot action menu** (Preview · Edit · Close/Reopen · Delete · Duplicate · View Public Job Page · Share). New components `JobRowMenu`/`ShareJobDialog`/`DeleteJobDialog` (+ close/reopen confirm dialog replacing `window.confirm`); new page `/jobs/[id]/edit` reusing `PostJobWizard` in edit mode via the existing `PATCH /recruiter/jobs/:id`; `?duplicate=<id>` deep-link into `/post-job` (template deep-copy); new **`DELETE /recruiter/jobs/:id`** endpoint. Recruiter-only — `apps/web`+`apps/services` untouched; no schema/migration. | `packages/ui/src/icons.ts` (append-only icon adds — no lock per §15.3); possibly `packages/feature-flags/src/keys.ts` (new `killswitch.recruiter_job_delete`, pending owner decision — will take the lock before editing) |
+| rat145 | `feature/recruiter-jobs-action-menu` | Recruiter `/jobs` per-row **3-dot action menu** (Preview · Edit · Close/Reopen · Delete · Duplicate · View Public Job Page · Share). New components `JobRowMenu`/`ShareJobDialog`/`DeleteJobDialog` (+ close/reopen confirm dialog replacing `window.confirm`); new page `/jobs/[id]/edit` reusing `PostJobWizard` in edit mode via the existing `PATCH /recruiter/jobs/:id`; `?duplicate=<id>` deep-link into `/post-job` (template deep-copy); new **`DELETE /recruiter/jobs/:id`** endpoint. Recruiter-only — `apps/web`+`apps/services` untouched; no schema/migration. | `packages/ui/src/icons.ts` (append-only icon adds — no lock per §15.3); `packages/feature-flags/src/keys.ts` (new `killswitch.recruiter_job_delete` — **lock taken**) |
 
 ---
 
