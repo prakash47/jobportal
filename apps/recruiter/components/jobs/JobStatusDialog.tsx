@@ -32,8 +32,11 @@ const COPY = {
   },
   publish: {
     title: (t: string) => `Publish “${t}”?`,
+    // Worded to stay true whether or not admin moderation is on: with moderation
+    // off the job is live at once, with it on it goes to review first — "once it
+    // goes live" covers both without promising immediacy.
     description:
-      'This draft goes live immediately — it appears in search and starts accepting applications. Publishing counts toward your job-posting limit.',
+      'Publishing submits this draft. Once it goes live it appears in search and starts accepting applications, and it counts toward your job-posting limit.',
     confirm: 'Publish job',
     variant: 'primary' as const,
     fallbackError: 'Could not publish this job.',
