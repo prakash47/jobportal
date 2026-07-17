@@ -48,7 +48,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Dev (rat145) | **API: create(PUBLISH) requires city/dept/openings** | `feature/recruiter-create-publish-fields` · 2026-07-17 · `apps/api/src/recruiter-jobs/dto.ts` (shared `missingPublishFields()` helper + a `publishMode==='PUBLISH'` refine on `CreateRecruiterJobDto`) + `recruiter-jobs.service.ts` `publish()` (uses the shared helper) + `dto.test.ts`. Closes the trust-boundary gap where a direct API PUBLISH could create a live job with no city/department/openings. **API-only; no schema/migration/flag/lock; `apps/web`+`apps/services` untouched.** |
 
 ---
 
