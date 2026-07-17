@@ -14,6 +14,7 @@ import { AlertsIndexerHook } from '../alerts/alerts.indexer-hook';
 import { CachePurgeService } from '../cache-purge/cache-purge.service';
 import { EmailService } from '../email/email.service';
 import { RecruiterPostQuotaService } from '../recruiter-post-quota/quota.service';
+import { missingPublishFields } from './dto';
 import type {
   CreateRecruiterJobInput,
   ListRecruiterJobsQuery,
@@ -455,20 +456,12 @@ export class RecruiterJobsService {
     }
 
     // A draft can be saved with just a title + short description (SRS §4.9.3 —
-    // drafts are lenient), but going live needs the fields a real listing
-    // requires. Validate the STORED row and 400 with the gaps BEFORE consuming a
-    // quota slot, so an incomplete draft never burns one. (Intentionally
-    // STRICTER than create(PUBLISH), whose DTO leaves city/department/openings
-    // optional — the wizard gates those client-side; tightening create() is a
-    // separate follow-up.)
-    const missing: string[] = [];
-    if (!existing.title || existing.title.trim().length < 3) missing.push('title');
-    if (!existing.description || existing.description.trim().length < 10) {
-      missing.push('description');
-    }
-    if (existing.functionalAreaId == null) missing.push('department');
-    if (existing.openings == null || existing.openings < 1) missing.push('number of openings');
-    if (existing.primaryCityId == null) missing.push('city');
+    // drafts are lenient), but going live needs the full mandatory set. Validate
+    // the STORED row (the same `missingPublishFields` set create(PUBLISH) now
+    // enforces on its input — one source of truth, so the two make-live paths
+    // can't drift) and 400 with the gaps BEFORE consuming a quota slot, so an
+    // incomplete draft never burns one.
+    const missing = missingPublishFields(existing);
     if (missing.length > 0) {
       throw new BadRequestException(
         `This draft is missing required fields: ${missing.join(', ')}. Edit the draft to add them before publishing.`,
