@@ -40,6 +40,32 @@ const baseFields = z
   })
   .strict();
 
+/**
+ * The mandatory fields a job needs to go LIVE (SRS §4.9.3), returned as a
+ * human-labelled list of the ones missing/invalid on `f`. Single source of
+ * truth shared by CreateRecruiterJobDto's PUBLISH refine and
+ * RecruiterJobsService.publish() so the two make-live paths enforce the exact
+ * same set and can never drift. DRAFT saves stay lenient — only title +
+ * description (min 10), which baseFields already requires.
+ */
+export interface PublishableFields {
+  title?: string | null | undefined;
+  description?: string | null | undefined;
+  functionalAreaId?: number | null | undefined;
+  openings?: number | null | undefined;
+  primaryCityId?: number | null | undefined;
+}
+
+export function missingPublishFields(f: PublishableFields): string[] {
+  const missing: string[] = [];
+  if (!f.title || f.title.trim().length < 3) missing.push('title');
+  if (!f.description || f.description.trim().length < 10) missing.push('description');
+  if (f.functionalAreaId == null) missing.push('department');
+  if (f.openings == null || f.openings < 1) missing.push('number of openings');
+  if (f.primaryCityId == null) missing.push('city');
+  return missing;
+}
+
 export const CreateRecruiterJobDto = baseFields
   .extend({ publishMode: z.enum(['DRAFT', 'PUBLISH']) })
   .refine(
@@ -55,7 +81,19 @@ export const CreateRecruiterJobDto = baseFields
       v.experienceMaxYears === undefined ||
       v.experienceMinYears <= v.experienceMaxYears,
     { message: 'experienceMin must be <= experienceMax' },
-  );
+  )
+  // Going LIVE (publishMode PUBLISH) needs the full mandatory set — not just the
+  // title + description baseFields enforces. Without this, a direct API call
+  // (`{ publishMode:'PUBLISH', title, description }`) would create an ACTIVE,
+  // indexed job with no city/department/openings; the wizard gates these
+  // client-side but the API is the only trusted enforcement point (CLAUDE.md
+  // §4). DRAFT stays lenient. Same set publish() enforces on a stored draft.
+  .refine((v) => v.publishMode !== 'PUBLISH' || missingPublishFields(v).length === 0, {
+    // Dynamic message (Zod 4 passes it the issue) so the 400 names only the
+    // fields that are actually missing, mirroring publish()'s message.
+    error: (iss) =>
+      `To publish, these fields are required: ${missingPublishFields(iss.input as PublishableFields).join(', ')}.`,
+  });
 export type CreateRecruiterJobInput = z.infer<typeof CreateRecruiterJobDto>;
 
 // PATCH allows the same shape minus publishMode; status transitions go via
