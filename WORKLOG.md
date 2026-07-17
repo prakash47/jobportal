@@ -48,7 +48,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Dev (rat145) | **Recruiter "Draft Jobs" nav sub-item + Save-as-Draft fix** | `feature/recruiter-draft-jobs` · 2026-07-17 · `SidebarNav.tsx` (Jobs → collapsible group: "All jobs" `/jobs` + "Draft Jobs" `/jobs?status=DRAFT`, query-aware active state) + `PostJobWizard.tsx` (draft button now requires a description — the create DTO requires `description` min 10 for DRAFT too, and `Job.description` is non-nullable, so a title-only draft 400s). **Recruiter-only; no schema/migration/flags/shared-surface-locks; reuses the existing `/jobs?status=DRAFT` list.** Follow-up noted: a saved DRAFT can't currently be published via any recruiter action. |
 
 ---
 
