@@ -48,7 +48,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Dev (rat145) | **Recruiter Publish-from-draft (DRAFT→ACTIVE)** | `feature/recruiter-publish-draft` · 2026-07-17 · API `recruiter-jobs.service.ts` (new `publish()`) + `.controller.ts` (`POST :id/publish`) + service tests; recruiter `JobRowMenu.tsx` (Publish item on own DRAFT rows), `JobStatusDialog.tsx` (+`publish` action), `JobsTable.tsx`/`jobs/page.tsx` (thread `publishEnabled`), `packages/ui/src/icons.ts` (+`Send`, append-only). Reuses existing `killswitch.recruiter_post_job` (L2 hide + L3 503) — **no new flag/schema/migration/lock.** |
 
 ---
 
