@@ -201,7 +201,11 @@ export function PostJobWizard({
     !quota.unlimited &&
     (quota.daily.count >= quota.daily.limit || quota.monthly.count >= quota.monthly.limit);
 
-  // Publish requires the mandatory fields (SRS §4.9.3); a draft only needs a title.
+  // Publish requires all the mandatory fields (SRS §4.9.3). A draft needs a
+  // title AND a description: the create API requires `description` (min 10) for
+  // every publishMode, and Job.description is non-nullable — so a title-only
+  // draft would 400. (Making title-only drafts saveable would need a
+  // nullable-column migration that ripples into the seeker render — out of scope.)
   const titleOk = title.trim().length >= 3;
   const descriptionOk = description.trim().length >= 10;
   const canPublish =
@@ -732,7 +736,12 @@ export function PostJobWizard({
           </>
         ) : (
           <>
-            <Button variant="secondary" onClick={() => submit('DRAFT')} loading={busy} disabled={!titleOk}>
+            <Button
+              variant="secondary"
+              onClick={() => submit('DRAFT')}
+              loading={busy}
+              disabled={!titleOk || !descriptionOk}
+            >
               Save as draft
             </Button>
             <Button
@@ -746,9 +755,14 @@ export function PostJobWizard({
           </>
         )}
       </div>
-      {!isEdit && !canPublish && titleOk && (
+      {!isEdit && titleOk && !descriptionOk && (
         <p className="text-right text-xs text-[var(--color-fg-subtle)]">
-          To publish, add a department, title, description, openings, and a city.
+          Add a description (at least 10 characters) to save a draft or publish.
+        </p>
+      )}
+      {!isEdit && titleOk && descriptionOk && !canPublish && (
+        <p className="text-right text-xs text-[var(--color-fg-subtle)]">
+          To publish, also add a department, openings, and a city.
         </p>
       )}
       {blankedRequired && (
