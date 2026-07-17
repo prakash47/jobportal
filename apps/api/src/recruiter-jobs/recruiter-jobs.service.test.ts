@@ -18,6 +18,7 @@ vi.mock('@jobportal/db', () => ({
       count: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       deleteMany: vi.fn(),
     },
     locality: { findUnique: vi.fn(), upsert: vi.fn() },
@@ -46,6 +47,7 @@ const mocked = prisma as unknown as {
     count: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
     deleteMany: ReturnType<typeof vi.fn>;
   };
   locality: { findUnique: ReturnType<typeof vi.fn>; upsert: ReturnType<typeof vi.fn> };
@@ -56,7 +58,8 @@ const mocked = prisma as unknown as {
 
 const fakeQuota = {
   consume: vi.fn(),
-} as { consume: ReturnType<typeof vi.fn> };
+  refund: vi.fn(),
+} as { consume: ReturnType<typeof vi.fn>; refund: ReturnType<typeof vi.fn> };
 
 const fakeAlertsHook = {
   onJobIndexed: vi.fn(),
@@ -91,6 +94,7 @@ describe('RecruiterJobsService', () => {
     flagState = {};
     mockedFlag.mockImplementation(async (key: string) => flagState[key] === true);
     fakeQuota.consume.mockResolvedValue({});
+    fakeQuota.refund.mockResolvedValue(undefined);
     fakeAlertsHook.onJobIndexed.mockResolvedValue(undefined);
     fakeCachePurge.purgeJob.mockResolvedValue(undefined);
     fakeEmail.enqueueJobPostedConfirmation.mockResolvedValue(undefined);
@@ -343,6 +347,157 @@ describe('RecruiterJobsService', () => {
     it('reopen on DRAFT → BadRequestException', async () => {
       mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 42, status: 'DRAFT' });
       await expect(service.reopen(42, 5)).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('publish (DRAFT → ACTIVE)', () => {
+    // A fully-completed draft: every publish-mandatory field + no stale expiry.
+    const completeDraft = {
+      id: 5,
+      postedById: 42,
+      status: 'DRAFT' as const,
+      canonicalSlug: 'foo-5',
+      title: 'Senior Frontend Engineer',
+      description: 'Build the dashboard. ' + 'a'.repeat(50),
+      functionalAreaId: 3,
+      openings: 2,
+      primaryCityId: 1,
+      expiresAt: null as Date | null,
+    };
+
+    beforeEach(() => {
+      // publish() runs the verified-email gate (resolveRecruiterContext) before
+      // touching the job — default the recruiter to verified.
+      mocked.recruiter.findUnique.mockResolvedValue({ companyId: 7, workEmailVerified: true });
+    });
+
+    it('killswitch ON → 503 before the verified gate / job read / consume', async () => {
+      flagState[POST_JOB_KILLSWITCH] = true;
+      await expect(service.publish(42, 5)).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(mocked.recruiter.findUnique).not.toHaveBeenCalled();
+      expect(mocked.job.findUnique).not.toHaveBeenCalled();
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('unverified work email → ForbiddenException, no job read / consume', async () => {
+      mocked.recruiter.findUnique.mockResolvedValue({ companyId: 7, workEmailVerified: false });
+      await expect(service.publish(42, 5)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mocked.job.findUnique).not.toHaveBeenCalled();
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+    });
+
+    it("teammate's job → NotFoundException (ownership, no consume/update)", async () => {
+      mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 99, status: 'DRAFT' });
+      await expect(service.publish(42, 5)).rejects.toBeInstanceOf(NotFoundException);
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('non-DRAFT job (already ACTIVE) → BadRequestException, no consume/update', async () => {
+      mocked.job.findUnique.mockResolvedValue({ ...completeDraft, status: 'ACTIVE' });
+      await expect(service.publish(42, 5)).rejects.toBeInstanceOf(BadRequestException);
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('missing fields → 400 naming exactly the gaps, BEFORE consuming a slot', async () => {
+      // department + city null; openings present → the message lists only the gaps.
+      mocked.job.findUnique.mockResolvedValue({
+        ...completeDraft,
+        functionalAreaId: null,
+        primaryCityId: null,
+      });
+      await expect(service.publish(42, 5)).rejects.toThrow(
+        /missing required fields: department, city\./,
+      );
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('complete DRAFT + moderation OFF → ACTIVE, atomic status-guarded flip + side effects', async () => {
+      mocked.job.findUnique
+        .mockResolvedValueOnce(completeDraft) // ownership check
+        .mockResolvedValueOnce({ ...completeDraft, status: 'ACTIVE' }); // re-read after flip
+      mocked.job.updateMany.mockResolvedValue({ count: 1 });
+
+      const out = await service.publish(42, 5);
+
+      expect(out.status).toBe('ACTIVE');
+      expect(fakeQuota.consume).toHaveBeenCalledWith(42);
+      expect(fakeQuota.refund).not.toHaveBeenCalled();
+      // The flip is guarded on status:'DRAFT' and refreshes postedAt.
+      const call = mocked.job.updateMany.mock.calls[0]?.[0] as {
+        where: Record<string, unknown>;
+        data: Record<string, unknown>;
+      };
+      expect(call.where).toMatchObject({ id: 5, status: 'DRAFT' });
+      expect(call.data.status).toBe('ACTIVE');
+      expect(call.data.postedAt).toBeInstanceOf(Date);
+      await Promise.resolve();
+      expect(mockedSync).toHaveBeenCalledWith(5, 'index');
+      expect(fakeAlertsHook.onJobIndexed).toHaveBeenCalledWith(5);
+      expect(fakeCachePurge.purgeJob).toHaveBeenCalledWith('foo-5');
+      expect(fakeEmail.enqueueJobPostedConfirmation).toHaveBeenCalled();
+    });
+
+    it('clears a stale (past) expiresAt so the freshly-live job is not swept', async () => {
+      const past = new Date('2020-01-01T00:00:00Z');
+      mocked.job.findUnique
+        .mockResolvedValueOnce({ ...completeDraft, expiresAt: past })
+        .mockResolvedValueOnce({ ...completeDraft, status: 'ACTIVE', expiresAt: null });
+      mocked.job.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.publish(42, 5);
+
+      const data = mocked.job.updateMany.mock.calls[0]?.[0]?.data as Record<string, unknown>;
+      expect(data.expiresAt).toBeNull();
+    });
+
+    it('complete DRAFT + moderation ON → PENDING_MODERATION + consumed + NO side effects', async () => {
+      flagState[MODERATION_FLAG] = true;
+      mocked.job.findUnique
+        .mockResolvedValueOnce(completeDraft)
+        .mockResolvedValueOnce({ ...completeDraft, status: 'PENDING_MODERATION' });
+      mocked.job.updateMany.mockResolvedValue({ count: 1 });
+
+      const out = await service.publish(42, 5);
+
+      expect(out.status).toBe('PENDING_MODERATION');
+      expect(fakeQuota.consume).toHaveBeenCalledWith(42); // still reserves the slot
+      await Promise.resolve();
+      expect(mockedSync).not.toHaveBeenCalled();
+      expect(fakeAlertsHook.onJobIndexed).not.toHaveBeenCalled();
+      expect(fakeCachePurge.purgeJob).not.toHaveBeenCalled();
+      expect(fakeEmail.enqueueJobPostedConfirmation).not.toHaveBeenCalled();
+    });
+
+    it('lost publish race (updateMany count 0) → refunds the slot, no side effects', async () => {
+      mocked.job.findUnique
+        .mockResolvedValueOnce(completeDraft) // ownership check (still DRAFT here)
+        .mockResolvedValueOnce({ ...completeDraft, status: 'ACTIVE' }); // current row returned
+      mocked.job.updateMany.mockResolvedValue({ count: 0 }); // another request already flipped it
+
+      const out = await service.publish(42, 5);
+
+      expect(out.status).toBe('ACTIVE');
+      expect(fakeQuota.consume).toHaveBeenCalledWith(42);
+      expect(fakeQuota.refund).toHaveBeenCalledWith(42); // loser returns its slot
+      await Promise.resolve();
+      expect(mockedSync).not.toHaveBeenCalled(); // the winner did the side effects
+      expect(fakeEmail.enqueueJobPostedConfirmation).not.toHaveBeenCalled();
+    });
+
+    it('update throws after consume → refunds the slot and rethrows, no side effects', async () => {
+      mocked.job.findUnique.mockResolvedValue(completeDraft);
+      mocked.job.updateMany.mockRejectedValue(new Error('db down'));
+
+      await expect(service.publish(42, 5)).rejects.toThrow('db down');
+      expect(fakeQuota.consume).toHaveBeenCalledWith(42);
+      expect(fakeQuota.refund).toHaveBeenCalledWith(42);
+      await Promise.resolve();
+      expect(mockedSync).not.toHaveBeenCalled();
+      expect(fakeEmail.enqueueJobPostedConfirmation).not.toHaveBeenCalled();
     });
   });
 

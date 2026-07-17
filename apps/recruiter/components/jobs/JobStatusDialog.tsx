@@ -30,6 +30,17 @@ const COPY = {
     variant: 'primary' as const,
     fallbackError: 'Could not reopen this job.',
   },
+  publish: {
+    title: (t: string) => `Publish “${t}”?`,
+    // Worded to stay true whether or not admin moderation is on: with moderation
+    // off the job is live at once, with it on it goes to review first — "once it
+    // goes live" covers both without promising immediacy.
+    description:
+      'Publishing submits this draft. Once it goes live it appears in search and starts accepting applications, and it counts toward your job-posting limit.',
+    confirm: 'Publish job',
+    variant: 'primary' as const,
+    fallbackError: 'Could not publish this job.',
+  },
 };
 
 // Reopening doesn't reset the expiry date, so a reopened EXPIRED job would be
@@ -38,8 +49,9 @@ const EXPIRY_NOTE =
   'This job’s expiry date has already passed — extend it from Edit after reopening, or the nightly sweep will expire it again.';
 
 /**
- * Confirm dialog for the close/reopen status transitions (Jobs list 3-dot
- * menu). Replaces the old window.confirm in JobActions.tsx with the app's
+ * Confirm dialog for the close / reopen / publish status transitions (Jobs list
+ * 3-dot menu), each a bodyless POST to /recruiter/jobs/:id/<action>. Replaces
+ * the old window.confirm in JobActions.tsx with the app's
  * canonical confirm pattern (see users/RemoveUserDialog) — including an inline
  * error the native confirm could never show.
  */
@@ -53,7 +65,7 @@ export function JobStatusDialog({
 }: {
   id: number;
   title: string;
-  action: 'close' | 'reopen';
+  action: 'close' | 'reopen' | 'publish';
   open: boolean;
   onOpenChange: (o: boolean) => void;
   /** Reopening an EXPIRED job — warn that the past expiry date still applies. */

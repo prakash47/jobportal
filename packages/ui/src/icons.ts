@@ -44,6 +44,7 @@ export {
   Plus,
   RotateCcw,
   Search,
+  Send,
   Settings,
   Share2,
   ShieldCheck,

@@ -10,6 +10,7 @@ import {
   MoreVertical,
   Pencil,
   RotateCcw,
+  Send,
   Share2,
   Trash2,
   X,
@@ -29,7 +30,7 @@ const ICON_CLASS = 'size-4 shrink-0 text-[var(--color-fg-muted)]';
 // NotificationBell badge (shared theme.css deliberately untouched).
 const DANGER_TEXT = 'text-[color-mix(in_oklch,var(--color-danger),black_18%)]';
 
-type DialogKind = 'close' | 'reopen' | 'delete' | 'share';
+type DialogKind = 'close' | 'reopen' | 'delete' | 'share' | 'publish';
 
 type Entry =
   | 'separator'
@@ -49,7 +50,8 @@ type Entry =
 
 /**
  * The per-row ⋮ action menu on the Jobs list (SRS §4.9): Preview / View
- * public job page, Share, Edit, Duplicate, Close / Reopen, Delete.
+ * public job page, Share, Publish (drafts), Edit, Duplicate, Close / Reopen,
+ * Delete.
  *
  * Built on the portalled Radix Popover (the NotificationBell pattern — no new
  * dependency; the portal also escapes the table's overflow-x-auto clip) with
@@ -69,6 +71,7 @@ export function JobRowMenu({
   publicUrl,
   hasApplications,
   deleteEnabled,
+  publishEnabled,
 }: {
   id: number;
   title: string;
@@ -78,6 +81,9 @@ export function JobRowMenu({
   hasApplications: boolean;
   /** L2 of killswitch.recruiter_job_delete — server-evaluated per request. */
   deleteEnabled: boolean;
+  /** L2 of killswitch.recruiter_post_job — hides Publish on drafts when posting
+   * is killed (the /:id/publish endpoint is the L3 boundary). */
+  publishEnabled: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
@@ -112,8 +118,21 @@ export function JobRowMenu({
     });
   }
   if (isOwn) {
+    entries.push('separator');
+    // Publish is the primary action for a draft — a DRAFT→ACTIVE transition the
+    // edit (PATCH) + close/reopen endpoints never cover. Own drafts only, and
+    // hidden when killswitch.recruiter_post_job is ON (L2; the endpoint 503s at
+    // L3). The stored draft may be missing publish-required fields — the confirm
+    // dialog surfaces the API's 400 telling the recruiter to edit it first.
+    if (status === 'DRAFT' && publishEnabled) {
+      entries.push({
+        key: 'publish',
+        label: 'Publish',
+        icon: <Send className={ICON_CLASS} aria-hidden />,
+        onSelect: () => openDialog('publish'),
+      });
+    }
     entries.push(
-      'separator',
       {
         key: 'edit',
         label: 'Edit',
@@ -309,7 +328,7 @@ export function JobRowMenu({
 
       {/* Dialogs live outside the popover so closing it doesn't unmount them.
           Conditional mount = state resets on every open. */}
-      {(dialog === 'close' || dialog === 'reopen') && (
+      {(dialog === 'close' || dialog === 'reopen' || dialog === 'publish') && (
         <JobStatusDialog
           id={id}
           title={title}

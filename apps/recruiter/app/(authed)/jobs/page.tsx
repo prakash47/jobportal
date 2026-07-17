@@ -135,7 +135,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
     where.OR = or;
   }
 
-  const [rows, total, cityRows, posterRows, deleteKilled] = await Promise.all([
+  const [rows, total, cityRows, posterRows, deleteKilled, postJobKilled] = await Promise.all([
     prisma.job.findMany({
       where,
       orderBy: ORDER_BY[sort],
@@ -172,6 +172,9 @@ export default async function JobsPage({ searchParams }: PageProps) {
     // L2 of killswitch.recruiter_job_delete — hides the ⋮ menu's Delete item.
     // The DELETE endpoint's L3 check is the trust boundary.
     isFlagEnabled('killswitch.recruiter_job_delete'),
+    // L2 of killswitch.recruiter_post_job — hides the ⋮ menu's Publish item on
+    // drafts (publishing a draft IS posting). The /publish endpoint 503s at L3.
+    isFlagEnabled('killswitch.recruiter_post_job'),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
@@ -293,6 +296,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
           <JobsTable
             sort={sort}
             deleteEnabled={!deleteKilled}
+            publishEnabled={!postJobKilled}
             rows={rows.map((r) => {
               const m = metricsByJob.get(r.id) ?? { total: 0, newCount: 0, shortlisted: 0 };
               return {

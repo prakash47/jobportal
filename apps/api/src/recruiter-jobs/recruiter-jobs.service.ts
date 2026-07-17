@@ -434,6 +434,101 @@ export class RecruiterJobsService {
     return updated;
   }
 
+  // Recruiter-driven publish of an existing DRAFT (Jobs list → 3-dot menu →
+  // Publish). This is the DRAFT→ACTIVE transition the wizard's create(PUBLISH)
+  // never covered — create() makes a *new* job; edit() (PATCH) never touches
+  // status; close/reopen reject DRAFT. It reuses the SAME killswitch +
+  // verified-email gate as create() (publishing a draft IS posting a job),
+  // consumes the post quota, honours moderation, and fires the publish
+  // side-effects + the job-posted email. Validated against the STORED draft
+  // (no request body).
+  async publish(userId: number, id: number): Promise<Job> {
+    await this.assertPostingEnabled();
+    // Same hard gate create() runs (SRS §4.9.5): a job can't go live unless the
+    // recruiter's work email is verified. Belt-and-suspenders — a draft can only
+    // be created by an already-verified recruiter today, but enforcing it here
+    // keeps the make-live boundary non-bypassable if that ever changes.
+    await this.resolveRecruiterContext(userId);
+    const existing = await this.getOne(userId, id); // ownership 404
+    if (existing.status !== 'DRAFT') {
+      throw new BadRequestException('Only draft jobs can be published');
+    }
+
+    // A draft can be saved with just a title + short description (SRS §4.9.3 —
+    // drafts are lenient), but going live needs the fields a real listing
+    // requires. Validate the STORED row and 400 with the gaps BEFORE consuming a
+    // quota slot, so an incomplete draft never burns one. (Intentionally
+    // STRICTER than create(PUBLISH), whose DTO leaves city/department/openings
+    // optional — the wizard gates those client-side; tightening create() is a
+    // separate follow-up.)
+    const missing: string[] = [];
+    if (!existing.title || existing.title.trim().length < 3) missing.push('title');
+    if (!existing.description || existing.description.trim().length < 10) {
+      missing.push('description');
+    }
+    if (existing.functionalAreaId == null) missing.push('department');
+    if (existing.openings == null || existing.openings < 1) missing.push('number of openings');
+    if (existing.primaryCityId == null) missing.push('city');
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `This draft is missing required fields: ${missing.join(', ')}. Edit the draft to add them before publishing.`,
+      );
+    }
+
+    // Decide the final status BEFORE quota.consume so a moderation-on publish
+    // still reserves the slot (matching create()).
+    const moderate = await isFlagEnabled(MODERATION_FLAG);
+    const finalStatus: JobStatus = moderate ? 'PENDING_MODERATION' : 'ACTIVE';
+    // L3 — atomic increment. Throws 429 if the recruiter is already at limit.
+    await this.quota.consume(userId);
+
+    const now = new Date();
+    // Refresh postedAt to the go-live moment: the draft may have sat for days,
+    // and postedAt drives seeker "posted N ago" + search recency — it must be
+    // the publish time, not the draft-creation time (create() dates a first
+    // publish to now the same way). Clear a stale draft-era expiry too, so a
+    // freshly-live job isn't expired by the very next nightly sweep (the wizard
+    // never sets one, but a direct-API draft can carry a past expiresAt).
+    const data: Prisma.JobUpdateManyMutationInput = { status: finalStatus, postedAt: now };
+    if (existing.expiresAt && existing.expiresAt <= now) data.expiresAt = null;
+
+    // Atomic DRAFT→final flip, guarded on `status: 'DRAFT'` (the delete()
+    // pattern). Both requests of a double-click/retry/second-tab race consume a
+    // slot first, but only the one that actually flips the row (count === 1)
+    // keeps it + fires the side effects; the loser sees count === 0 and refunds
+    // its slot — no double-consume, no duplicate "your job is live" email.
+    let flipped: { count: number };
+    try {
+      flipped = await prisma.job.updateMany({ where: { id, status: 'DRAFT' }, data });
+    } catch (err) {
+      // Consumed a slot but the write failed — refund it (best-effort) so a
+      // transient DB error doesn't permanently cost the recruiter a post.
+      await this.quota.refund(userId);
+      this.logger.warn(`publish failed after quota.consume for user ${userId}`);
+      throw err;
+    }
+    if (flipped.count === 0) {
+      // Lost the race (already published, or left DRAFT between the guard and
+      // here) — this call published nothing, so return its slot and the row.
+      await this.quota.refund(userId);
+      return this.getOne(userId, id);
+    }
+
+    const updated = await this.getOne(userId, id); // re-read the freshly-live row
+
+    // Only an ACTIVE (moderation-off) publish is indexed + emailed; a
+    // PENDING_MODERATION job waits for admin approval (as in create()).
+    if (updated.status === 'ACTIVE') {
+      this.firePublishSideEffects(updated);
+      this.fireJobPostedEmail(userId, updated).catch((err: unknown) => {
+        this.logger.warn(
+          `job-posted email enqueue failed for job ${updated.id}: ${(err as Error).message}`,
+        );
+      });
+    }
+    return updated;
+  }
+
   // Fire-and-log the publish-side-effect trio. Do NOT await — the response
   // returns to the recruiter while ES + alerts + Cloudflare run in the
   // background. Errors log to stdout; the next list/edit will reconcile.

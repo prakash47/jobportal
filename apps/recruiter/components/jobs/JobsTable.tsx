@@ -84,7 +84,15 @@ function ariaSortFor(column: JobsSortColumn, sort: JobsSortKey): 'ascending' | '
 }
 
 /** The per-row ⋮ action menu (see JobRowMenu for the item matrix). */
-function RowMenu({ row, deleteEnabled }: { row: JobListRow; deleteEnabled: boolean }) {
+function RowMenu({
+  row,
+  deleteEnabled,
+  publishEnabled,
+}: {
+  row: JobListRow;
+  deleteEnabled: boolean;
+  publishEnabled: boolean;
+}) {
   return (
     <JobRowMenu
       id={row.id}
@@ -94,6 +102,7 @@ function RowMenu({ row, deleteEnabled }: { row: JobListRow; deleteEnabled: boole
       publicUrl={row.publicUrl}
       hasApplications={row.totalResponses > 0}
       deleteEnabled={deleteEnabled}
+      publishEnabled={publishEnabled}
     />
   );
 }
@@ -175,11 +184,14 @@ export function JobsTable({
   rows,
   sort,
   deleteEnabled,
+  publishEnabled,
 }: {
   rows: JobListRow[];
   sort: JobsSortKey;
   /** L2 of killswitch.recruiter_job_delete (server-evaluated in the page RSC). */
   deleteEnabled: boolean;
+  /** L2 of killswitch.recruiter_post_job — gates the Publish item on drafts. */
+  publishEnabled: boolean;
 }) {
   return (
     <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
@@ -270,7 +282,7 @@ export function JobsTable({
                   </td>
                 ))}
                 <td className="px-4 py-3 text-right">
-                  <RowMenu row={r} deleteEnabled={deleteEnabled} />
+                  <RowMenu row={r} deleteEnabled={deleteEnabled} publishEnabled={publishEnabled} />
                 </td>
               </tr>
             ))}
@@ -296,7 +308,7 @@ export function JobsTable({
                 <JobStatusBadge status={r.status} />
                 {/* -my-1 keeps the 32px icon button from inflating the title row. */}
                 <div className="-my-1">
-                  <RowMenu row={r} deleteEnabled={deleteEnabled} />
+                  <RowMenu row={r} deleteEnabled={deleteEnabled} publishEnabled={publishEnabled} />
                 </div>
               </div>
             </div>

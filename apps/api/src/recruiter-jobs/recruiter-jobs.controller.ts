@@ -132,4 +132,17 @@ export class RecruiterJobsController {
   ) {
     return this.service.reopen(user.sub, id);
   }
+
+  // DRAFT → ACTIVE publish (Jobs list → 3-dot menu → Publish). Bodyless — it
+  // publishes the stored draft as-is; the service validates its mandatory
+  // fields (400), reuses killswitch.recruiter_post_job (503 when ON), and
+  // consumes the post quota (429 at limit).
+  @Post(':id/publish')
+  @HttpCode(HttpStatus.OK)
+  publish(
+    @CurrentUser() user: AccessClaims,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.publish(user.sub, id);
+  }
 }
