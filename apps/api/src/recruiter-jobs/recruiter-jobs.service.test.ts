@@ -346,6 +346,90 @@ describe('RecruiterJobsService', () => {
     });
   });
 
+  describe('publish (DRAFT → ACTIVE)', () => {
+    // A fully-completed draft: has every publish-mandatory field.
+    const completeDraft = {
+      id: 5,
+      postedById: 42,
+      status: 'DRAFT' as const,
+      canonicalSlug: 'foo-5',
+      title: 'Senior Frontend Engineer',
+      description: 'Build the dashboard. ' + 'a'.repeat(50),
+      functionalAreaId: 3,
+      openings: 2,
+      primaryCityId: 1,
+    };
+
+    it('killswitch ON → ServiceUnavailableException before any DB work / consume', async () => {
+      flagState[POST_JOB_KILLSWITCH] = true;
+      await expect(service.publish(42, 5)).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(mocked.job.findUnique).not.toHaveBeenCalled();
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.update).not.toHaveBeenCalled();
+    });
+
+    it("teammate's job → NotFoundException (ownership, no consume/update)", async () => {
+      mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 99, status: 'DRAFT' });
+      await expect(service.publish(42, 5)).rejects.toBeInstanceOf(NotFoundException);
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.update).not.toHaveBeenCalled();
+    });
+
+    it('non-DRAFT job (already ACTIVE) → BadRequestException, no consume/update', async () => {
+      mocked.job.findUnique.mockResolvedValue({ ...completeDraft, status: 'ACTIVE' });
+      await expect(service.publish(42, 5)).rejects.toBeInstanceOf(BadRequestException);
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.update).not.toHaveBeenCalled();
+    });
+
+    it('DRAFT missing required fields → BadRequestException BEFORE consuming a slot', async () => {
+      mocked.job.findUnique.mockResolvedValue({
+        ...completeDraft,
+        functionalAreaId: null,
+        primaryCityId: null,
+        openings: null,
+      });
+      await expect(service.publish(42, 5)).rejects.toBeInstanceOf(BadRequestException);
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.update).not.toHaveBeenCalled();
+    });
+
+    it('complete DRAFT + moderation OFF → ACTIVE + quota consumed + ES/alerts/purge/email', async () => {
+      mocked.job.findUnique.mockResolvedValue(completeDraft);
+      mocked.job.update.mockResolvedValue({ ...completeDraft, status: 'ACTIVE' });
+
+      const out = await service.publish(42, 5);
+
+      expect(out.status).toBe('ACTIVE');
+      expect(fakeQuota.consume).toHaveBeenCalledWith(42);
+      // update flips status AND refreshes postedAt to the go-live moment
+      const data = mocked.job.update.mock.calls[0]?.[0]?.data as Record<string, unknown>;
+      expect(data.status).toBe('ACTIVE');
+      expect(data.postedAt).toBeInstanceOf(Date);
+      await Promise.resolve();
+      expect(mockedSync).toHaveBeenCalledWith(5, 'index');
+      expect(fakeAlertsHook.onJobIndexed).toHaveBeenCalledWith(5);
+      expect(fakeCachePurge.purgeJob).toHaveBeenCalledWith('foo-5');
+      expect(fakeEmail.enqueueJobPostedConfirmation).toHaveBeenCalled();
+    });
+
+    it('complete DRAFT + moderation ON → PENDING_MODERATION + consumed + NO side effects', async () => {
+      flagState[MODERATION_FLAG] = true;
+      mocked.job.findUnique.mockResolvedValue(completeDraft);
+      mocked.job.update.mockResolvedValue({ ...completeDraft, status: 'PENDING_MODERATION' });
+
+      const out = await service.publish(42, 5);
+
+      expect(out.status).toBe('PENDING_MODERATION');
+      expect(fakeQuota.consume).toHaveBeenCalledWith(42); // still reserves the slot
+      await Promise.resolve();
+      expect(mockedSync).not.toHaveBeenCalled();
+      expect(fakeAlertsHook.onJobIndexed).not.toHaveBeenCalled();
+      expect(fakeCachePurge.purgeJob).not.toHaveBeenCalled();
+      expect(fakeEmail.enqueueJobPostedConfirmation).not.toHaveBeenCalled();
+    });
+  });
+
   describe('delete', () => {
     const JOB_DELETE_KILLSWITCH = 'killswitch.recruiter_job_delete';
 
