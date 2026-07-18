@@ -33,6 +33,7 @@ function readSort(sp: Record<string, string | string[] | undefined>): SortKey {
 function countLabel(total: number, filter: ApplicantFilter | null): string {
   if (filter === 'new') return `${total} new`;
   if (filter === 'shortlisted') return `${total} shortlisted`;
+  if (filter === 'rejected') return `${total} rejected`;
   if (filter === 'matched') return `${total} ${total === 1 ? 'match' : 'matches'}`;
   return `${total} ${total === 1 ? 'applicant' : 'applicants'}`;
 }
@@ -41,6 +42,7 @@ function countLabel(total: number, filter: ApplicantFilter | null): string {
 function emptyTitleFor(filter: ApplicantFilter | null): string | undefined {
   if (filter === 'new') return 'No new applications';
   if (filter === 'shortlisted') return 'No shortlisted applicants';
+  if (filter === 'rejected') return 'No rejected applicants';
   if (filter === 'matched') return 'No matching candidates';
   return undefined;
 }
@@ -70,6 +72,7 @@ export default async function ApplicantsPage({ params, searchParams }: PageProps
   const where: Prisma.ApplicationWhereInput = { jobId };
   if (filter === 'new') where.status = 'APPLIED';
   else if (filter === 'shortlisted') where.status = 'SHORTLISTED';
+  else if (filter === 'rejected') where.status = 'REJECTED';
   else if (filter === 'matched') {
     if (job.skillIds.length > 0) {
       where.user = { candidate: { skillIds: { hasSome: job.skillIds } } };
