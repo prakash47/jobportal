@@ -118,10 +118,13 @@ export function formatExperienceYears(min: number | null, max: number | null): s
 /**
  * Whole days from now until `expiresAt` (negative if already past, null when no
  * expiry is set). Epoch math only — timezone-agnostic and safe in a server
- * component. Rounds toward the calendar day so "expires later today" reads as 0.
+ * component. Floors toward the day, matching the codebase's `postedAgo`
+ * convention: an expiry later *today* (< 24h future) reads as 0 ("Expires
+ * today"), and one that passed within the last 24h reads as -1 (already
+ * expired) — so the count never overstates the time remaining.
  */
 export function daysUntilExpiry(expiresAt: Date | string | null): number | null {
   if (!expiresAt) return null;
   const ms = new Date(expiresAt).getTime() - Date.now();
-  return Math.ceil(ms / 86_400_000);
+  return Math.floor(ms / 86_400_000);
 }

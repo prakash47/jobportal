@@ -121,8 +121,9 @@ export function JobDetailHeader({
         </Button>
         <Button asChild variant="ghost">
           <a href={publicUrl} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="size-4" />
+            <ExternalLink className="size-4" aria-hidden="true" />
             {wasPublished ? 'View public page' : 'Preview'}
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </Button>
       </div>

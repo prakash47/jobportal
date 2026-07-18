@@ -44,16 +44,28 @@ export function JobValidityCard({
   billingEnabled,
 }: JobValidityCardProps) {
   const days = daysUntilExpiry(expiresAt);
-  const isExpired = status === 'EXPIRED' || (days !== null && days < 0);
+  const isDraft = status === 'DRAFT' || status === 'PENDING_MODERATION';
+  const isClosed = status === 'CLOSED';
+  // A live posting whose expiry has already passed (before the nightly sweep
+  // flips its status to EXPIRED) is treated the same as EXPIRED here.
+  const isExpired = status === 'EXPIRED' || (status === 'ACTIVE' && days !== null && days < 0);
   // "Nearing expiry" = a live posting within a week of its expiry date.
   const isNearing = status === 'ACTIVE' && days !== null && days >= 0 && days <= 7;
+  // Extend/Upgrade only make sense for a live posting that's expiring or one
+  // that has already expired — never for a deliberately CLOSED job or an
+  // unpublished DRAFT/PENDING posting (the card would otherwise offer to
+  // "extend" a job the recruiter closed, contradicting its Closed badge).
   const showCta = isExpired || isNearing;
 
   let message: string;
-  if (expiresAt === null) {
-    message = 'No expiry date set — this posting stays live until you close it.';
+  if (isDraft) {
+    message = "This posting isn't published yet, so it has no active validity period.";
+  } else if (isClosed) {
+    message = 'This posting is closed and no longer visible to candidates.';
   } else if (isExpired) {
     message = 'This posting has expired and is no longer visible to candidates.';
+  } else if (expiresAt === null) {
+    message = 'No expiry date set — this posting stays live until you close it.';
   } else if (days === 0) {
     message = 'Expires today.';
   } else if (days !== null) {
@@ -83,7 +95,13 @@ export function JobValidityCard({
       {message && (
         <p
           className={`mt-3 flex items-start gap-2 text-sm ${
-            isExpired ? 'text-[var(--color-danger)]' : 'text-[var(--color-fg)]'
+            // Raw --color-danger as body text is ~4.4:1 on the elevated surface
+            // (sub-AA). Mix in 30% of --color-fg so it darkens on light and
+            // lightens on dark — theme-aware AA, no new token (the JobStatusBadge
+            // darkening precedent). The decorative icon keeps the raw fill (3:1 OK).
+            isExpired
+              ? 'text-[color-mix(in_oklch,var(--color-danger),var(--color-fg)_30%)]'
+              : 'text-[var(--color-fg)]'
           }`}
         >
           {showCta && (

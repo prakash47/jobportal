@@ -50,7 +50,10 @@ function emptyTitleFor(filter: ApplicantFilter | null): string | undefined {
 export default async function ApplicantsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const jobId = Number(id);
-  if (!Number.isFinite(jobId)) notFound();
+  // Integer within Postgres int4 — a float ('1.5') or over-range id would throw
+  // inside Prisma (500) instead of the 404 an unknown id deserves. Aligned with
+  // the sibling detail/edit pages (this list is now reached from the detail page).
+  if (!Number.isInteger(jobId) || jobId < 1 || jobId > 2147483647) notFound();
 
   const session = (await readUserFromCookie())!;
   const sp = await searchParams;

@@ -150,7 +150,9 @@ export default async function JobDetailPage({ params }: PageProps) {
           />
         </div>
 
-        <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+        {/* top-20 (5rem) clears the layout's sticky h-14 (3.5rem) page header
+            plus a gap, so the sidebar doesn't tuck under it while scrolling. */}
+        <aside className="space-y-6 lg:sticky lg:top-20 lg:self-start">
           <SalaryCompensationCard
             salaryMinPaise={job.salaryMinPaise}
             salaryMaxPaise={job.salaryMaxPaise}
