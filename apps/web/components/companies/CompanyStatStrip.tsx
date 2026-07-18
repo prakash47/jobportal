@@ -45,10 +45,16 @@ export function CompanyStatStrip({ activeJobs, averageRating, reviewCount }: Com
       {tiles.map((t) => (
         <div key={t.label} className="rounded-lg bg-[var(--color-bg-muted)] px-4 py-3">
           <dt className="text-xs text-[var(--color-fg-muted)]">{t.label}</dt>
+          {/* sub text nested inside <dd> — a <div> grouping child of <dl> may
+              only contain <dt>/<dd>, so it can't be a <p> sibling. */}
           <dd className="mt-1 text-2xl font-semibold tabular-nums text-[var(--color-fg)]">
             {t.value}
+            {t.sub && (
+              <span className="mt-0.5 block text-xs font-normal text-[var(--color-fg-muted)]">
+                {t.sub}
+              </span>
+            )}
           </dd>
-          {t.sub && <p className="mt-0.5 text-xs text-[var(--color-fg-muted)]">{t.sub}</p>}
         </div>
       ))}
     </dl>
