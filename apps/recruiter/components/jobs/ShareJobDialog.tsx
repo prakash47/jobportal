@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@jobportal/ui';
-import { Check, Copy, Linkedin, MessageCircle, Twitter } from '@jobportal/ui/icons';
+import { Check, Copy, Linkedin, Mail, MessageCircle, Twitter } from '@jobportal/ui/icons';
 
 const ROW_CLASS =
   'flex w-full items-center gap-3 rounded-md border border-[var(--color-border)] px-3 py-2.5 text-sm font-medium text-[var(--color-fg)] transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]';
@@ -45,24 +45,36 @@ export function ShareJobDialog({
   const encodedUrl = encodeURIComponent(url);
   const shareText = `We're hiring: ${title}`;
 
-  const targets: { key: string; label: string; href: string; icon: ReactNode }[] = [
+  // `newTab` false → rendered without target=_blank/rel: a mailto: opens the
+  // user's mail client, so a forced blank tab would just flash and close.
+  const targets: { key: string; label: string; href: string; icon: ReactNode; newTab?: boolean }[] = [
     {
       key: 'linkedin',
       label: 'Share on LinkedIn',
       href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
       icon: <Linkedin className="size-4 shrink-0 text-[var(--color-fg-muted)]" aria-hidden />,
+      newTab: true,
     },
     {
       key: 'x',
       label: 'Share on X',
       href: `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodeURIComponent(shareText)}`,
       icon: <Twitter className="size-4 shrink-0 text-[var(--color-fg-muted)]" aria-hidden />,
+      newTab: true,
     },
     {
       key: 'whatsapp',
       label: 'Share on WhatsApp',
       href: `https://wa.me/?text=${encodeURIComponent(`${shareText} — ${url}`)}`,
       icon: <MessageCircle className="size-4 shrink-0 text-[var(--color-fg-muted)]" aria-hidden />,
+      newTab: true,
+    },
+    {
+      key: 'email',
+      label: 'Share via Email',
+      href: `mailto:?subject=${encodeURIComponent(shareText)}&body=${encodeURIComponent(`${shareText}\n\n${url}`)}`,
+      icon: <Mail className="size-4 shrink-0 text-[var(--color-fg-muted)]" aria-hidden />,
+      newTab: false,
     },
   ];
 
@@ -93,8 +105,7 @@ export function ShareJobDialog({
             <a
               key={t.key}
               href={t.href}
-              target="_blank"
-              rel="noopener noreferrer"
+              {...(t.newTab ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
               className={ROW_CLASS}
             >
               {t.icon}
