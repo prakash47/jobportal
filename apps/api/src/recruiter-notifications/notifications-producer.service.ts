@@ -112,4 +112,27 @@ export class NotificationsProducerService {
       },
     });
   }
+
+  // A job owner added this recruiter as a collaborator (Job Detail → Collaborate).
+  // Notifies just the added teammate; linkUrl deep-links to the job detail page,
+  // which the collaborator can now open (owner-or-collaborator guard). Called
+  // fire-and-log from the collaborators service — wrap in .catch(log).
+  async notifyJobCollaboration(input: {
+    recruiterUserId: number;
+    jobId: number;
+    jobTitle: string;
+    invitedByName: string;
+  }): Promise<void> {
+    if (await isFlagEnabled(NOTIFICATIONS_KILLSWITCH_FLAG)) return;
+
+    await prisma.notification.create({
+      data: {
+        userId: input.recruiterUserId,
+        type: 'JOB_COLLABORATION',
+        title: 'Added as a collaborator',
+        body: `${input.invitedByName} added you as a collaborator on ${input.jobTitle}`,
+        linkUrl: `/jobs/${input.jobId}`,
+      },
+    });
+  }
 }

@@ -61,13 +61,22 @@ export default async function ApplicantsPage({ params, searchParams }: PageProps
   const sort = readSort(sp);
   const filter = parseApplicantFilter(sp['filter']);
 
-  // Owner-scoped lookup. Cross-recruiter access produces 404 (no leak),
-  // matching the API ownership pattern. `skillIds` powers the "matched" filter.
+  // Owner-OR-collaborator lookup (SRS §4.9 Collaborate → "respond to this job").
+  // Cross-recruiter access produces 404 (no leak), matching the API pattern.
+  // `skillIds` powers the "matched" filter; the filtered `collaborators` sub-select
+  // is non-empty only when the viewer is a collaborator on this job.
   const job = await prisma.job.findUnique({
     where: { id: jobId },
-    select: { id: true, title: true, postedById: true, status: true, skillIds: true },
+    select: {
+      id: true,
+      title: true,
+      postedById: true,
+      status: true,
+      skillIds: true,
+      collaborators: { where: { userId: session.sub }, select: { userId: true }, take: 1 },
+    },
   });
-  if (!job || job.postedById !== session.sub) notFound();
+  if (!job || (job.postedById !== session.sub && job.collaborators.length === 0)) notFound();
 
   // Base scope + the active filter. `new`/`shortlisted` map to a status; the
   // `matched` filter mirrors the Jobs-list "Matches" column — applicants whose

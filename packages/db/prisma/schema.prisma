@@ -283,6 +283,9 @@ enum NotificationType {
   // Help & Support: support staff replied to / changed the status of one of the
   // recruiter's tickets (linkUrl points at /support/tickets/:id).
   SUPPORT_TICKET_UPDATED
+  // Job Detail → Collaborate: a job owner added this recruiter as a collaborator
+  // (linkUrl points at /jobs/:id).
+  JOB_COLLABORATION
 }
 
 // SRS §4.9 — recruiter Team / User-management in-company role (RBAC). This is
@@ -356,6 +359,9 @@ model User {
   emailPreference     EmailPreference?
   companyReviews      CompanyReview[]
   postedJobs          Job[]                @relation("PostedJobs")
+  // Jobs this user was added to as a collaborator (SRS §4.9 Job Detail →
+  // Collaborate). Owner link is postedJobs above; this is the allowlist side.
+  collaboratingJobs   JobCollaborator[]    @relation("CollaboratingJobs")
   // Recruiter notifications (the bell feed) + recruiter-scoped channel toggles.
   // Both keyed by User id (a recruiter is a User with role RECRUITER); the
   // candidate-shared EmailPreference above is left untouched.
@@ -824,13 +830,37 @@ model Job {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
-  applications Application[]
-  savedBy      SavedJob[]
+  applications  Application[]
+  savedBy       SavedJob[]
+  collaborators JobCollaborator[]
 
   @@index([status, postedAt])
   @@index([primaryCityId, status])
   @@index([companyId, status])
   @@index([postedById, status])
+}
+
+// SRS §4.9 — Job Detail "Collaborate": teammates a job's owner grants access to
+// so they can help manage (edit / close-reopen) or respond (act on applicants).
+// A job's single OWNER is Job.postedById; collaborators are an additive allowlist
+// on top, keyed by User id (matching postedById + JWT sub) so the owner-or-
+// collaborator access check is a plain OR across the two. Destructive/make-live
+// actions (delete, publish) + managing collaborators themselves stay owner-only.
+// addedById is the acting owner's User id (loose actor, SetNull on their removal —
+// the RecruiterInvite.invitedByUserId pattern). Rows cascade-delete with the job
+// or the collaborating user.
+model JobCollaborator {
+  id        Int      @id @default(autoincrement())
+  jobId     Int
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation("CollaboratingJobs", fields: [userId], references: [id], onDelete: Cascade)
+  addedById Int?
+  createdAt DateTime @default(now())
+
+  @@unique([jobId, userId])
+  @@index([userId])
+  @@index([jobId])
 }
 
 model Application {

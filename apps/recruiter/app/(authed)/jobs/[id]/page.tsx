@@ -61,17 +61,28 @@ export default async function JobDetailPage({ params }: PageProps) {
       locality: { select: { name: true } },
       functionalArea: { select: { name: true } },
       // Posted-by identity (SRS §4.9): name/photo on User, designation on the
-      // linked Recruiter row. postedById === session.sub is guaranteed below,
-      // so postedBy is the current recruiter (non-null on a rendered page).
+      // linked Recruiter row. postedById is nullable, but the guard below
+      // guarantees the viewer is the owner or a collaborator when rendered.
       postedBy: {
         select: { name: true, image: true, recruiter: { select: { designation: true } } },
       },
+      // Collaborators (SRS §4.9 Collaborate) — surfaced on the Posted-By card and
+      // used to broaden the owner-only guard to owner-OR-collaborator.
+      collaborators: {
+        orderBy: { createdAt: 'asc' },
+        select: { userId: true, user: { select: { name: true, image: true } } },
+      },
     },
   });
-  if (!job || job.postedById !== session.sub) notFound();
+  if (!job) notFound();
+  // Owner-or-collaborator access (SRS §4.9). Mirrors the API's jobManageableWhere
+  // (reads/writes split — the page guards in the RSC, mutations at the API).
+  const isOwner = job.postedById === session.sub;
+  const isCollaborator = job.collaborators.some((c) => c.userId === session.sub);
+  if (!isOwner && !isCollaborator) notFound();
 
   // Everything below only depends on the loaded job — run in parallel.
-  const [skillRows, statusCounts, matched, billingEnabled] = await Promise.all([
+  const [skillRows, statusCounts, matched, billingEnabled, collaborateKilled] = await Promise.all([
     job.skillIds.length > 0
       ? prisma.skill.findMany({
           where: { id: { in: job.skillIds } },
@@ -92,6 +103,7 @@ export default async function JobDetailPage({ params }: PageProps) {
         })
       : Promise.resolve(0),
     isFlagEnabled(FLAG.SUBSCRIPTION_SYSTEM),
+    isFlagEnabled(FLAG.KILL_RECRUITER_JOB_COLLABORATE),
   ]);
 
   // Resolve skill names in the recruiter's declared order.
@@ -179,13 +191,26 @@ export default async function JobDetailPage({ params }: PageProps) {
             expiresAt={job.expiresAt}
             billingEnabled={billingEnabled}
           />
-          {job.postedBy && (
-            <PostedByCard
-              name={job.postedBy.name}
-              image={job.postedBy.image}
-              designation={job.postedBy.recruiter?.designation ?? null}
-            />
-          )}
+          <PostedByCard
+            jobId={job.id}
+            jobTitle={job.title}
+            poster={
+              job.postedBy
+                ? {
+                    name: job.postedBy.name,
+                    image: job.postedBy.image,
+                    designation: job.postedBy.recruiter?.designation ?? null,
+                  }
+                : null
+            }
+            collaborators={job.collaborators.map((c) => ({
+              userId: c.userId,
+              name: c.user.name,
+              image: c.user.image,
+            }))}
+            isOwner={isOwner}
+            collaborateEnabled={!collaborateKilled}
+          />
         </aside>
       </div>
     </div>

@@ -7,6 +7,7 @@ import {
 import { prisma, Prisma, type Application, type ApplicationStatus } from '@jobportal/db';
 import { buildHistoryEntry, canTransition } from '../applications/state-machine';
 import { EmailService } from '../email/email.service';
+import { jobManageableWhere } from '../recruiter-jobs/job-access';
 import { StorageService } from '../storage/storage.service';
 import type { ListApplicantsQuery } from './dto';
 
@@ -21,14 +22,15 @@ export class RecruiterApplicantsService {
     private readonly storage: StorageService,
   ) {}
 
-  // SRS §4.9.6 — applicants for a job the recruiter owns. Cross-job 404 (no
-  // existence leak), same pattern as candidate-side ownership checks.
+  // SRS §4.9.6 — applicants for a job the recruiter owns OR collaborates on
+  // (Collaborate → "respond to this job"). Cross-job 404 (no existence leak),
+  // same pattern as candidate-side ownership checks.
   async list(userId: number, jobId: number, query: ListApplicantsQuery) {
-    const job = await prisma.job.findUnique({
-      where: { id: jobId },
-      select: { id: true, postedById: true, title: true },
+    const job = await prisma.job.findFirst({
+      where: { id: jobId, ...jobManageableWhere(userId) },
+      select: { id: true, title: true },
     });
-    if (!job || job.postedById !== userId) {
+    if (!job) {
       throw new NotFoundException('Job not found');
     }
 
@@ -72,10 +74,12 @@ export class RecruiterApplicantsService {
     return { job: { id: job.id, title: job.title }, hits, total, page, pageSize: PAGE_SIZE };
   }
 
-  // Owner check: the recruiter owns the JOB the application belongs to.
-  // Returns the loaded application + side-data needed by the action paths
-  // (incl. the candidate's userId so getResumeUrl doesn't re-query).
-  private async ownedApplicationOrThrow(userId: number, applicationId: number) {
+  // Access check: the recruiter owns OR collaborates on the JOB the application
+  // belongs to (Collaborate → "respond to this job"). Returns the loaded
+  // application + side-data needed by the action paths (incl. the candidate's
+  // userId so getResumeUrl doesn't re-query). The `collaborators` sub-select is
+  // filtered to this user, so a non-empty array means an active collaborator row.
+  private async manageableApplicationOrThrow(userId: number, applicationId: number) {
     const app = await prisma.application.findUnique({
       where: { id: applicationId },
       select: {
@@ -85,12 +89,18 @@ export class RecruiterApplicantsService {
         statusHistory: true,
         recruiterNotes: true,
         job: {
-          select: { id: true, postedById: true, title: true, company: { select: { name: true } } },
+          select: {
+            id: true,
+            postedById: true,
+            title: true,
+            company: { select: { name: true } },
+            collaborators: { where: { userId }, select: { userId: true }, take: 1 },
+          },
         },
         user: { select: { email: true } },
       },
     });
-    if (!app || app.job.postedById !== userId) {
+    if (!app || (app.job.postedById !== userId && app.job.collaborators.length === 0)) {
       throw new NotFoundException('Application not found');
     }
     return app;
@@ -104,7 +114,7 @@ export class RecruiterApplicantsService {
     applicationId: number,
     toStatus: ApplicationStatus,
   ): Promise<Application> {
-    const app = await this.ownedApplicationOrThrow(userId, applicationId);
+    const app = await this.manageableApplicationOrThrow(userId, applicationId);
 
     if (!canTransition(app.status, toStatus, 'RECRUITER')) {
       throw new ForbiddenException(
@@ -152,7 +162,7 @@ export class RecruiterApplicantsService {
     applicationId: number,
     notes: string,
   ): Promise<{ recruiterNotes: string }> {
-    await this.ownedApplicationOrThrow(userId, applicationId);
+    await this.manageableApplicationOrThrow(userId, applicationId);
     const updated = await prisma.application.update({
       where: { id: applicationId },
       data: { recruiterNotes: notes.length === 0 ? null : notes },
@@ -167,7 +177,7 @@ export class RecruiterApplicantsService {
     userId: number,
     applicationId: number,
   ): Promise<{ url: string; expiresInSeconds: number; filename: string }> {
-    const app = await this.ownedApplicationOrThrow(userId, applicationId);
+    const app = await this.manageableApplicationOrThrow(userId, applicationId);
     const candidate = await prisma.candidate.findUnique({
       where: { userId: app.userId },
       select: { activeResume: true },
