@@ -15,6 +15,7 @@ import { CachePurgeService } from '../cache-purge/cache-purge.service';
 import { EmailService } from '../email/email.service';
 import { RecruiterPostQuotaService } from '../recruiter-post-quota/quota.service';
 import { missingPublishFields } from './dto';
+import { jobManageableWhere } from './job-access';
 import type {
   CreateRecruiterJobInput,
   ListRecruiterJobsQuery,
@@ -157,7 +158,23 @@ export class RecruiterJobsService {
     return { count };
   }
 
+  // Owner OR collaborator (SRS §4.9 Collaborate). Backs the read/manage/respond
+  // paths: the GET :id endpoint (edit prefill / duplicate), update, close, and
+  // reopen. Destructive/make-live actions call getOwnedJob instead.
   async getOne(userId: number, id: number): Promise<Job> {
+    const row = await prisma.job.findFirst({
+      where: { id, ...jobManageableWhere(userId) },
+    });
+    if (!row) {
+      throw new NotFoundException('Job not found');
+    }
+    return row;
+  }
+
+  // Owner-strict — for actions that must stay with the single job owner
+  // (delete, publish/make-live). A collaborator hitting these gets the same 404
+  // an unknown id gets (no existence leak, matching getOne's shape).
+  private async getOwnedJob(userId: number, id: number): Promise<Job> {
     const row = await prisma.job.findUnique({ where: { id } });
     if (!row || row.postedById !== userId) {
       throw new NotFoundException('Job not found');
@@ -382,7 +399,7 @@ export class RecruiterJobsService {
     if (await isFlagEnabled(JOB_DELETE_KILLSWITCH_FLAG)) {
       throw new ServiceUnavailableException('Job deletion is temporarily unavailable');
     }
-    const existing = await this.getOne(userId, id); // ownership 404
+    const existing = await this.getOwnedJob(userId, id); // owner-only 404
     // Single-statement delete guarded on `applications: none` — atomic, so an
     // application arriving between the ownership check and the delete can't be
     // cascade-destroyed (a separate count+delete would race).
@@ -450,7 +467,7 @@ export class RecruiterJobsService {
     // be created by an already-verified recruiter today, but enforcing it here
     // keeps the make-live boundary non-bypassable if that ever changes.
     await this.resolveRecruiterContext(userId);
-    const existing = await this.getOne(userId, id); // ownership 404
+    const existing = await this.getOwnedJob(userId, id); // owner-only 404
     if (existing.status !== 'DRAFT') {
       throw new BadRequestException('Only draft jobs can be published');
     }
@@ -504,10 +521,10 @@ export class RecruiterJobsService {
       // Lost the race (already published, or left DRAFT between the guard and
       // here) — this call published nothing, so return its slot and the row.
       await this.quota.refund(userId);
-      return this.getOne(userId, id);
+      return this.getOwnedJob(userId, id);
     }
 
-    const updated = await this.getOne(userId, id); // re-read the freshly-live row
+    const updated = await this.getOwnedJob(userId, id); // re-read the freshly-live row
 
     // Only an ACTIVE (moderation-off) publish is indexed + emailed; a
     // PENDING_MODERATION job waits for admin approval (as in create()).

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@jobportal/db', () => ({
   prisma: {
-    job: { findUnique: vi.fn() },
+    job: { findUnique: vi.fn(), findFirst: vi.fn() },
     application: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn() },
     candidate: { findUnique: vi.fn() },
   },
@@ -13,7 +13,7 @@ import { prisma } from '@jobportal/db';
 import { RecruiterApplicantsService } from './recruiter-applicants.service';
 
 const mocked = prisma as unknown as {
-  job: { findUnique: ReturnType<typeof vi.fn> };
+  job: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
   application: {
     findUnique: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
@@ -42,6 +42,8 @@ const ownedApp = {
     postedById: 42,
     title: 'SE',
     company: { name: 'Acme' },
+    // Filtered `collaborators` sub-select (empty = viewer is not a collaborator).
+    collaborators: [],
   },
   user: { email: 'cand@example.com' },
 };
@@ -58,13 +60,14 @@ describe('RecruiterApplicantsService.list', () => {
     );
   });
 
-  it('throws NotFoundException for a job posted by another recruiter (no leak)', async () => {
-    mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 99 });
+  it('throws NotFoundException when access does not match (no leak)', async () => {
+    // findFirst applies the owner-OR-collaborator filter — no match ⇒ null ⇒ 404.
+    mocked.job.findFirst.mockResolvedValue(null);
     await expect(service.list(42, 5, {})).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('returns hits and total for the owning recruiter', async () => {
-    mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 42, title: 'SE' });
+  it('returns hits and total for an owner or collaborator', async () => {
+    mocked.job.findFirst.mockResolvedValue({ id: 5, title: 'SE' });
     mocked.application.findMany.mockResolvedValue([]);
     mocked.application.count.mockResolvedValue(0);
     const out = await service.list(42, 5, {});
@@ -73,7 +76,7 @@ describe('RecruiterApplicantsService.list', () => {
   });
 
   it('honours sort=status', async () => {
-    mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 42, title: 'SE' });
+    mocked.job.findFirst.mockResolvedValue({ id: 5, title: 'SE' });
     mocked.application.findMany.mockResolvedValue([]);
     mocked.application.count.mockResolvedValue(0);
     await service.list(42, 5, { sort: 'status' });
@@ -94,12 +97,24 @@ describe('RecruiterApplicantsService.transition', () => {
     );
   });
 
-  it('cross-job 404 (no leak) when the recruiter does not own the job', async () => {
+  it('cross-job 404 (no leak) when the recruiter neither owns nor collaborates', async () => {
     mocked.application.findUnique.mockResolvedValue({
       ...ownedApp,
-      job: { ...ownedApp.job, postedById: 999 },
+      job: { ...ownedApp.job, postedById: 999, collaborators: [] },
     });
     await expect(service.transition(42, 99, 'IN_REVIEW')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('allows a collaborator (not the owner) to transition', async () => {
+    // postedById is someone else, but the viewer (42) has a collaborator row.
+    mocked.application.findUnique.mockResolvedValue({
+      ...ownedApp,
+      job: { ...ownedApp.job, postedById: 999, collaborators: [{ userId: 42 }] },
+    });
+    mocked.application.update.mockResolvedValue({ id: 99, status: 'IN_REVIEW', updatedAt: new Date() });
+    await expect(service.transition(42, 99, 'IN_REVIEW')).resolves.toMatchObject({
+      status: 'IN_REVIEW',
+    });
   });
 
   it('rejects an invalid forward transition (state machine guard)', async () => {

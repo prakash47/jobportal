@@ -111,6 +111,12 @@ const flags: FlagSeed[] = [
   // stops even that: when ON the DELETE endpoint rejects with 503 (L3) and the
   // menu hides Delete (L2). Seeded OFF so the action is LIVE by default.
   { key: 'killswitch.recruiter_job_delete', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter job deletion (kill)' },
+  // Recruiter Job Detail "Collaborate" (owner adds teammates to a job so they can
+  // help manage/respond). Emergency stop for granting new access: when ON the
+  // POST/DELETE /recruiter/jobs/:id/collaborators endpoints reject with 503 (L3)
+  // and the Job Detail page hides the Collaborate control (L2); existing
+  // collaborators keep their access. Seeded OFF so the feature is LIVE by default.
+  { key: 'killswitch.recruiter_job_collaborate', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter job collaboration (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {

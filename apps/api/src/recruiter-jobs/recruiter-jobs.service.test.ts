@@ -14,6 +14,7 @@ vi.mock('@jobportal/db', () => ({
     user: { findUnique: vi.fn() },
     job: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
       count: vi.fn(),
       create: vi.fn(),
@@ -43,6 +44,7 @@ const mocked = prisma as unknown as {
   user: { findUnique: ReturnType<typeof vi.fn> };
   job: {
     findUnique: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
     count: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
@@ -281,21 +283,22 @@ describe('RecruiterJobsService', () => {
     });
   });
 
-  describe('getOne ownership', () => {
-    it('throws NotFoundException for a job posted by another user (no leak)', async () => {
-      mocked.job.findUnique.mockResolvedValue({ id: 1, postedById: 99 });
+  describe('getOne access (owner or collaborator)', () => {
+    it('throws NotFoundException when access does not match (no leak)', async () => {
+      // findFirst applies the owner-OR-collaborator filter — no match ⇒ null ⇒ 404.
+      mocked.job.findFirst.mockResolvedValue(null);
       await expect(service.getOne(42, 1)).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('returns the job for the owning recruiter', async () => {
-      mocked.job.findUnique.mockResolvedValue({ id: 1, postedById: 42 });
+    it('returns the job for an owner or collaborator', async () => {
+      mocked.job.findFirst.mockResolvedValue({ id: 1, postedById: 42 });
       await expect(service.getOne(42, 1)).resolves.toMatchObject({ id: 1 });
     });
   });
 
   describe('close + reopen', () => {
     it('close on ACTIVE → status=CLOSED + ES remove + cache purge', async () => {
-      mocked.job.findUnique.mockResolvedValue({
+      mocked.job.findFirst.mockResolvedValue({
         id: 5,
         postedById: 42,
         status: 'ACTIVE',
@@ -314,19 +317,19 @@ describe('RecruiterJobsService', () => {
     });
 
     it('close on DRAFT → BadRequestException', async () => {
-      mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 42, status: 'DRAFT' });
+      mocked.job.findFirst.mockResolvedValue({ id: 5, postedById: 42, status: 'DRAFT' });
       await expect(service.close(42, 5)).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('close on already-CLOSED is idempotent', async () => {
-      mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 42, status: 'CLOSED' });
+      mocked.job.findFirst.mockResolvedValue({ id: 5, postedById: 42, status: 'CLOSED' });
       const out = await service.close(42, 5);
       expect(out.status).toBe('CLOSED');
       expect(mocked.job.update).not.toHaveBeenCalled();
     });
 
     it('reopen on CLOSED → status=ACTIVE + ES sync + alerts hook', async () => {
-      mocked.job.findUnique.mockResolvedValue({
+      mocked.job.findFirst.mockResolvedValue({
         id: 5,
         postedById: 42,
         status: 'CLOSED',
@@ -345,7 +348,7 @@ describe('RecruiterJobsService', () => {
     });
 
     it('reopen on DRAFT → BadRequestException', async () => {
-      mocked.job.findUnique.mockResolvedValue({ id: 5, postedById: 42, status: 'DRAFT' });
+      mocked.job.findFirst.mockResolvedValue({ id: 5, postedById: 42, status: 'DRAFT' });
       await expect(service.reopen(42, 5)).rejects.toBeInstanceOf(BadRequestException);
     });
   });

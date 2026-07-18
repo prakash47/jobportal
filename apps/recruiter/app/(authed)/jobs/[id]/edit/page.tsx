@@ -26,8 +26,16 @@ export default async function EditJobPage({ params }: PageProps) {
 
   const session = (await readUserFromCookie())!;
 
-  const job = await prisma.job.findUnique({ where: { id: jobId } });
-  if (!job || job.postedById !== session.sub) notFound();
+  // Owner-OR-collaborator (SRS §4.9 Collaborate → "manage this job"). findFirst
+  // with the access OR so a collaborator can open the edit wizard; mutations are
+  // re-checked at the API (PATCH /recruiter/jobs/:id → getOne, also broadened).
+  const job = await prisma.job.findFirst({
+    where: {
+      id: jobId,
+      OR: [{ postedById: session.sub }, { collaborators: { some: { userId: session.sub } } }],
+    },
+  });
+  if (!job) notFound();
 
   const { skills, cities, localities, industries, functionalAreas } =
     await loadJobFormCatalogues();

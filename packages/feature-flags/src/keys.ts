@@ -103,6 +103,16 @@ export const FLAG = {
   // redeploy. As a `killswitch.*` key it is auto-classified critical (Slack +
   // confirm modal).
   KILL_RECRUITER_JOB_DELETE: 'killswitch.recruiter_job_delete',
+  // Recruiter Job Detail "Collaborate" (adding teammates to a job so they can
+  // help manage/respond to it). Emergency stop for the collaborator feature:
+  // when ON, the collaborator endpoints (POST/DELETE /recruiter/jobs/:id/
+  // collaborators) reject with 503 (L3) and the Job Detail page hides the
+  // Collaborate control (L2). Existing collaborators keep their access (this
+  // gates granting new access, matching the job-delete switch scope). Seeded
+  // enabled:false, so collaboration is LIVE by default; an admin flipping this
+  // ON disables it without a redeploy. As a `killswitch.*` key it is
+  // auto-classified critical (Slack + confirm modal).
+  KILL_RECRUITER_JOB_COLLABORATE: 'killswitch.recruiter_job_collaborate',
 } as const;
 
 export type FlagKey = (typeof FLAG)[keyof typeof FLAG];
