@@ -33,6 +33,7 @@ function readSort(sp: Record<string, string | string[] | undefined>): SortKey {
 function countLabel(total: number, filter: ApplicantFilter | null): string {
   if (filter === 'new') return `${total} new`;
   if (filter === 'shortlisted') return `${total} shortlisted`;
+  if (filter === 'rejected') return `${total} rejected`;
   if (filter === 'matched') return `${total} ${total === 1 ? 'match' : 'matches'}`;
   return `${total} ${total === 1 ? 'applicant' : 'applicants'}`;
 }
@@ -41,6 +42,7 @@ function countLabel(total: number, filter: ApplicantFilter | null): string {
 function emptyTitleFor(filter: ApplicantFilter | null): string | undefined {
   if (filter === 'new') return 'No new applications';
   if (filter === 'shortlisted') return 'No shortlisted applicants';
+  if (filter === 'rejected') return 'No rejected applicants';
   if (filter === 'matched') return 'No matching candidates';
   return undefined;
 }
@@ -48,7 +50,10 @@ function emptyTitleFor(filter: ApplicantFilter | null): string | undefined {
 export default async function ApplicantsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const jobId = Number(id);
-  if (!Number.isFinite(jobId)) notFound();
+  // Integer within Postgres int4 — a float ('1.5') or over-range id would throw
+  // inside Prisma (500) instead of the 404 an unknown id deserves. Aligned with
+  // the sibling detail/edit pages (this list is now reached from the detail page).
+  if (!Number.isInteger(jobId) || jobId < 1 || jobId > 2147483647) notFound();
 
   const session = (await readUserFromCookie())!;
   const sp = await searchParams;
@@ -70,6 +75,7 @@ export default async function ApplicantsPage({ params, searchParams }: PageProps
   const where: Prisma.ApplicationWhereInput = { jobId };
   if (filter === 'new') where.status = 'APPLIED';
   else if (filter === 'shortlisted') where.status = 'SHORTLISTED';
+  else if (filter === 'rejected') where.status = 'REJECTED';
   else if (filter === 'matched') {
     if (job.skillIds.length > 0) {
       where.user = { candidate: { skillIds: { hasSome: job.skillIds } } };
