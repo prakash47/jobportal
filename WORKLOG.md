@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Developer | Branch | Building | Shared surfaces |
+|---|---|---|---|
+| Jayesh | `feature/company-detail-redesign` | **Company Detail page redesign** (`/company/[handle]`, SRS §4.7) — premium enterprise hero + quick-stats strip + responsive 3-column layout (sticky in-page nav + Quick Facts left · About/Highlights/Openings/Reviews main · Hiring rail + Related Companies right). New `CompanyProfileHero`/`CompanyStatStrip`/`CompanyShareButton`/`CompanyProfileNav`/`CompanyQuickFacts`/`CompanyHighlights`/`CompanyHiringRail`/`RelatedCompanies`/`VerifiedBadge` in `components/companies`; wraps page in `SiteShell` (drops `revalidate`); widens the Prisma select (companyType/workingAtSections/kyc). **apps/web only** — no schema/migration/flag/lock; `apps/services`+recruiter+packages untouched (companies barrel append-only). | Web companies components (append-only barrel) |
 
 ---
 
