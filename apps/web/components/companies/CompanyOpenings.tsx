@@ -51,9 +51,13 @@ export async function CompanyOpenings({
     );
 
   return (
-    <section aria-label="Current openings" className="space-y-4">
+    <section
+      id="openings"
+      aria-label="Open positions"
+      className="scroll-mt-24 space-y-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-5 sm:p-6"
+    >
       <div className="flex items-baseline justify-between">
-        <h2 className="text-lg font-semibold text-[var(--color-fg)]">Current openings</h2>
+        <h2 className="text-lg font-semibold text-[var(--color-fg)]">Open positions</h2>
         <span className="text-sm text-[var(--color-fg-muted)]">
           {totalActive === 0
             ? 'No openings'
@@ -82,7 +86,7 @@ export async function CompanyOpenings({
                 >
                   <span className="block truncate">{j.title}</span>
                 </Link>
-                <p className="mt-0.5 text-xs text-[var(--color-fg-subtle)]">
+                <p className="mt-0.5 text-xs text-[var(--color-fg-muted)]">
                   {j.primaryCityName ?? 'Location not set'} · Posted {fmt(j.postedAt)}
                 </p>
               </div>
