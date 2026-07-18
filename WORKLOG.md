@@ -48,7 +48,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Prakash (tech) | **Recruiter Job Detail page** (`feature/recruiter-job-detail`) | New route `apps/recruiter/app/(authed)/jobs/[id]/page.tsx` (owner-scoped RSC) + `components/jobs/detail/*` (Header/Description/CandidateRequirements/Salary/ApplicationStats/Validity). Repoints the own-row title link in `JobsTable.tsx` → `/jobs/[id]`. Appends salary/experience/employment formatters to `job-list-format.ts`. Adds a `rejected` filter to `applicant-filter.ts` + applicants page + `ApplicantsFilterTabs`. **Recruiter-only; no schema/migration/flag/API/shared-surface-lock; `apps/web`+`apps/services` untouched.** Started 2026-07-18. |
 
 ---
 
