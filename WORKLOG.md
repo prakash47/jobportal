@@ -33,12 +33,12 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | rat145 | `feature/recruiter-job-collaborate` | 2026-07-18 | Adding `JobCollaborator` model + `NotificationType.JOB_COLLABORATION` (migration `add_job_collaborators`). |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | rat145 | `feature/recruiter-job-collaborate` | 2026-07-18 | +`KILL_RECRUITER_JOB_COLLABORATE`. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Developer | Branch | Building | Shared surfaces |
+|---|---|---|---|
+| rat145 | `feature/recruiter-job-collaborate` | Job-detail **Collaborate** (PR B): `JobCollaborator` model + `NotificationType.JOB_COLLABORATION` (migration `add_job_collaborators`), `killswitch.recruiter_job_collaborate`, `recruiter-job-collaborators` API (GET/POST/DELETE `/recruiter/jobs/:id/collaborators`), broadened owner→owner-or-collaborator guards (`recruiter-jobs`: getOne/update/close/reopen; `recruiter-applicants`: list/transition/notes/resume; detail/applicants/edit RSC pages), `notifyJobCollaboration`, `CollaborateDialog` on the Posted-By card. Delete/Publish/collab-management stay owner-only. | 🔒 `schema.prisma`, 🔒 `feature-flags/keys.ts` |
 
 ---
 
@@ -58,7 +60,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Feature | Notes |
 |---|---|---|
-| rat145 | `feature/recruiter-job-collaborate` (**PR B**) | Job-detail **Collaborate**: new `JobCollaborator` model + `NotificationType.JOB_COLLABORATION` (migration `add_job_collaborators`), `killswitch.recruiter_job_collaborate`, `recruiter-job-collaborators` API (GET/POST/DELETE `/recruiter/jobs/:id/collaborators`) + broadened owner→owner-or-collaborator guards (recruiter-jobs + recruiter-applicants + 3 RSC pages), `CollaborateDialog`. **Will lock**: `schema.prisma` + `feature-flags/keys.ts`. |
+| | | |
 
 ---
 
