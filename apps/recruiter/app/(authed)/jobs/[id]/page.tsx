@@ -11,6 +11,7 @@ import { CandidateRequirementsCard } from '../../../../components/jobs/detail/Ca
 import { SalaryCompensationCard } from '../../../../components/jobs/detail/SalaryCompensationCard';
 import { ApplicationStatsPanel } from '../../../../components/jobs/detail/ApplicationStatsPanel';
 import { JobValidityCard } from '../../../../components/jobs/detail/JobValidityCard';
+import { PostedByCard } from '../../../../components/jobs/detail/PostedByCard';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +60,12 @@ export default async function JobDetailPage({ params }: PageProps) {
       primaryCity: { select: { name: true } },
       locality: { select: { name: true } },
       functionalArea: { select: { name: true } },
+      // Posted-by identity (SRS §4.9): name/photo on User, designation on the
+      // linked Recruiter row. postedById === session.sub is guaranteed below,
+      // so postedBy is the current recruiter (non-null on a rendered page).
+      postedBy: {
+        select: { name: true, image: true, recruiter: { select: { designation: true } } },
+      },
     },
   });
   if (!job || job.postedById !== session.sub) notFound();
@@ -172,6 +179,13 @@ export default async function JobDetailPage({ params }: PageProps) {
             expiresAt={job.expiresAt}
             billingEnabled={billingEnabled}
           />
+          {job.postedBy && (
+            <PostedByCard
+              name={job.postedBy.name}
+              image={job.postedBy.image}
+              designation={job.postedBy.recruiter?.designation ?? null}
+            />
+          )}
         </aside>
       </div>
     </div>

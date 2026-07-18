@@ -1,10 +1,9 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { Button } from '@jobportal/ui';
-import { Briefcase, Clock, ExternalLink, MapPin, Pencil, Users } from '@jobportal/ui/icons';
+import { Briefcase, Clock, MapPin, Users } from '@jobportal/ui/icons';
 import { CompanyLogo } from '../../CompanyLogo';
 import { JobStatusBadge, type JobStatus } from '../JobStatusBadge';
 import { EMPLOYMENT_LABELS, formatListDate, type EmploymentType } from '../job-list-format';
+import { JobQuickActions } from './JobQuickActions';
 
 export interface JobDetailHeaderProps {
   jobId: number;
@@ -51,10 +50,6 @@ export function JobDetailHeader({
   postedAt,
   publicUrl,
 }: JobDetailHeaderProps) {
-  // Public seeker page renders unpublished jobs behind a noindex preview banner,
-  // so a draft/pending posting gets a "Preview" affordance rather than none.
-  const wasPublished = status === 'ACTIVE' || status === 'EXPIRED' || status === 'CLOSED';
-
   return (
     <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-5 sm:p-6">
       <div className="flex items-start gap-4">
@@ -106,26 +101,8 @@ export function JobDetailHeader({
         </div>
       </div>
 
-      <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--color-border)] pt-4">
-        <Button asChild variant="primary">
-          <Link href={`/jobs/${jobId}/applicants`}>
-            <Users className="size-4" />
-            View applicants
-          </Link>
-        </Button>
-        <Button asChild variant="secondary">
-          <Link href={`/jobs/${jobId}/edit`}>
-            <Pencil className="size-4" />
-            Edit
-          </Link>
-        </Button>
-        <Button asChild variant="ghost">
-          <a href={publicUrl} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="size-4" aria-hidden="true" />
-            {wasPublished ? 'View public page' : 'Preview'}
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>
-        </Button>
+      <div className="mt-5 border-t border-[var(--color-border)] pt-4">
+        <JobQuickActions id={jobId} title={title} status={status} publicUrl={publicUrl} />
       </div>
     </div>
   );
