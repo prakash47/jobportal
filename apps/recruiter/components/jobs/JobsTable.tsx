@@ -108,9 +108,11 @@ function RowMenu({
 }
 
 /**
- * Job title: a link to the applicants page ONLY for the job's own poster. The
+ * Job title: a link to the Job Detail page ONLY for the job's own poster. The
  * list is company-wide, but that page is owner-private (it 404s when
  * `postedById !== session.sub`), so a teammate's row renders the title unlinked.
+ * The detail page is the row's "home" — it links onward to applicants/edit and
+ * shows the full posting + live stats (SRS §4.9).
  */
 function JobLink({
   id,
@@ -129,7 +131,7 @@ function JobLink({
 }) {
   if (isOwn) {
     return (
-      <Link href={`/jobs/${id}/applicants`} title={title} className={ownClass}>
+      <Link href={`/jobs/${id}`} title={title} className={ownClass}>
         {children}
       </Link>
     );
