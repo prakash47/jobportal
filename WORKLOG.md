@@ -48,7 +48,10 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Developer | Branch | Building | Shared surfaces |
+|---|---|---|---|
+| rat145 | `feature/recruiter-job-detail-actions` | Recruiter **Job Detail** enhancements **PR A** (no schema/locks): new `JobQuickActions` bar (View applicants · Edit · Duplicate · Share · Close/Reopen · View public) in `JobDetailHeader`; **Email** channel added to `ShareJobDialog`; new `PostedByCard` (poster name/photo/designation) — detail RSC `select` widened with `postedBy`. `apps/recruiter` only. | none |
+| rat145 (next) | `feature/recruiter-job-collaborate` (**planned, PR B**) | Job-detail **Collaborate**: new `JobCollaborator` model + `NotificationType.JOB_COLLABORATION` (migration `add_job_collaborators`), `killswitch.recruiter_job_collaborate`, `recruiter-job-collaborators` API (GET/POST/DELETE `/recruiter/jobs/:id/collaborators`) + broadened owner→owner-or-collaborator guards, `CollaborateDialog`. | **will lock**: `schema.prisma` + `feature-flags/keys.ts` |
 
 ---
 
