@@ -6,10 +6,10 @@ import { Button } from '@jobportal/ui';
 import { Search, MapPin, Briefcase, ChevronDown } from '@jobportal/ui/icons';
 import { EVENTS, track } from '../../lib/analytics/posthog';
 
-// Hero search — a single tall glass bar with three fields (what / where / exp),
-// each opening a light-theme custom dropdown of suggestions on focus. Focusing a
-// field shows NO per-field border (clean bar, per design); the dropdown is the
-// affordance. Submit maps to the SRP: ?q= / ?city= / ?expMin=.
+// Hero search — a single tall flat elevated bar with three fields (what / where
+// / exp), each opening a light-theme custom dropdown of suggestions on focus.
+// Focusing a field shows NO per-field border (clean bar, per design); the
+// dropdown is the affordance. Submit maps to the SRP: ?q= / ?city= / ?expMin=.
 
 export interface HeroCity {
   slug: string;
@@ -153,7 +153,7 @@ export function HeroSearchBar({
       ref={formRef}
       onSubmit={onSubmit}
       role="search"
-      className="glass-lg mx-auto flex w-full max-w-4xl flex-col gap-2 rounded-2xl p-2 transition-[border-color] duration-[var(--duration-base)] ease-[var(--ease-out)] focus-within:border-[var(--color-primary-400)] sm:flex-row sm:items-center sm:gap-0 sm:rounded-full sm:p-2"
+      className="mx-auto flex w-full max-w-4xl flex-col gap-2 rounded-2xl border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] p-2 shadow-[var(--shadow-card)] transition-[border-color] duration-[var(--duration-base)] ease-[var(--ease-out)] focus-within:border-[var(--color-primary-400)] sm:flex-row sm:items-center sm:gap-0 sm:rounded-full sm:p-2"
     >
       {/* What (given more width than Where so the longer placeholder fits) */}
       <div className="relative flex-[1.4]">

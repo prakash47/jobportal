@@ -3,9 +3,9 @@ import { SectionHeading } from './SectionHeading';
 import { Reveal } from './Reveal';
 
 // Bento value grid — merges the old HowItWorks + WhyJobPortal into one
-// asymmetric block. ONE large gradient-bordered anchor tile (the headline
-// promise) + four smaller bordered tiles. Bold where it counts, calm tiles
-// around it. All copy reused from the originals; no fabricated data.
+// asymmetric block. ONE large accent-bordered anchor tile (the headline
+// promise) + four smaller bordered tiles. Flat brand, borders over shadows.
+// All copy reused from the originals; no fabricated data.
 
 const ANCHOR = {
   icon: Sparkles,
@@ -32,20 +32,14 @@ export function BentoValue() {
       />
       <Reveal>
         <div className="grid gap-4 lg:grid-cols-4 lg:grid-rows-2">
-          {/* Large gradient-bordered anchor tile */}
-          <div className="gradient-border relative overflow-hidden rounded-2xl p-7 sm:p-8 lg:col-span-2 lg:row-span-2">
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full opacity-70 blur-2xl"
-              style={{ background: 'var(--gradient-brand-soft)' }}
-            />
+          {/* Large anchor tile — flat accent-bordered emphasis. */}
+          <div className="relative overflow-hidden rounded-2xl border-2 border-[var(--color-accent-200)] bg-[var(--color-bg-elevated)] p-7 shadow-[var(--shadow-card)] sm:p-8 lg:col-span-2 lg:row-span-2">
             <div className="relative flex h-full flex-col">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-[image:var(--gradient-brand-soft)] text-[var(--color-primary-700)]">
+              <span className="flex size-11 items-center justify-center rounded-xl bg-[var(--color-primary-100)] text-[var(--color-primary-700)]">
                 <Anchor className="size-5" aria-hidden="true" />
               </span>
               <span
-                className="mt-5 block h-[2px] w-10 rounded-full"
-                style={{ background: 'var(--gradient-brand)' }}
+                className="mt-5 block h-[2px] w-10 rounded-full bg-[var(--color-accent-500)]"
                 aria-hidden="true"
               />
               <h3 className="mt-5 text-2xl font-bold tracking-tight text-[var(--color-fg)] sm:text-3xl">
@@ -54,7 +48,7 @@ export function BentoValue() {
               <p className="mt-3 max-w-md text-sm leading-relaxed text-[var(--color-fg-muted)] sm:text-base">
                 {ANCHOR.body}
               </p>
-              <p className="mt-auto inline-flex items-center gap-1.5 pt-6 text-xs font-medium text-[var(--color-fg-subtle)]">
+              <p className="mt-auto inline-flex items-center gap-1.5 pt-6 text-xs font-medium text-[var(--color-fg-muted)]">
                 <Check className="size-4 text-[var(--color-success)]" aria-hidden="true" />
                 {ANCHOR.proof}
               </p>
@@ -67,7 +61,7 @@ export function BentoValue() {
             return (
               <div
                 key={t.title}
-                className="card-lift rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-6"
+                className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-6 shadow-[var(--shadow-card)]"
               >
                 <span className="flex size-10 items-center justify-center rounded-lg bg-[var(--color-primary-100)] text-[var(--color-primary-700)]">
                   <Icon className="size-5" aria-hidden="true" />

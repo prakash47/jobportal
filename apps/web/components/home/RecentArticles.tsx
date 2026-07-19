@@ -8,8 +8,7 @@ interface Props {
 }
 
 // Reuses the same ArticleCard the /career-advice index uses — visual
-// consistency is the point. Elevated band; the shared card-lift wraps each
-// <li> (rather than forking the shared card) for one consistent hover.
+// consistency is the point. Elevated band; the card owns its own hover.
 
 export function RecentArticles({ articles }: Props) {
   if (articles.length === 0) return null;
@@ -26,7 +25,7 @@ export function RecentArticles({ articles }: Props) {
         <Reveal>
           <ul className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {articles.map((a) => (
-              <li key={a.slug} className="card-lift rounded-lg">
+              <li key={a.slug}>
                 <ArticleCard {...a} />
               </li>
             ))}

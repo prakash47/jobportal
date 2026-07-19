@@ -32,14 +32,14 @@ export function PopularSkillsGrid({ skills }: Props) {
               <Link
                 href={`/jobs?skill=${encodeURIComponent(s.slug)}`}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-full border border-white/60 px-3 py-1.5 text-sm font-medium transition-colors hover:border-[var(--color-primary-300)] hover:bg-[image:var(--gradient-brand-soft)] hover:text-[var(--color-primary-700)]',
+                  'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors hover:border-[var(--color-primary-300)] hover:bg-[var(--color-primary-50)] hover:text-[var(--color-primary-700)]',
                   index < 3
-                    ? 'bg-[image:var(--gradient-brand-soft)] text-[var(--color-primary-700)]'
-                    : 'bg-white/80 text-[var(--color-fg-muted)]',
+                    ? 'border-[var(--color-primary-200)] bg-[var(--color-primary-50)] text-[var(--color-primary-700)]'
+                    : 'border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-fg-muted)]',
                 )}
               >
                 {s.name}
-                <span className="text-xs tabular-nums text-[var(--color-fg-subtle)]">
+                <span className="text-xs tabular-nums text-[var(--color-fg-muted)]">
                   {fmt(s.jobCount)}
                 </span>
               </Link>

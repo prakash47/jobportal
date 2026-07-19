@@ -11,14 +11,9 @@ const RECRUITER_URL = process.env.NEXT_PUBLIC_RECRUITER_URL ?? 'http://localhost
 export function RecruiterCta() {
   return (
     <section className="mx-auto w-full max-w-[var(--container-max)] px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-      <div className="relative overflow-hidden rounded-2xl bg-[image:var(--gradient-brand)] p-8 shadow-[var(--shadow-float)] ring-1 ring-white/15 sm:p-12">
-        {/* The page's one maximal moment — full navy→cyan gradient with a bright
-            cyan corner glow. Text sits on the navy-dominant region (left). */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-20 -top-20 size-72 rounded-full"
-          style={{ background: 'var(--color-accent-500)', opacity: 0.22, filter: 'blur(56px)' }}
-        />
+      <div className="relative overflow-hidden rounded-2xl bg-[var(--color-primary-600)] p-8 shadow-[var(--shadow-float)] ring-1 ring-white/10 sm:p-12">
+        {/* The page's one deliberate dark moment — a flat deep-navy #192249
+            finale panel (no gradient, no glow). Cyan used flat for the accents. */}
         <div className="relative flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="max-w-2xl space-y-2">
             <div className="flex items-center gap-2.5">

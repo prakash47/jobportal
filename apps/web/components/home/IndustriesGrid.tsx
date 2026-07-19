@@ -31,9 +31,9 @@ export function IndustriesGrid({ industries }: Props) {
               <li key={i.slug}>
                 <Link
                   href={`/jobs?industry=${encodeURIComponent(i.slug)}`}
-                  className="card-lift group flex h-full items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4 shadow-[var(--shadow-card)] hover:border-[var(--color-primary-300)]"
+                  className="group flex h-full items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4 shadow-[var(--shadow-card)] transition-colors hover:border-[var(--color-primary-300)]"
                 >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[image:var(--gradient-brand-soft)] text-[var(--color-primary-700)]">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary-100)] text-[var(--color-primary-700)]">
                     <Building2 className="size-5" aria-hidden="true" />
                   </span>
                   <span className="min-w-0 flex-1">

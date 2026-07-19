@@ -7,6 +7,7 @@ import {
   BentoValue,
   FaqSection,
   FeaturedCompanies,
+  FeaturedJobs,
   Hero,
   IndustriesGrid,
   PopularCitiesGrid,
@@ -16,7 +17,6 @@ import {
   RolesGrid,
   SiteFooter,
   SiteHeader,
-  TrustStrip,
 } from '../components/home';
 
 // Public homepage. SSR + 30-min revalidate (counts can lag half an hour;
@@ -72,19 +72,17 @@ export default async function HomePage() {
 
       <SiteHeader />
 
+      {/* Search-first IA: search → real jobs → companies → browse (role/city/
+          industry/skill) → why-us → resources → FAQ → recruiter finale. */}
       <main>
-        <Hero cities={data.popularCities} />
-        <TrustStrip
-          activeJobs={data.counts.activeJobs}
-          companies={data.counts.companies}
-          recruiters={data.counts.recruiters}
-        />
-        <BentoValue />
-        <IndustriesGrid industries={data.topIndustries} />
+        <Hero cities={data.popularCities} counts={data.counts} />
+        <FeaturedJobs jobs={data.latestJobs} />
+        <FeaturedCompanies companies={data.featuredCompanies} />
         <RolesGrid roles={data.topRoles} />
         <PopularCitiesGrid cities={data.popularCities} />
+        <IndustriesGrid industries={data.topIndustries} />
         <PopularSkillsGrid skills={data.popularSkills} />
-        <FeaturedCompanies companies={data.featuredCompanies} />
+        <BentoValue />
         <RecentArticles articles={data.recentArticles} />
         <FaqSection />
         <RecruiterCta />
