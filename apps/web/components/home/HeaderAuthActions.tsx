@@ -96,13 +96,13 @@ export function HeaderAuthActions({
             Register
           </button>
 
-          {/* Employer CTA — cyan outline at rest (white bg, accent-600 border,
-              accent-700 label), filling to a solid accent-700 with white text on
-              hover. AA-safe cyan stops (the raw brand accent-500 fails contrast
-              for text/border/white-on-fill). Fast colour transition. */}
+          {/* Employer CTA — EXACT brand cyan (accent-500 #22A0DA) outline at rest
+              (white bg, cyan border + cyan label), filling to solid brand cyan
+              with white text on hover. Fast (150ms) colour transition. Owner
+              chose the exact brand cyan over the AA-safe deeper stops. */}
           <a
             href={recruiterUrl}
-            className="hidden h-9 items-center gap-1.5 rounded-lg border border-[var(--color-accent-600)] bg-[var(--color-bg-elevated)] px-4 text-sm font-semibold text-[var(--color-accent-700)] transition-colors duration-[var(--duration-fast)] ease-out hover:border-[var(--color-accent-700)] hover:bg-[var(--color-accent-700)] hover:text-white lg:inline-flex"
+            className="hidden h-9 items-center gap-1.5 rounded-lg border border-[var(--color-accent-500)] bg-[var(--color-bg-elevated)] px-4 text-sm font-semibold text-[var(--color-accent-500)] transition-colors duration-[var(--duration-fast)] ease-out hover:border-[var(--color-accent-500)] hover:bg-[var(--color-accent-500)] hover:text-white lg:inline-flex"
           >
             Hire talent
             <ArrowRight className="size-4" aria-hidden="true" />

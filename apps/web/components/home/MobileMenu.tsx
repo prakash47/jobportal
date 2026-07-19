@@ -161,7 +161,7 @@ export function MobileMenu({
                   </button>
                   <a
                     href={recruiterUrl}
-                    className="inline-flex h-11 items-center justify-center gap-1.5 rounded-lg bg-[var(--color-accent-700)] text-sm font-semibold text-white transition-colors hover:bg-[var(--color-accent-800)]"
+                    className="inline-flex h-11 items-center justify-center gap-1.5 rounded-lg bg-[var(--color-accent-500)] text-sm font-semibold text-white transition-colors hover:bg-[var(--color-accent-600)]"
                   >
                     Hire talent
                     <ArrowRight className="size-4" aria-hidden="true" />
