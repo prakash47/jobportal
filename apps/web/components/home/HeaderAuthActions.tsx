@@ -96,13 +96,15 @@ export function HeaderAuthActions({
             Register
           </button>
 
-          {/* "For Employers" slot — flat pale-cyan tint + navy text (no gradient),
-              text unchanged per owner. */}
+          {/* Employer CTA — EXACT brand cyan (accent-500 #22A0DA) outline at rest
+              (white bg, cyan border + cyan label), filling to solid brand cyan
+              with white text on hover. Fast (150ms) colour transition. Owner
+              chose the exact brand cyan over the AA-safe deeper stops. */}
           <a
             href={recruiterUrl}
-            className="hidden h-9 items-center gap-1.5 rounded-lg bg-[var(--color-accent-500)] px-4 text-sm font-semibold text-[var(--color-primary-800)] transition-colors hover:bg-[var(--color-accent-600)] lg:inline-flex"
+            className="hidden h-9 items-center gap-1.5 rounded-lg border border-[var(--color-accent-500)] bg-[var(--color-bg-elevated)] px-4 text-sm font-semibold text-[var(--color-accent-500)] transition-colors duration-[var(--duration-fast)] ease-out hover:border-[var(--color-accent-500)] hover:bg-[var(--color-accent-500)] hover:text-white lg:inline-flex"
           >
-            Hire on Career Queue
+            Hire talent
             <ArrowRight className="size-4" aria-hidden="true" />
           </a>
         </>
