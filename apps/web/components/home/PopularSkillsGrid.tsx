@@ -8,9 +8,9 @@ interface Props {
   skills: PopularItem[];
 }
 
-// Tag-cloud that rhymes the hero quick-filter chips. Glass chips on the neutral
-// band; the top 3 highest-count skills wear a faint brand-soft tint for
-// hierarchy. Color-only hover (no lift) keeps it airy at density.
+// Tag-cloud that rhymes the hero quick-filter chips. Flat bordered chips on the
+// neutral band; the top 3 highest-count skills wear a faint primary-50 tint for
+// hierarchy. Color hover (no lift) keeps it airy at density.
 
 const fmt = (n: number) => n.toLocaleString('en-IN');
 
