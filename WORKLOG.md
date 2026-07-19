@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Developer | Branch | Building | Shared surfaces |
+|---|---|---|---|
+| Jayesh | `feature/home-redesign` | **Home page redesign** (`apps/web/app/page.tsx`, SRS §4.1) — flatten every content section off the banned gradients + glassmorphism onto the flat navy/cyan borders-over-shadows brand; **add a Featured Jobs section** (real jobs); **reorder IA search-first**; **refresh the hero** (search-first, flat); polish spacing/type/a11y/responsiveness. Keep navbar + footer untouched; omit testimonials/newsletter/app (no data). Touches `apps/web/components/home/*` + `lib/home/queries.ts` (expand heroJobs). **apps/web only** — no schema/migration/flag/API/lock; home barrel append-only. | Web home components (append-only barrel) |
 
 ---
 
