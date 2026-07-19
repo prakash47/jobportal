@@ -3,10 +3,12 @@
 
 export interface ArticleIndexParams {
   tag: string | null; // tag slug (lowercase); null = no filter
+  q: string | null; // free-text search over title/excerpt; null = no search
   page: number; // 1-indexed
 }
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_Q = 80;
 
 export function parseArticleIndexParams(
   sp: Record<string, string | string[] | undefined>,
@@ -14,9 +16,13 @@ export function parseArticleIndexParams(
   const rawTag = Array.isArray(sp['tag']) ? sp['tag'][0] : sp['tag'];
   const tag = rawTag && SLUG_RE.test(rawTag) ? rawTag : null;
 
+  const rawQ = Array.isArray(sp['q']) ? sp['q'][0] : sp['q'];
+  const trimmed = rawQ?.trim() ?? '';
+  const q = trimmed.length > 0 ? trimmed.slice(0, MAX_Q) : null;
+
   const rawPage = Array.isArray(sp['page']) ? sp['page'][0] : sp['page'];
   const n = Number(rawPage);
   const page = Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
 
-  return { tag, page };
+  return { tag, q, page };
 }
