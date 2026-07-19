@@ -1,9 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { Badge, Card, CardContent, CardHeader } from '@jobportal/ui';
-
-const fmtDate = (d: Date) =>
-  d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+import { authorInitials, formatArticleDate, tagLabel } from './article-format';
 
 export interface ArticleCardProps {
   slug: string;
@@ -16,8 +13,11 @@ export interface ArticleCardProps {
   coverImageUrl: string | null;
 }
 
-// Stripe-blog tile: confident, content-first. Cover is 16:9 if present;
-// otherwise the card stays text-only — no decorative gradient block.
+// Editorial article tile — content-first, typographic. Cover is 16:9 when
+// present; otherwise the card stays text-only (no decorative gradient block).
+// The whole card is a stretched link to the read page. Flat surface, borders
+// over shadows (CLAUDE.md §2). Shared with the homepage articles section, so it
+// stays fluid + full-height for any grid column.
 export function ArticleCard({
   slug,
   title,
@@ -28,58 +28,64 @@ export function ArticleCard({
   tags,
   coverImageUrl,
 }: ArticleCardProps) {
+  const category = tags[0];
+
   return (
-    <Card className="overflow-hidden transition-colors hover:border-[var(--color-border-strong)]">
+    <article className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] shadow-[var(--shadow-card)] transition-colors hover:border-[var(--color-border-strong)]">
       {coverImageUrl && (
-        <Link href={`/career-advice/${slug}`} className="block">
-          <div className="aspect-[16/9] w-full overflow-hidden border-b border-[var(--color-border)]">
-            <Image
-              src={coverImageUrl}
-              alt=""
-              width={640}
-              height={360}
-              className="size-full object-cover"
-            />
-          </div>
-        </Link>
+        <div className="aspect-[16/9] w-full overflow-hidden border-b border-[var(--color-border)]">
+          <Image
+            src={coverImageUrl}
+            alt=""
+            width={640}
+            height={360}
+            className="size-full object-cover"
+          />
+        </div>
       )}
-      <CardHeader className="gap-2">
-        <Link
-          href={`/career-advice/${slug}`}
-          className="text-base font-semibold leading-snug tracking-tight text-[var(--color-fg)] hover:underline"
-        >
-          {title}
-        </Link>
-        {excerpt && (
-          <p className="line-clamp-3 text-sm text-[var(--color-fg-muted)]">{excerpt}</p>
+      <div className="flex flex-1 flex-col p-5">
+        {category && (
+          <span className="w-fit rounded-md bg-[var(--color-primary-100)] px-2 py-0.5 text-xs font-medium text-[var(--color-primary-800)]">
+            {tagLabel(category)}
+          </span>
         )}
-      </CardHeader>
-      <CardContent className="space-y-3 pt-0">
-        <p className="text-xs text-[var(--color-fg-subtle)]">
-          {authorName}
+        <h3 className="mt-3 text-[15px] font-semibold leading-snug tracking-tight text-[var(--color-fg)]">
+          <Link
+            href={`/career-advice/${slug}`}
+            className="transition-colors after:absolute after:inset-0 after:content-[''] group-hover:text-[var(--color-primary-600)]"
+          >
+            {title}
+          </Link>
+        </h3>
+        {excerpt && (
+          <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-[var(--color-fg-muted)]">
+            {excerpt}
+          </p>
+        )}
+        <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-4 text-xs text-[var(--color-fg-muted)]">
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="flex size-5 items-center justify-center rounded-full bg-[var(--color-primary-100)] text-[9px] font-semibold text-[var(--color-primary-700)]"
+            >
+              {authorInitials(authorName)}
+            </span>
+            <span className="font-medium text-[var(--color-fg)]">{authorName}</span>
+          </span>
           {publishedAt && (
             <>
-              <span className="mx-2">·</span>
-              {fmtDate(publishedAt)}
+              <span aria-hidden="true" className="text-[var(--color-fg-subtle)]">·</span>
+              <span>{formatArticleDate(publishedAt)}</span>
             </>
           )}
           {readTimeMinutes !== null && (
             <>
-              <span className="mx-2">·</span>
-              {readTimeMinutes} min read
+              <span aria-hidden="true" className="text-[var(--color-fg-subtle)]">·</span>
+              <span>{readTimeMinutes} min read</span>
             </>
           )}
-        </p>
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {tags.slice(0, 3).map((t) => (
-              <Badge key={t} variant="neutral">
-                {t}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      </div>
+    </article>
   );
 }
