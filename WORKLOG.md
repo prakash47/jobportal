@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Developer | Branch | Building | Shared surfaces |
+|---|---|---|---|
+| Jayesh | `feature/career-advice-redesign` | **Career Advice hub redesign** (`/career-advice`, SRS §4.8) — focused premium editorial index: wrap in `SiteShell` (nav+footer; drops `revalidate`), editorial hero + real article search (`?q=`), typographic image-ready featured lead story, 2-col (Latest articles grid + sticky sidebar: Browse-by-topic tags / Recently published / jobs CTA). New `CareerHero`/`ArticleSearch`/`FeaturedArticle`/`CareerSidebar` widgets in `components/career-advice`; enhance `ArticleCard`. 100% real data — omit newsletter/authors/roadmaps/collections/guides/resources/services/most-read/bookmark (no backing). `apps/web` only — no schema/migration/flag/lock; career-advice barrel append-only. | Web career-advice components (append-only barrel) |
 
 ---
 
