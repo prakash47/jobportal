@@ -18,8 +18,7 @@ export function SectionHeading({ eyebrow, title, description, cta }: SectionHead
       <div className="max-w-2xl space-y-2">
         <div className="flex items-center gap-2.5">
           <span
-            className="h-[2px] w-6 rounded-full"
-            style={{ background: 'var(--gradient-brand)' }}
+            className="h-[2px] w-6 rounded-full bg-[var(--color-accent-500)]"
             aria-hidden="true"
           />
           <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-primary-600)]">

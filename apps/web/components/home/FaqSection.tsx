@@ -8,7 +8,7 @@ import { JsonLd } from '../../lib/seo';
 import { SectionHeading } from './SectionHeading';
 
 // FAQ accordion — jobseeker-facing, answering the questions our freemium model
-// actually raises. Open items get a gradient left rail. A FAQPage JSON-LD block
+// actually raises. Open items get a flat navy border. A FAQPage JSON-LD block
 // ships the same content for rich results (SEO, CLAUDE.md §6).
 
 const FAQS: ReadonlyArray<{ q: string; a: string }> = [

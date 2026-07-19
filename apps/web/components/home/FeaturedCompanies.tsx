@@ -29,14 +29,13 @@ export function FeaturedCompanies({ companies }: Props) {
               <li key={c.id}>
                 <Link
                   href={`/company/${c.slug}-overview-${c.id}`}
-                  className="glass card-lift group relative flex h-full items-start gap-3 overflow-hidden rounded-xl p-4"
+                  className="group relative flex h-full items-start gap-3 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4 shadow-[var(--shadow-card)] transition-colors hover:border-[var(--color-primary-300)]"
                 >
                   {/* Spotlight the single highest-rated company (already sorted). */}
                   {index === 0 && (
                     <span
                       aria-hidden="true"
-                      className="absolute inset-x-0 top-0 h-0.5"
-                      style={{ background: 'var(--gradient-brand)' }}
+                      className="absolute inset-x-0 top-0 h-0.5 bg-[var(--color-accent-500)]"
                     />
                   )}
                   <CompanyLogo companyId={c.id} name={c.name} logoUrl={c.logoUrl} size={48} />
@@ -48,7 +47,7 @@ export function FeaturedCompanies({ companies }: Props) {
                       {[c.industryName, c.hqCityName].filter(Boolean).join(' · ') || ' '}
                     </div>
                     {c.averageRating != null && (
-                      <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-[var(--color-fg-subtle)]">
+                      <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-[var(--color-fg-muted)]">
                         <Star className="size-3.5 text-[var(--color-warning)]" aria-hidden="true" />
                         <span className="tabular-nums text-[var(--color-fg-muted)]">
                           {c.averageRating.toFixed(1)}
@@ -58,7 +57,7 @@ export function FeaturedCompanies({ companies }: Props) {
                         )}
                       </span>
                     )}
-                    <div className="mt-2 text-xs text-[var(--color-fg-subtle)]">
+                    <div className="mt-2 text-xs text-[var(--color-fg-muted)]">
                       {c.openingsCount > 0 ? (
                         <>
                           <span className="tabular-nums">{fmt(c.openingsCount)}</span> open{' '}

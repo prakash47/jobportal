@@ -74,9 +74,9 @@ export interface RecentArticle {
   coverImageUrl: string | null;
 }
 
-// Real ACTIVE jobs for the hero floating-card cluster (server-rendered proof
-// of inventory). Salary stays in paise; the card formats to LPA.
-export interface HeroJob {
+// Real ACTIVE jobs for the "Latest jobs" section (server-rendered proof of
+// inventory). Salary stays in paise; the card formats to LPA.
+export interface FeaturedJob {
   canonicalSlug: string;
   title: string;
   companyId: number;
@@ -97,7 +97,7 @@ export interface HomePageData {
   popularSkills: PopularItem[];
   featuredCompanies: FeaturedCompany[];
   recentArticles: RecentArticle[];
-  heroJobs: HeroJob[];
+  latestJobs: FeaturedJob[];
 }
 
 // Pure transform: takes `{ id, jobCount }` pairs (in priority order) and a
@@ -206,11 +206,11 @@ export async function loadHomePageData(): Promise<HomePageData> {
         },
       }),
 
-      // Hero cluster — newest 3 ACTIVE jobs. Uses @@index([status, postedAt]).
+      // Latest jobs — newest 8 ACTIVE jobs. Uses @@index([status, postedAt]).
       prisma.job.findMany({
         where: { status: 'ACTIVE' },
         orderBy: { postedAt: 'desc' },
-        take: 3,
+        take: 8,
         select: {
           canonicalSlug: true,
           title: true,
@@ -295,7 +295,7 @@ export async function loadHomePageData(): Promise<HomePageData> {
     openingsCount: openByCompany.get(c.id) ?? 0,
   }));
 
-  const heroJobs: HeroJob[] = heroJobsRaw.map((j) => ({
+  const latestJobs: FeaturedJob[] = heroJobsRaw.map((j) => ({
     canonicalSlug: j.canonicalSlug,
     title: j.title,
     companyId: j.company.id,
@@ -320,6 +320,6 @@ export async function loadHomePageData(): Promise<HomePageData> {
     popularSkills: hydratePopularItems(skillPairs, skills),
     featuredCompanies,
     recentArticles,
-    heroJobs,
+    latestJobs,
   };
 }

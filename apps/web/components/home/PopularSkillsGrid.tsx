@@ -8,9 +8,9 @@ interface Props {
   skills: PopularItem[];
 }
 
-// Tag-cloud that rhymes the hero quick-filter chips. Glass chips on the neutral
-// band; the top 3 highest-count skills wear a faint brand-soft tint for
-// hierarchy. Color-only hover (no lift) keeps it airy at density.
+// Tag-cloud that rhymes the hero quick-filter chips. Flat bordered chips on the
+// neutral band; the top 3 highest-count skills wear a faint primary-50 tint for
+// hierarchy. Color hover (no lift) keeps it airy at density.
 
 const fmt = (n: number) => n.toLocaleString('en-IN');
 
@@ -32,14 +32,14 @@ export function PopularSkillsGrid({ skills }: Props) {
               <Link
                 href={`/jobs?skill=${encodeURIComponent(s.slug)}`}
                 className={cn(
-                  'inline-flex items-center gap-2 rounded-full border border-white/60 px-3 py-1.5 text-sm font-medium transition-colors hover:border-[var(--color-primary-300)] hover:bg-[image:var(--gradient-brand-soft)] hover:text-[var(--color-primary-700)]',
+                  'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors hover:border-[var(--color-primary-300)] hover:bg-[var(--color-primary-50)] hover:text-[var(--color-primary-700)]',
                   index < 3
-                    ? 'bg-[image:var(--gradient-brand-soft)] text-[var(--color-primary-700)]'
-                    : 'bg-white/80 text-[var(--color-fg-muted)]',
+                    ? 'border-[var(--color-primary-200)] bg-[var(--color-primary-50)] text-[var(--color-primary-700)]'
+                    : 'border-[var(--color-border)] bg-[var(--color-bg-elevated)] text-[var(--color-fg-muted)]',
                 )}
               >
                 {s.name}
-                <span className="text-xs tabular-nums text-[var(--color-fg-subtle)]">
+                <span className="text-xs tabular-nums text-[var(--color-fg-muted)]">
                   {fmt(s.jobCount)}
                 </span>
               </Link>
