@@ -3,7 +3,22 @@ import { parseArticleIndexParams } from './params';
 
 describe('parseArticleIndexParams', () => {
   it('returns defaults on an empty query', () => {
-    expect(parseArticleIndexParams({})).toEqual({ tag: null, page: 1 });
+    expect(parseArticleIndexParams({})).toEqual({ tag: null, q: null, page: 1 });
+  });
+
+  it('reads + trims ?q, and treats blank/whitespace as null', () => {
+    expect(parseArticleIndexParams({ q: 'salary negotiation' })).toMatchObject({
+      q: 'salary negotiation',
+    });
+    expect(parseArticleIndexParams({ q: '  resume  ' })).toMatchObject({ q: 'resume' });
+    expect(parseArticleIndexParams({ q: '' })).toMatchObject({ q: null });
+    expect(parseArticleIndexParams({ q: '   ' })).toMatchObject({ q: null });
+    expect(parseArticleIndexParams({ q: ['first', 'second'] })).toMatchObject({ q: 'first' });
+  });
+
+  it('caps ?q length at 80 chars', () => {
+    const long = 'a'.repeat(200);
+    expect(parseArticleIndexParams({ q: long }).q).toHaveLength(80);
   });
 
   it('reads ?tag as a single slug', () => {
