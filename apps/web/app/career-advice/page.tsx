@@ -140,7 +140,7 @@ export default async function CareerAdviceIndexPage({ searchParams }: PageProps)
               </div>
             )}
 
-            {gridArticles.length === 0 ? (
+            {gridArticles.length === 0 && !featured ? (
               <div className="mt-6 rounded-xl border border-dashed border-[var(--color-border)] p-10 text-center">
                 <p className="text-sm font-medium text-[var(--color-fg)]">
                   {q || tag ? 'Nothing matches yet' : 'No articles yet'}
