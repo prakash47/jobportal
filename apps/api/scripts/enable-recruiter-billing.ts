@@ -4,10 +4,16 @@
 //
 // It does two things the feature needs to be visible + buyable:
 //   1. Flags (via setFlag → invalidates the running server's flag cache):
-//      subscription.system.enabled  (reveals the Billing menu + unlocks the pages)
+//      subscription.system.enabled  (unlocks PURCHASING)
 //      subscription.plans.basic/premium/enterprise.enabled  (per-tier launch)
-//   2. Activates the seeded RECRUITER plans (isActive + isPublic) so /plans
-//      actually renders cards instead of the empty state.
+//   2. Ensures the seeded RECRUITER plans are listed (isActive + isPublic).
+//
+// NOTE: this script no longer controls VISIBILITY. The Billing nav group and
+// the /plans + /billing pages are gated by recruiter.plans_visible, which is
+// seeded ON — every recruiter sees them and their Free-plan state by default.
+// What this script toggles is whether paid plans can be BOUGHT. Accordingly
+// `--off` leaves the plans LISTED (matching the seed) and only turns the
+// purchase flags off, so the CTAs fall back to a disabled "Coming soon".
 //
 // Local dev only. Refuses to run against a non-local DATABASE_URL.
 //
@@ -53,17 +59,21 @@ async function main(): Promise<void> {
     console.log(`  flag ${key} -> enabled:${enabled}`);
   }
 
+  // Listing is what lets /plans render the catalogue; purchasability is the
+  // flags' job above. Narrowed to rows still in the unlisted default so this
+  // never resurrects a plan an admin deliberately delisted (same rule as the
+  // seed's backfill).
   const res = await prisma.subscriptionPlan.updateMany({
-    where: { audience: 'RECRUITER' },
-    data: { isActive: enabled, isPublic: enabled },
+    where: { audience: 'RECRUITER', isActive: false, isPublic: false },
+    data: { isActive: true, isPublic: true },
   });
-  console.log(`  ${res.count} RECRUITER plans -> isActive:${enabled}, isPublic:${enabled}`);
+  console.log(`  ${res.count} unlisted RECRUITER plans -> listed`);
 
   await prisma.$disconnect();
   console.log(
     enabled
-      ? '\nRecruiter billing is ON. Refresh the recruiter portal (:3001) — the "Billing" group appears in the sidebar; open Plans & pricing.'
-      : '\nRecruiter billing is OFF (Day-0 freemium state restored).',
+      ? '\nRecruiter billing is ON — paid plans are now purchasable on /plans (:3001).'
+      : '\nRecruiter billing is OFF (Day-0 freemium state restored). /plans stays visible with the Free plan current and paid CTAs disabled.',
   );
 }
 

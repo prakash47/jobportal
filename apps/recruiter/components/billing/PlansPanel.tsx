@@ -16,6 +16,7 @@ import {
 import { Check } from '@jobportal/ui/icons';
 import { api } from '../../lib/api-client';
 import { BillingDetailsDialog, type BillingProfileData } from './BillingDetailsDialog';
+import { FreePlanCard } from './FreePlanCard';
 import { loadRazorpayScript, type RazorpayCheckoutResponse } from './checkout';
 
 // Plan cards + the purchase flow. Order creation and pricing are entirely
@@ -34,6 +35,13 @@ export interface PlanCardData {
   intervalDays: number;
   tier: string;
   features: string[];
+  /**
+   * Whether this specific plan can be bought right now — the master
+   * subscription.system.enabled AND this tier's subscription.plans.<tier>.enabled.
+   * False renders a disabled "Coming soon" CTA instead of hiding the card, so
+   * recruiters can always review pricing. The API re-checks both flags.
+   */
+  purchasable: boolean;
 }
 
 interface CreateOrderResponse {
@@ -54,6 +62,12 @@ interface Props {
   hasProfile: boolean;
   profile: BillingProfileData | null;
   kycPrefill: { legalName?: string | null; gstin?: string | null } | null;
+  /**
+   * The master subscription.system.enabled. When false NOTHING is buyable yet,
+   * which changes the banner copy — telling a Member "ask a team owner to
+   * upgrade" would be wrong when even an owner can't purchase.
+   */
+  purchaseEnabled: boolean;
 }
 
 function formatPrice(paise: number): string {
@@ -73,6 +87,7 @@ export function PlansPanel({
   hasProfile,
   profile,
   kycPrefill,
+  purchaseEnabled,
 }: Props) {
   const router = useRouter();
   const [busyPlanId, setBusyPlanId] = useState<number | null>(null);
@@ -189,11 +204,27 @@ export function PlansPanel({
     router.refresh();
   }
 
+  // Note the deliberate present tense on the Free message — the flag system lets
+  // an admin move a currently-free capability behind a tier at runtime, so
+  // promising that today's features stay free forever isn't a promise this code
+  // can keep.
+  const banner = !purchaseEnabled
+    ? currentPlanId === null
+      ? 'Paid plans aren’t open for purchase yet. Your team is on the Free plan, and everything you use today is free. These prices are a preview of what’s coming.'
+      : 'Plan changes are paused at the moment. Your current plan stays active — renewals and upgrades will reopen soon.'
+    : !canManage
+      ? 'Only owners and admins can purchase plans. Ask a team owner to upgrade.'
+      : null;
+
   return (
     <div className="space-y-4">
-      {!canManage && (
+      {/* Three distinct states. The purchase-closed copy MUST consult
+          currentPlanId: a company holding an active paid subscription while an
+          admin has the master switch off is not "on the Free plan", and saying
+          so would contradict the "Current plan" badge on their own paid card. */}
+      {banner && (
         <p className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)] px-4 py-3 text-sm text-[var(--color-fg-muted)]">
-          Only owners and admins can purchase plans. Ask a team owner to upgrade.
+          {banner}
         </p>
       )}
 
@@ -203,7 +234,15 @@ export function PlansPanel({
         </p>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Four cards (Free + three paid tiers) across on desktop; the page opts
+          into the layout's wide column so they don't squeeze. Falls back to
+          2-up on small screens and 1-up on mobile. */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* The always-present Free plan — current whenever no paid subscription
+            is active (currentPlanId is null). Rendered inside the same grid so
+            it sits as a peer of the paid cards. */}
+        <FreePlanCard isCurrent={currentPlanId === null} />
+
         {plans.map((plan) => {
           const isCurrent = plan.id === currentPlanId;
           return (
@@ -247,7 +286,19 @@ export function PlansPanel({
                   </ul>
                 )}
               </CardContent>
-              {canManage && (
+              {!plan.purchasable ? (
+                // Visible-but-not-purchasable. Rendered as STATUS TEXT, not a
+                // disabled <Button>: nobody can act on it (it isn't a
+                // role-denied action), so a dead control would be misleading —
+                // and the shared Button's disabled:opacity-50 lands at ~3.4:1,
+                // which we can't fix here without editing packages/ui and
+                // rippling into apps/web. Muted text is AA and honest.
+                <CardFooter>
+                  <p className="w-full text-center text-sm font-medium text-[var(--color-fg-muted)]">
+                    Coming soon
+                  </p>
+                </CardFooter>
+              ) : canManage ? (
                 <CardFooter>
                   <Button
                     className="w-full"
@@ -258,6 +309,16 @@ export function PlansPanel({
                   >
                     {isCurrent ? 'Renew' : currentPlanId ? 'Switch to this plan' : 'Choose plan'}
                   </Button>
+                </CardFooter>
+              ) : (
+                // A Member on a launched tier. Without this the buyable card
+                // would render NO footer while an unlaunched sibling shows
+                // "Coming soon" — making the tier they can never buy look more
+                // complete than the one their owner can.
+                <CardFooter>
+                  <p className="w-full text-center text-sm font-medium text-[var(--color-fg-muted)]">
+                    Owners and admins only
+                  </p>
                 </CardFooter>
               )}
             </Card>

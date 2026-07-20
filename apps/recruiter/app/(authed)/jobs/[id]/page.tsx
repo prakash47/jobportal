@@ -102,7 +102,7 @@ export default async function JobDetailPage({ params }: PageProps) {
           where: { jobId, user: { candidate: { skillIds: { hasSome: job.skillIds } } } },
         })
       : Promise.resolve(0),
-    isFlagEnabled(FLAG.SUBSCRIPTION_SYSTEM),
+    isFlagEnabled(FLAG.RECRUITER_PLANS_VISIBLE),
     isFlagEnabled(FLAG.KILL_RECRUITER_JOB_COLLABORATE),
   ]);
 
