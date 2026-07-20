@@ -38,7 +38,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | Prakash | `feature/recruiter-plans-always-visible` | 2026-07-20 | Adding `recruiter.plans_visible` (seeded ON). |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Developer | Branch | Building | Shared surfaces |
+|---|---|---|---|
+| Prakash | `feature/recruiter-plans-always-visible` | **Recruiter Plans & Billing always visible (Free plan as default state).** New flag **`recruiter.plans_visible`** (seeded **ON**) replaces `subscription.system.enabled` at the recruiter L1 middleware / L2 `plans`+`billing` pages / `SidebarNav showBilling`. New **`FreePlanCard`** (synthetic, no DB row) on `/plans` marked "Current plan" when the company has no active paid subscription; paid tier cards render with pricing but a **disabled "Coming soon"** CTA while `subscription.system.enabled` stays OFF. **`subscription.system.enabled` is NOT flipped** — it stays OFF so `apps/web`'s `ApplyButton` upgrade CTA (which links to a non-existent `/pricing`) is unaffected. Files: `apps/recruiter/{middleware.ts, app/(authed)/layout.tsx, app/(authed)/plans/page.tsx, app/(authed)/billing/page.tsx, components/SidebarNav.tsx, components/billing/*}`, `packages/feature-flags/src/keys.ts`, `packages/db/prisma/seed/flags.ts`. | 🔒 `packages/feature-flags/src/keys.ts` (lock taken). **No schema/migration. No `theme.css`. `apps/web` + `apps/services` untouched.** |
 
 ---
 
