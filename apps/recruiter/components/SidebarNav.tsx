@@ -35,10 +35,12 @@ const SETTINGS_ITEMS = [
   { href: '/settings/change-password', label: 'Change password' },
 ] as const;
 
-// "Billing" is the paid Plans & Billing surface. The group only renders when
-// the (authed) layout says subscription.system.enabled is ON — a Day-0
-// recruiter must not see a dead nav entry (CLAUDE.md §0: paid features are
-// invisible until launched). Cosmetic gate only; L1/L2/L3 do the real work.
+// "Billing" is the Plans & Billing surface. The group renders when the (authed)
+// layout says recruiter.plans_visible is ON — seeded ON, so every recruiter
+// sees it and can review the catalogue plus their own Free-plan state. Paid
+// features stay invisible-until-launched per CLAUDE.md §0 in the sense that
+// matters: nothing can be BOUGHT until subscription.system.enabled is flipped
+// (purchase CTAs render disabled). Cosmetic gate only; L1/L2/L3 do the real work.
 const BILLING_ITEMS = [
   { href: '/plans', label: 'Plans & pricing' },
   { href: '/billing', label: 'Subscription & invoices' },

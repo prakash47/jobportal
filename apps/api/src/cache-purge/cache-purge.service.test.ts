@@ -25,6 +25,14 @@ describe('pathsForFlag', () => {
     ]);
   });
 
+  it('recruiter.plans_visible → no paths (recruiter-only surface, force-dynamic)', () => {
+    // Must stay an explicit empty array, NOT the ['/'] default: this flag gates
+    // the recruiter portal only and must never purge the job-seeker homepage.
+    // Guards the `if (explicit)` truthiness path — [] is truthy, so the mapping
+    // wins over the fallback.
+    expect(pathsForFlag('recruiter.plans_visible')).toEqual([]);
+  });
+
   it('unknown flag falls back to homepage (defensive default)', () => {
     expect(pathsForFlag('experiment.something.brand_new')).toEqual(['/']);
     expect(pathsForFlag('killswitch.transactional_emails')).toEqual(['/']);

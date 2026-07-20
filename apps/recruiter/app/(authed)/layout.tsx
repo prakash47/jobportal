@@ -39,10 +39,12 @@ export default async function AuthedLayout({ children }: { children: React.React
   });
   const company = recruiter?.company ?? null;
 
-  // Paid Plans & Billing surface (Pattern B, seeded OFF ⇒ hidden): the nav
-  // group only renders once the admin launches billing. Cosmetic — the
-  // middleware (L1), pages (L2), and API (L3) enforce the flag for real.
-  const billingEnabled = await isFlagEnabled(FLAG.SUBSCRIPTION_SYSTEM);
+  // Plans & Billing nav group. Gated on RECRUITER_PLANS_VISIBLE (seeded ON) so
+  // every recruiter — including Free-plan ones, i.e. all of them on day one —
+  // sees the group. Cosmetic only; the middleware (L1) and pages (L2) enforce
+  // visibility for real, and the API (L3) enforces purchasability separately
+  // via SUBSCRIPTION_SYSTEM.
+  const billingEnabled = await isFlagEnabled(FLAG.RECRUITER_PLANS_VISIBLE);
 
   // Reads-direct topology: server-render the bell's initial unread count + feed
   // via Prisma (the client island then polls + refreshes through the BFF). When

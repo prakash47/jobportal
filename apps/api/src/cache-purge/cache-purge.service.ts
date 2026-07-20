@@ -74,6 +74,11 @@ const PATH_MAP: Record<string, string[]> = {
   'services.recruiter_connect.enabled': ['/services', '/services/recruiter-connect'],
   'subscription.system.enabled': ['/', '/pricing'],
   'subscription.pricing_page.visible': ['/pricing'],
+  // Recruiter-portal-only surface (/plans + /billing), and those pages are
+  // force-dynamic so there is nothing cached to purge. Mapped explicitly to []
+  // so it doesn't hit the defensive ['/'] default and needlessly purge the
+  // job-seeker homepage, which this flag cannot affect.
+  'recruiter.plans_visible': [],
 };
 
 export function pathsForFlag(flagKey: string): string[] {

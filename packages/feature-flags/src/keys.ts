@@ -1,4 +1,5 @@
-// All 26 flag keys from SRS §7.8. Constants for type-safe consumer code.
+// Flag keys from SRS §7.8 (which specifies "26+"; the set has grown since).
+// Constants for type-safe consumer code.
 
 export const FLAG = {
   // Services menu
@@ -38,6 +39,22 @@ export const FLAG = {
   // lands with the Phase 3 API (these are the UI/product gates).
   RECRUITER_HOT_VACANCY: 'recruiter.hot_vacancy.enabled',
   RECRUITER_SMB_PACK: 'recruiter.smb_pack.enabled',
+  // Visibility of the recruiter "Billing" nav group and its two pages
+  // (/plans, /billing). Deliberately SEPARATE from SUBSCRIPTION_SYSTEM: this
+  // key controls whether a recruiter can SEE the plan catalogue and their own
+  // (Free) subscription state; SUBSCRIPTION_SYSTEM controls whether anything
+  // can be BOUGHT. Seeded enabled:TRUE — the surface is informational, not a
+  // paid feature, so CLAUDE.md §0 ("paid features ship OFF") is satisfied by
+  // leaving SUBSCRIPTION_SYSTEM off: every purchase CTA renders disabled
+  // ("Coming soon") and the API's assertBillingEnabled still 403s.
+  //
+  // Why not just reuse SUBSCRIPTION_SYSTEM: that key is also read by
+  // apps/api/src/applications/quota.service.ts, which feeds `upgradeAvailable`
+  // into apps/web's ApplyButton — turning it ON would show rate-limited job
+  // seekers an "Upgrade your plan → See plans" CTA pointing at /pricing, a
+  // route that does not exist in apps/web. Keeping the two keys separate is
+  // what keeps the job-seeker portal unaffected.
+  RECRUITER_PLANS_VISIBLE: 'recruiter.plans_visible',
 
   // Experiments
   EXP_NEW_HOMEPAGE: 'experiment.new_homepage',

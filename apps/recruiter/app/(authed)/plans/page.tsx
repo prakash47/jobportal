@@ -6,9 +6,16 @@ import { PlansPanel, type PlanCardData } from '../../../components/billing/Plans
 
 // SRS §4.11 / §7 — recruiter Plans & Pricing. Reads (plan catalogue, current
 // subscription, billing profile) direct via Prisma (reads/writes split);
-// order creation + payment verification go through the BFF. L2 of the paid
-// gate lives here (404 while subscription.system.enabled is OFF); L1 is the
-// recruiter middleware; L3 (the trusted boundary) is the API.
+// order creation + payment verification go through the BFF.
+//
+// Two independent gates:
+//   • VISIBILITY — recruiter.plans_visible (seeded ON). L1 recruiter
+//     middleware, L2 the notFound() below. Every recruiter can review the
+//     catalogue and their own Free-plan state.
+//   • PURCHASABILITY — subscription.system.enabled (seeded OFF) plus the
+//     per-tier subscription.plans.<tier>.enabled keys. These no longer hide
+//     cards; they disable the CTA. L3 (the trusted boundary) is the API, which
+//     re-checks both before creating any order.
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +32,7 @@ const FEATURE_LABELS: Record<string, string> = {
 };
 
 export default async function PlansPage() {
-  if (!(await isFlagEnabled(FLAG.SUBSCRIPTION_SYSTEM))) notFound();
+  if (!(await isFlagEnabled(FLAG.RECRUITER_PLANS_VISIBLE))) notFound();
   const user = await requireRecruiter();
 
   const caller = await prisma.recruiter.findUnique({
@@ -60,31 +67,38 @@ export default async function PlansPage() {
     }),
   ]);
 
-  // Per-tier launch flags (subscription.plans.<tier>.enabled, seeded OFF) — a
-  // plan card renders only once the admin launches its tier. The API re-checks
-  // at purchase time.
-  const tierEnabled = await Promise.all(
-    planRows.map((p) => isFlagEnabled(`subscription.plans.${p.tier.toLowerCase()}.enabled`)),
-  );
-  const plans: PlanCardData[] = planRows
-    .filter((_, i) => tierEnabled[i] === true)
-    .map((p) => ({
-      id: p.id,
-      slug: p.slug,
-      name: p.name,
-      description: p.description,
-      priceInPaise: p.priceInPaise,
-      intervalDays: p.intervalDays,
-      tier: p.tier,
-      features: p.featureKeys
-        .map((key) => FEATURE_LABELS[key])
-        .filter((label): label is string => Boolean(label)),
-    }));
+  // Purchasability, resolved per card. The master switch decides whether ANY
+  // plan can be bought; the per-tier launch flag decides whether THIS tier is
+  // open yet. Previously these filtered cards out of the list entirely — they
+  // now only disable the CTA, so a recruiter can always see what each plan
+  // costs. The API re-checks both at purchase time (the trusted boundary).
+  const [purchaseEnabled, ...tierEnabled] = await Promise.all([
+    isFlagEnabled(FLAG.SUBSCRIPTION_SYSTEM),
+    ...planRows.map((p) => isFlagEnabled(`subscription.plans.${p.tier.toLowerCase()}.enabled`)),
+  ]);
+
+  const plans: PlanCardData[] = planRows.map((p, i) => ({
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    description: p.description,
+    priceInPaise: p.priceInPaise,
+    intervalDays: p.intervalDays,
+    tier: p.tier,
+    features: p.featureKeys
+      .map((key) => FEATURE_LABELS[key])
+      .filter((label): label is string => Boolean(label)),
+    purchasable: purchaseEnabled && tierEnabled[i] === true,
+  }));
 
   const canManage = caller.companyRole === 'OWNER' || caller.companyRole === 'ADMIN';
 
   return (
-    <div className="space-y-8">
+    // data-wide → the authed layout widens the content column to max-w-6xl (see
+    // (authed)/layout.tsx). Needed because the catalogue is now four cards —
+    // the Free plan plus three paid tiers — and at the default max-w-3xl they
+    // would squeeze to ~165px each or strand Enterprise alone on a second row.
+    <div data-wide className="space-y-8">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
           Plans &amp; pricing
@@ -95,33 +109,31 @@ export default async function PlansPage() {
         </p>
       </header>
 
-      {plans.length === 0 ? (
-        <div className="rounded-md border border-dashed border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-fg-muted)]">
-          Plans aren&rsquo;t available for purchase yet. Check back soon.
-        </div>
-      ) : (
-        <PlansPanel
-          plans={plans}
-          currentPlanId={subscription?.planId ?? null}
-          canManage={canManage}
-          hasProfile={profile !== null}
-          profile={
-            profile
-              ? {
-                  legalName: profile.legalName,
-                  gstin: profile.gstin,
-                  addressLine1: profile.addressLine1,
-                  addressLine2: profile.addressLine2,
-                  city: profile.city,
-                  state: profile.state,
-                  pincode: profile.pincode,
-                  billingEmail: profile.billingEmail,
-                }
-              : null
-          }
-          kycPrefill={kyc ? { legalName: kyc.legalName, gstin: kyc.gstNumber } : null}
-        />
-      )}
+      {/* Always rendered — PlansPanel leads with the synthetic Free card, so
+          even with zero paid plans in the catalogue a recruiter sees their
+          current plan rather than a bare empty state. */}
+      <PlansPanel
+        plans={plans}
+        currentPlanId={subscription?.planId ?? null}
+        canManage={canManage}
+        purchaseEnabled={purchaseEnabled}
+        hasProfile={profile !== null}
+        profile={
+          profile
+            ? {
+                legalName: profile.legalName,
+                gstin: profile.gstin,
+                addressLine1: profile.addressLine1,
+                addressLine2: profile.addressLine2,
+                city: profile.city,
+                state: profile.state,
+                pincode: profile.pincode,
+                billingEmail: profile.billingEmail,
+              }
+            : null
+        }
+        kycPrefill={kyc ? { legalName: kyc.legalName, gstin: kyc.gstNumber } : null}
+      />
     </div>
   );
 }

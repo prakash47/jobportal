@@ -21,11 +21,14 @@ export const config = {
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
-  // CLAUDE.md §4 — Layer 1 gate for the paid Plans & Billing surface (Pattern
-  // B: subscription.system.enabled seeded OFF ⇒ pages don't exist). Layer 2 is
-  // each page's notFound(); Layer 3 is the API (the only trusted boundary).
+  // CLAUDE.md §4 — Layer 1 gate for the Plans & Billing surface. Gated on
+  // RECRUITER_PLANS_VISIBLE (seeded ON) so every recruiter can see the plan
+  // catalogue and their own Free-plan state; SUBSCRIPTION_SYSTEM (seeded OFF)
+  // separately gates whether anything can be BOUGHT, enforced at the API.
+  // Layer 2 is each page's notFound(); Layer 3 is the API (the only trusted
+  // boundary).
   if (pathname === '/plans' || pathname === '/billing' || pathname.startsWith('/billing/')) {
-    if (!(await isFlagEnabled(FLAG.SUBSCRIPTION_SYSTEM))) {
+    if (!(await isFlagEnabled(FLAG.RECRUITER_PLANS_VISIBLE))) {
       return new NextResponse(null, { status: 404 });
     }
   }
