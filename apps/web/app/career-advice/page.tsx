@@ -147,7 +147,7 @@ export default async function CareerAdviceIndexPage({ searchParams }: PageProps)
             <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-accent-700)]">
               The cover
             </p>
-            <CoverTile article={featured.article} folio={featured.folio} size="cover" variant="ink" />
+            <CoverTile article={featured.article} folio={featured.folio} size="cover" variant="ink" headingLevel={2} />
           </div>
         )}
 
@@ -164,14 +164,23 @@ export default async function CareerAdviceIndexPage({ searchParams }: PageProps)
 
             {gridItems.length === 0 ? (
               <div className="mt-6 rounded-2xl border border-dashed border-[var(--color-border)] p-10 text-center">
-                <p className="text-sm font-medium text-[var(--color-fg)]">Nothing matches yet</p>
-                <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-                  Try a different search or topic, or{' '}
-                  <Link href="/career-advice" className="text-[var(--color-primary-600)] hover:underline">
-                    view all articles
-                  </Link>
-                  .
-                </p>
+                {q || tag ? (
+                  <>
+                    <p className="text-sm font-medium text-[var(--color-fg)]">Nothing matches yet</p>
+                    <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
+                      Try a different search or topic, or{' '}
+                      <Link href="/career-advice" className="text-[var(--color-primary-600)] hover:underline">
+                        view all articles
+                      </Link>
+                      .
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-[var(--color-fg)]">No articles yet</p>
+                    <p className="mt-1 text-sm text-[var(--color-fg-muted)]">Check back soon.</p>
+                  </>
+                )}
               </div>
             ) : (
               <ul className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">

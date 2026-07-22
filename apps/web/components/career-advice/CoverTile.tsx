@@ -22,6 +22,9 @@ export interface CoverTileProps {
   size?: 'cover' | 'tile';
   /** Force a field variant (the lead uses 'ink'); defaults to a per-slug hash. */
   variant?: CoverVariant;
+  /** Title heading level — the lead story is section-level (2); grid tiles nest
+   *  under the grid's own h2, so they stay 3 (default). */
+  headingLevel?: 2 | 3;
 }
 
 // A designed magazine "cover plate" for image-less articles: a flat navy/tint
@@ -29,12 +32,13 @@ export interface CoverTileProps {
 // SVG dot texture + one cyan editorial rule + the title set big as the artwork.
 // 100% real metadata, no fabricated photo, no gradient. Renders a real cover
 // image when one exists. The whole plate is a stretched link to the read page.
-export function CoverTile({ article, folio, size = 'tile', variant }: CoverTileProps) {
+export function CoverTile({ article, folio, size = 'tile', variant, headingLevel = 3 }: CoverTileProps) {
   const { slug, title, excerpt, authorName, publishedAt, readTimeMinutes, tags, coverImageUrl } =
     article;
   const href = `/career-advice/${slug}`;
   const category = tags[0];
   const isCover = size === 'cover';
+  const Heading = headingLevel === 2 ? 'h2' : 'h3';
 
   // Image-ready: if a real cover exists, use the photo path (image on top +
   // editorial copy below on a flat card). None of the seeded articles have one.
@@ -50,11 +54,11 @@ export function CoverTile({ article, folio, size = 'tile', variant }: CoverTileP
               {tagLabel(category)}
             </span>
           )}
-          <h3 className={`mt-2 font-bold leading-tight tracking-tight text-[var(--color-fg)] ${isCover ? 'text-2xl sm:text-3xl' : 'text-lg'}`}>
+          <Heading className={`mt-2 font-bold leading-tight tracking-tight text-[var(--color-fg)] ${isCover ? 'text-2xl sm:text-3xl' : 'text-lg'}`}>
             <Link href={href} className="transition-colors after:absolute after:inset-0 after:content-[''] group-hover:text-[var(--color-primary-600)]">
               {title}
             </Link>
-          </h3>
+          </Heading>
           {excerpt && <p className="mt-2 line-clamp-2 text-sm text-[var(--color-fg-muted)]">{excerpt}</p>}
           <MetaRow
             authorName={authorName}
@@ -114,7 +118,7 @@ export function CoverTile({ article, folio, size = 'tile', variant }: CoverTileP
             {tagLabel(category)}
           </span>
         )}
-        <h3
+        <Heading
           className={`mt-3 font-bold tracking-tight text-balance ${s.title} ${s.titleHover} transition-colors ${
             isCover ? 'text-[clamp(1.9rem,3.4vw+0.6rem,3.6rem)] leading-[1.05]' : 'text-2xl leading-[1.12]'
           }`}
@@ -122,7 +126,7 @@ export function CoverTile({ article, folio, size = 'tile', variant }: CoverTileP
           <Link href={href} className="after:absolute after:inset-0 after:content-['']">
             {title}
           </Link>
-        </h3>
+        </Heading>
         {excerpt && (
           <p className={`mt-3 text-sm leading-relaxed ${s.excerpt} ${isCover ? 'line-clamp-3' : 'line-clamp-2'}`}>
             {excerpt}
