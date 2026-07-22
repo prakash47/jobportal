@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Developer | Branch | Building | Shared surfaces |
+|---|---|---|---|
+| Jayesh | `feature/career-advice-editorial-v3` | **Career Advice hub → light editorial redesign v3** (`/career-advice`, SRS §4.8) — owner-approved artifact direction: **fully light** (no dark backgrounds), serif editorial headlines, **cover images on every article** (designed on-brand SVG covers per topic + real photo when a coverImageUrl exists), elevated cards + depth, light-cyan-tint colophon. Keeps the real `SiteShell` navbar/footer. New `ArticleCover` (SVG cover system); rework `CoverTile`/`CareerMasthead`/`CareerColophon` to light+image; retire `ContentsRail` (topic pills in masthead). Add a scoped `.font-editorial` serif utility to `apps/web/app/globals.css` (app-owned, append-only). Shared `ArticleCard` untouched. `apps/web` only — no schema/flag/lock. | Web career-advice components + globals.css (append) |
 
 ---
 
