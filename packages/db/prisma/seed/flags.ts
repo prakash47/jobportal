@@ -1,7 +1,12 @@
 import type { PrismaClient } from '../../generated/client';
 
-// Per SRS §7.8 + CLAUDE.md §4 — every flag ships enabled: false on Day 0.
-// 26 flags exact (matches SRS §7.8 "26+ feature flags").
+// Per SRS §7.8 + CLAUDE.md §4 — every PAID feature ships enabled: false on
+// Day 0. (SRS §7.8 specifies "26+ feature flags"; the list has grown well past
+// that as killswitches accumulated — no test asserts the count.)
+//
+// `enabled` defaults to false and is only set explicitly for flags that gate
+// a FREE surface's visibility (not a paid capability) — see
+// recruiter.plans_visible below.
 
 type FlagSeed = {
   key: string;
@@ -9,6 +14,8 @@ type FlagSeed = {
   category: 'services' | 'subscription' | 'features' | 'recruiter' | 'experiments' | 'killswitch';
   uiLabel: string;
   description?: string;
+  /** Defaults to false. Only set true for free/visibility flags. */
+  enabled?: boolean;
 };
 
 const flags: FlagSeed[] = [
@@ -47,6 +54,13 @@ const flags: FlagSeed[] = [
   // available (no flag).
   { key: 'recruiter.hot_vacancy.enabled', type: 'BOOLEAN', category: 'recruiter', uiLabel: 'Sell Hot Vacancy premium job posts' },
   { key: 'recruiter.smb_pack.enabled', type: 'BOOLEAN', category: 'recruiter', uiLabel: 'Sell SMB Pack job posts' },
+  // Recruiter "Billing" nav group + /plans and /billing pages. Seeded ON: every
+  // recruiter can see the plan catalogue and their own (Free) plan state from
+  // day one. This is a VISIBILITY flag, not a paid capability — purchasing is
+  // still gated by subscription.system.enabled (seeded OFF), so every buy CTA
+  // renders disabled and the API rejects orders. Flip this OFF to hide the
+  // whole surface again without a redeploy.
+  { key: 'recruiter.plans_visible', type: 'BOOLEAN', category: 'recruiter', uiLabel: 'Show recruiter Plans & Billing pages', enabled: true },
 
   // Moderation
   { key: 'moderation.jobs.enabled', type: 'BOOLEAN', category: 'moderation', uiLabel: 'Route new jobs through admin moderation' },
@@ -130,7 +144,7 @@ export async function seedFlags(prisma: PrismaClient): Promise<void> {
         category: flag.category,
         uiLabel: flag.uiLabel,
         description: flag.description ?? null,
-        enabled: false,
+        enabled: flag.enabled ?? false,
         percentage: flag.type === 'PERCENTAGE_ROLLOUT' ? 0 : null,
         targetUserIds: [],
         requiredTiers: [],
@@ -138,5 +152,8 @@ export async function seedFlags(prisma: PrismaClient): Promise<void> {
       },
     });
   }
-  console.log(`  -> ${flags.length} flags upserted (all enabled: false)`);
+  const onByDefault = flags.filter((f) => f.enabled).length;
+  console.log(
+    `  -> ${flags.length} flags upserted (${flags.length - onByDefault} enabled: false, ${onByDefault} enabled: true)`,
+  );
 }

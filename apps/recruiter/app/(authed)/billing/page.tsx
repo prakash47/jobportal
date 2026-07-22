@@ -16,7 +16,12 @@ import { BillingProfileCard } from '../../../components/billing/BillingProfileCa
 // SRS §4.11 / §7 — Subscription & invoices. Current plan + expiry, the
 // payment/transaction history (incl. pending + failed attempts), and invoice
 // downloads. Reads direct via Prisma; the download link streams from the BFF.
-// L2 paid gate here; L1 middleware; L3 API.
+// L2 visibility gate here (recruiter.plans_visible, seeded ON); L1 middleware;
+// L3 API enforces purchasability via subscription.system.enabled.
+//
+// A recruiter with no Subscription row is on the implicit Free plan — the
+// summary below already renders that state, so this page is meaningful for
+// every recruiter from day one.
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +32,12 @@ export default async function BillingPage({
 }: {
   searchParams: Promise<{ purchase?: string }>;
 }) {
-  if (!(await isFlagEnabled(FLAG.SUBSCRIPTION_SYSTEM))) notFound();
+  if (!(await isFlagEnabled(FLAG.RECRUITER_PLANS_VISIBLE))) notFound();
+  // Purchasability is separate from visibility. Needed here because the
+  // billing-details form writes through PUT /recruiter/billing/profile, which
+  // is behind the API's assertBillingEnabled — rendering it while purchasing is
+  // closed would hand an owner a form that 403s after they've typed their GSTIN.
+  const purchaseEnabled = await isFlagEnabled(FLAG.SUBSCRIPTION_SYSTEM);
   const user = await requireRecruiter();
   const { purchase } = await searchParams;
 
@@ -144,7 +154,7 @@ export default async function BillingPage({
 
       <SubscriptionStatusCard summary={summary} canManage={canManage} />
 
-      {canManage && (
+      {canManage && purchaseEnabled && (
         <BillingProfileCard
           profile={
             profileRow

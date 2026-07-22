@@ -10,9 +10,11 @@ export interface JobValidityCardProps {
   status: JobStatus;
   postedAt: Date;
   expiresAt: Date | null;
-  /** Whether the paid Plans & Billing surface is live (subscription.system.enabled).
+  /** Whether the Plans & Billing surface is reachable (recruiter.plans_visible).
    * The Upgrade CTA only renders when ON, so it never dead-links to a 404'd
-   * /plans in the Day-0 flag-OFF state (L2 UX gate). */
+   * /plans (L2 UX gate). Note this tracks VISIBILITY, not purchasability — the
+   * plans page itself explains that paid tiers aren't open yet, which is a
+   * better destination than hiding the CTA outright. */
   billingEnabled: boolean;
 }
 
