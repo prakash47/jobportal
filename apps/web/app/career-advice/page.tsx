@@ -5,14 +5,11 @@ import { Container } from '@jobportal/ui';
 import {
   CareerColophon,
   CareerMasthead,
-  ContentsRail,
   CoverTile,
-  TagFilter,
   type ColophonArchiveItem,
-  type ContentsRailTopic,
+  type MastheadTopic,
 } from '../../components/career-advice';
 import { tagLabel } from '../../components/career-advice/article-format';
-import { coverVariant, nextVariant, type CoverVariant } from '../../components/career-advice/article-visuals';
 import { SiteShell } from '../../components/shell/SiteShell';
 import { JsonLd, breadcrumbList } from '../../lib/seo';
 import { parseArticleIndexParams } from '../../lib/cms/params';
@@ -20,9 +17,8 @@ import { parseArticleIndexParams } from '../../lib/cms/params';
 const PAGE_SIZE = 12;
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
-// SRS §4.8.1 — wrapped in SiteShell (server-side auth) so the route renders
-// dynamically (no ISR revalidate); BreadcrumbList JSON-LD + self-canonical
-// still render server-side.
+// SRS §4.8.1 — SiteShell (server-side auth) makes the route dynamic (no ISR
+// revalidate); BreadcrumbList JSON-LD + self-canonical still render server-side.
 
 export const metadata: Metadata = {
   title: 'Career advice — JobPortal',
@@ -73,51 +69,31 @@ export default async function CareerAdviceIndexPage({ searchParams }: PageProps)
       where: { status: 'PUBLISHED' },
       orderBy: { publishedAt: 'desc' },
       take: 5,
-      select: { slug: true, title: true, publishedAt: true },
+      select: { slug: true, title: true },
     }),
   ]);
 
-  // Topic counts across ALL published articles (the contents rail is stable,
-  // not scoped to the current filter).
   const counts = new Map<string, number>();
   for (const a of allPublished) for (const t of a.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
-  const topics: ContentsRailTopic[] = [...counts.entries()]
+  const topics: MastheadTopic[] = [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([slug, count]) => ({ slug, count }));
-  const tagListForChips = topics.map((t) => ({ slug: t.slug, label: tagLabel(t.slug), count: t.count }));
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const isDefaultView = !q && !tag && page === 1;
   const showFeatured = isDefaultView && articles.length > 0;
+  const featured = showFeatured ? articles[0] : null;
+  const gridArticles = showFeatured ? articles.slice(1) : articles;
 
-  // Global recency rank → decorative folio ("01", "02", …). aria-hidden; never
-  // framed as a sequential step.
-  const ranked = articles.map((a, i) => ({ article: a, folio: (page - 1) * PAGE_SIZE + i + 1 }));
-  const featured = showFeatured ? ranked[0] : null;
-  const gridItems = showFeatured ? ranked.slice(1) : ranked;
-
-  // Deterministic per-slug variant, with an adjacent-collision tie-break so no
-  // two neighbouring tiles share a field.
-  const gridVariants: CoverVariant[] = [];
-  let prev: CoverVariant | null = null;
-  for (const it of gridItems) {
-    let v = coverVariant(it.article.slug);
-    if (v === prev) v = nextVariant(v);
-    gridVariants.push(v);
-    prev = v;
-  }
-
-  // Archive list for the colophon — recent stories NOT on this screen (so it
-  // never repeats what's visible). Empty at 3 articles on page 1.
   const shownSlugs = new Set(articles.map((a) => a.slug));
   const archive: ColophonArchiveItem[] = recent
     .filter((r) => !shownSlugs.has(r.slug))
     .slice(0, 4)
     .map((r) => ({ slug: r.slug, title: r.title }));
 
-  const sectionTitle = q ? `Results for “${q}”` : tag ? tagLabel(tag) : 'More stories';
+  const sectionTitle = q ? `Results for “${q}”` : tag ? tagLabel(tag) : 'More from the desk';
   const sectionCount = q || tag ? total : null;
-  const showGridSection = gridItems.length > 0 || !featured;
+  const showGridSection = gridArticles.length > 0 || !featured;
 
   const bc = breadcrumbList([
     { name: 'Home', url: `${SITE}/` },
@@ -127,34 +103,19 @@ export default async function CareerAdviceIndexPage({ searchParams }: PageProps)
   return (
     <SiteShell>
       <JsonLd value={bc} />
-      <Container size="lg" className="space-y-8 py-8 lg:space-y-10 lg:py-10">
-        <CareerMasthead total={total} latestDate={recent[0]?.publishedAt ?? null} initialQuery={q ?? ''} />
-
-        {/* Topic navigation: the contents rail on desktop, chip row on mobile. */}
-        {topics.length > 0 && (
-          <>
-            <div className="hidden lg:block">
-              <ContentsRail topics={topics} activeTag={tag} query={q} />
-            </div>
-            <div className="lg:hidden">
-              <TagFilter tags={tagListForChips} />
-            </div>
-          </>
-        )}
+      <Container size="lg" className="space-y-12 py-10 lg:space-y-14 lg:py-14">
+        <CareerMasthead topics={topics} activeTag={tag} query={q} initialQuery={q ?? ''} />
 
         {featured && (
-          <div>
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-accent-700)]">
-              The cover
-            </p>
-            <CoverTile article={featured.article} folio={featured.folio} size="cover" variant="ink" headingLevel={2} />
-          </div>
+          <CoverTile article={featured} size="cover" headingLevel={2} />
         )}
 
         {showGridSection && (
           <section aria-label={sectionTitle}>
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-[var(--color-border)] pb-3">
-              <h2 className="text-lg font-semibold text-[var(--color-fg)]">{sectionTitle}</h2>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-[var(--color-border)] pb-4">
+              <h2 className="font-editorial text-2xl font-semibold tracking-tight text-[var(--color-fg)] sm:text-3xl">
+                {sectionTitle}
+              </h2>
               {sectionCount !== null && (
                 <span className="text-sm text-[var(--color-fg-muted)]">
                   {sectionCount} {sectionCount === 1 ? 'article' : 'articles'}
@@ -162,7 +123,7 @@ export default async function CareerAdviceIndexPage({ searchParams }: PageProps)
               )}
             </div>
 
-            {gridItems.length === 0 ? (
+            {gridArticles.length === 0 ? (
               <div className="mt-6 rounded-2xl border border-dashed border-[var(--color-border)] p-10 text-center">
                 {q || tag ? (
                   <>
@@ -183,10 +144,10 @@ export default async function CareerAdviceIndexPage({ searchParams }: PageProps)
                 )}
               </div>
             ) : (
-              <ul className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
-                {gridItems.map((it, i) => (
-                  <li key={it.article.slug}>
-                    <CoverTile article={it.article} folio={it.folio} size="tile" variant={gridVariants[i]!} />
+              <ul className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
+                {gridArticles.map((a) => (
+                  <li key={a.slug}>
+                    <CoverTile article={a} size="tile" />
                   </li>
                 ))}
               </ul>
@@ -195,7 +156,7 @@ export default async function CareerAdviceIndexPage({ searchParams }: PageProps)
             {totalPages > 1 && (
               <nav
                 aria-label="Pagination"
-                className="mt-8 flex items-center justify-between border-t border-[var(--color-border)] pt-6 text-sm"
+                className="mt-10 flex items-center justify-between border-t border-[var(--color-border)] pt-6 text-sm"
               >
                 <PageLink page={page - 1} disabled={page <= 1} tag={tag} q={q}>
                   ← Newer

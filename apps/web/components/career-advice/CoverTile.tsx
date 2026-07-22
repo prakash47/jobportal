@@ -1,8 +1,7 @@
 import Link from 'next/link';
-import Image from 'next/image';
 import { ArrowRight } from '@jobportal/ui/icons';
 import { authorInitials, formatArticleDate, tagLabel } from './article-format';
-import { VARIANT_STYLES, coverVariant, topicGlyph, type CoverVariant } from './article-visuals';
+import { ArticleCover } from './ArticleCover';
 
 export interface CoverTileArticle {
   slug: string;
@@ -17,22 +16,17 @@ export interface CoverTileArticle {
 
 export interface CoverTileProps {
   article: CoverTileArticle;
-  /** 1-indexed recency rank, shown as a decorative "01/02/…" folio. */
-  folio: number;
   size?: 'cover' | 'tile';
-  /** Force a field variant (the lead uses 'ink'); defaults to a per-slug hash. */
-  variant?: CoverVariant;
-  /** Title heading level — the lead story is section-level (2); grid tiles nest
-   *  under the grid's own h2, so they stay 3 (default). */
+  /** Lead story is section-level (2); grid tiles nest under the grid's h2 (3). */
   headingLevel?: 2 | 3;
 }
 
-// A designed magazine "cover plate" for image-less articles: a flat navy/tint
-// field + a large per-topic glyph + a decorative bled folio numeral + a flat
-// SVG dot texture + one cyan editorial rule + the title set big as the artwork.
-// 100% real metadata, no fabricated photo, no gradient. Renders a real cover
-// image when one exists. The whole plate is a stretched link to the read page.
-export function CoverTile({ article, folio, size = 'tile', variant, headingLevel = 3 }: CoverTileProps) {
+// A light, elevated editorial card: a cover image on top (or beside, for the
+// lead), then a serif title, excerpt, and byline. Every article carries a cover
+// (a real photo when present, otherwise a designed on-brand cover — see
+// ArticleCover). Whole-card stretched link; depth + hover lift + a soft cover
+// zoom. All-light surfaces, borders + elevation, one cyan accent.
+export function CoverTile({ article, size = 'tile', headingLevel = 3 }: CoverTileProps) {
   const { slug, title, excerpt, authorName, publishedAt, readTimeMinutes, tags, coverImageUrl } =
     article;
   const href = `/career-advice/${slug}`;
@@ -40,158 +34,79 @@ export function CoverTile({ article, folio, size = 'tile', variant, headingLevel
   const isCover = size === 'cover';
   const Heading = headingLevel === 2 ? 'h2' : 'h3';
 
-  // Image-ready: if a real cover exists, use the photo path (image on top +
-  // editorial copy below on a flat card). None of the seeded articles have one.
-  if (coverImageUrl) {
-    return (
-      <article className="group relative flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] shadow-[var(--shadow-card)] transition-colors hover:border-[var(--color-border-strong)]">
-        <div className={`w-full overflow-hidden border-b border-[var(--color-border)] ${isCover ? 'aspect-[21/9]' : 'aspect-[16/9]'}`}>
-          <Image src={coverImageUrl} alt="" width={1120} height={480} className="size-full object-cover" />
-        </div>
-        <div className="flex flex-1 flex-col p-5 sm:p-6">
-          {category && (
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-accent-700)]">
-              {tagLabel(category)}
-            </span>
-          )}
-          <Heading className={`mt-2 font-bold leading-tight tracking-tight text-[var(--color-fg)] ${isCover ? 'text-2xl sm:text-3xl' : 'text-lg'}`}>
-            <Link href={href} className="transition-colors after:absolute after:inset-0 after:content-[''] group-hover:text-[var(--color-primary-600)]">
-              {title}
-            </Link>
-          </Heading>
-          {excerpt && <p className="mt-2 line-clamp-2 text-sm text-[var(--color-fg-muted)]">{excerpt}</p>}
-          <MetaRow
-            authorName={authorName}
-            publishedAt={publishedAt}
-            readTimeMinutes={readTimeMinutes}
-            seam="border-[var(--color-border)]"
-            meta="text-[var(--color-fg-muted)]"
-            metaChip="bg-[var(--color-primary-100)] text-[var(--color-primary-700)]"
-            showCta={isCover}
-            ctaClass="text-[var(--color-primary-600)]"
-          />
-        </div>
-      </article>
-    );
-  }
+  const cover = (
+    <div className={isCover ? 'relative min-h-[240px] overflow-hidden' : 'aspect-[16/9] overflow-hidden'}>
+      <div className={`size-full transition-transform duration-300 ease-out group-hover:scale-[1.04] ${isCover ? 'absolute inset-0' : ''}`}>
+        <ArticleCover coverImageUrl={coverImageUrl} tag={category} title={title} priority={isCover} />
+      </div>
+    </div>
+  );
 
-  // Index Plate (the designed cover for image-less articles).
-  const v = variant ?? coverVariant(slug);
-  const s = VARIANT_STYLES[v];
-  const Glyph = topicGlyph(category);
-  const dotsId = `covdots-${slug}`;
-  const folioLabel = String(folio).padStart(2, '0');
+  const body = (
+    <div className={`flex flex-1 flex-col ${isCover ? 'justify-center p-7 sm:p-10' : 'p-6'}`}>
+      <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-accent-700)]">
+        {isCover ? 'Featured story' : category ? tagLabel(category) : 'Article'}
+      </span>
+      <Heading
+        className={`font-editorial mt-3 font-semibold tracking-tight text-balance text-[var(--color-fg)] transition-colors group-hover:text-[var(--color-primary-600)] ${
+          isCover ? 'text-[clamp(1.6rem,2.6vw+0.6rem,2.75rem)] leading-[1.1]' : 'text-2xl leading-[1.16]'
+        }`}
+      >
+        <Link href={href} className="after:absolute after:inset-0 after:content-['']">
+          {title}
+        </Link>
+      </Heading>
+      {excerpt && (
+        <p className={`mt-3 leading-relaxed text-[var(--color-fg-muted)] ${isCover ? 'max-w-[46ch] text-base' : 'line-clamp-2 text-sm'}`}>
+          {excerpt}
+        </p>
+      )}
+      <div className="mt-auto flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t border-[var(--color-border)] pt-4 text-[13px] text-[var(--color-fg-muted)]">
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden="true" className="flex size-6 items-center justify-center rounded-full bg-[var(--color-accent-50)] text-[10px] font-semibold text-[var(--color-accent-700)]">
+            {authorInitials(authorName)}
+          </span>
+          <span className="font-medium text-[var(--color-fg)]">{authorName}</span>
+        </span>
+        {publishedAt && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{formatArticleDate(publishedAt)}</span>
+          </>
+        )}
+        {readTimeMinutes !== null && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span>{readTimeMinutes} min read</span>
+          </>
+        )}
+        {isCover && (
+          <span className="ml-auto inline-flex items-center gap-1 font-semibold text-[var(--color-primary-600)]">
+            Read the story
+            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+          </span>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <article
-      className={`group relative flex h-full flex-col overflow-hidden rounded-2xl shadow-[var(--shadow-card)] transition-colors ${s.field} ${isCover ? 'min-h-[21rem] p-6 sm:p-8 lg:min-h-[24rem]' : 'min-h-[13rem] p-5 sm:p-6'}`}
+      className={`group relative overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] shadow-[var(--shadow-card)] transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-1 hover:border-[var(--color-border-strong)] hover:shadow-[var(--shadow-lift)] ${
+        isCover ? 'grid sm:grid-cols-2' : 'flex h-full flex-col'
+      }`}
     >
-      {/* Flat dot texture — a vector <pattern>, deliberately NOT a gradient. */}
-      {s.dot && (
-        <svg aria-hidden="true" className="pointer-events-none absolute inset-0 size-full">
-          <defs>
-            <pattern id={dotsId} width="16" height="16" patternUnits="userSpaceOnUse">
-              <circle cx="2" cy="2" r="1.3" fill={s.dot} />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill={`url(#${dotsId})`} />
-        </svg>
+      {isCover ? (
+        <>
+          <div className="order-1 border-b border-[var(--color-border)] sm:order-none sm:border-b-0 sm:border-r">{cover}</div>
+          {body}
+        </>
+      ) : (
+        <>
+          <div className="border-b border-[var(--color-border)]">{cover}</div>
+          {body}
+        </>
       )}
-      {/* Cyan editorial rule (the one deliberate accent), on the 'rule' variant. */}
-      {s.topBar && <div aria-hidden="true" className={`absolute inset-x-0 top-0 h-[3px] ${s.topBar}`} />}
-      {/* Large per-topic glyph — the visual anchor, opposite the numeral. */}
-      <Glyph
-        aria-hidden="true"
-        className={`pointer-events-none absolute -right-2 -top-3 ${s.glyph} ${isCover ? 'size-56 sm:size-72' : 'size-32'}`}
-      />
-      {/* Decorative bled folio numeral (recency rank, NOT a step). */}
-      <span
-        aria-hidden="true"
-        className={`pointer-events-none absolute -bottom-2 left-3 font-bold tabular-nums leading-none ${s.numeral} ${isCover ? 'text-[7rem] sm:text-[9rem]' : 'text-[4.5rem]'}`}
-      >
-        {folioLabel}
-      </span>
-
-      <div className={`relative flex flex-1 flex-col ${isCover ? 'max-w-[46ch]' : ''}`}>
-        {category && (
-          <span className={`text-[11px] font-semibold uppercase tracking-[0.18em] ${s.kicker}`}>
-            {tagLabel(category)}
-          </span>
-        )}
-        <Heading
-          className={`mt-3 font-bold tracking-tight text-balance ${s.title} ${s.titleHover} transition-colors ${
-            isCover ? 'text-[clamp(1.9rem,3.4vw+0.6rem,3.6rem)] leading-[1.05]' : 'text-2xl leading-[1.12]'
-          }`}
-        >
-          <Link href={href} className="after:absolute after:inset-0 after:content-['']">
-            {title}
-          </Link>
-        </Heading>
-        {excerpt && (
-          <p className={`mt-3 text-sm leading-relaxed ${s.excerpt} ${isCover ? 'line-clamp-3' : 'line-clamp-2'}`}>
-            {excerpt}
-          </p>
-        )}
-        <MetaRow
-          authorName={authorName}
-          publishedAt={publishedAt}
-          readTimeMinutes={readTimeMinutes}
-          seam={s.seam}
-          meta={s.meta}
-          metaChip={s.metaChip}
-          showCta={isCover}
-          ctaClass={v === 'ink' ? 'text-[var(--color-accent-400)]' : 'text-[var(--color-primary-600)]'}
-        />
-      </div>
     </article>
-  );
-}
-
-function MetaRow({
-  authorName,
-  publishedAt,
-  readTimeMinutes,
-  seam,
-  meta,
-  metaChip,
-  showCta,
-  ctaClass,
-}: {
-  authorName: string;
-  publishedAt: Date | null;
-  readTimeMinutes: number | null;
-  seam: string;
-  meta: string;
-  metaChip: string;
-  showCta: boolean;
-  ctaClass: string;
-}) {
-  return (
-    <div className={`mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 border-t pt-3 text-xs ${seam} ${meta}`}>
-      <span className="inline-flex items-center gap-1.5">
-        <span aria-hidden="true" className={`flex size-5 items-center justify-center rounded-full text-[9px] font-semibold ${metaChip}`}>
-          {authorInitials(authorName)}
-        </span>
-        <span className="font-medium">{authorName}</span>
-      </span>
-      {publishedAt && (
-        <>
-          <span aria-hidden="true">·</span>
-          <span>{formatArticleDate(publishedAt)}</span>
-        </>
-      )}
-      {readTimeMinutes !== null && (
-        <>
-          <span aria-hidden="true">·</span>
-          <span>{readTimeMinutes} min read</span>
-        </>
-      )}
-      {showCta && (
-        <span className={`ml-auto inline-flex items-center gap-1 font-medium ${ctaClass}`}>
-          Continue reading
-          <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-        </span>
-      )}
-    </div>
   );
 }
