@@ -48,7 +48,9 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 > One row per active piece of work. Name the concrete artifacts (models, components, endpoints) so overlap is obvious at a glance.
 
-| _(none in progress)_ | | | |
+| Developer | Branch | Building | Shared surfaces |
+|---|---|---|---|
+| Jayesh | `feature/career-advice-editorial` | **Career Advice hub → editorial-magazine redesign v2** (`/career-advice`, SRS §4.8) — owner found v1 "too simple" + wants visuals despite no cover images. Judge-panel winner "The Editorial" + "Index Plate" grafts: masthead (issue-line + oversized wordmark + search) → desktop contents rail → asymmetric featured **cover plate** → 2-up **CoverTile** grid → navy colophon CTA. New `CoverTile` (designed cover: per-topic glyph + decorative folio numeral + flat SVG dot-grid `<pattern>` + cyan rule + 3 flat navy/tint variants; renders real coverImageUrl when present), `CareerMasthead`, `ContentsRail`, `CareerColophon`, `article-visuals` helpers. Shared **`ArticleCard` untouched** (homepage safety). 100% real data, no fabricated imagery/gradients. `apps/web` only — no schema/flag/lock; career-advice barrel append-only. | Web career-advice components (append-only barrel) |
 
 ---
 
