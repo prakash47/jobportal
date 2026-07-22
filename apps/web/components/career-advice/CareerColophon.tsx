@@ -7,55 +7,41 @@ export interface ColophonArchiveItem {
 }
 
 export interface CareerColophonProps {
-  /** Extra stories not on the current screen; the "archive" list renders only
-   *  when non-empty, so it never just repeats the visible articles. */
+  /** Extra stories not on the current screen; renders only when non-empty. */
   archive?: ColophonArchiveItem[];
 }
 
-// The magazine's back page: a flat deep-navy (#192249-family) closing band that
-// pairs the one real cross-product CTA (jobs / alerts) with a conditional
-// archive list. Reuses the same flat SVG dot texture as the cover plates so the
-// page has one unified visual language. No gradient, no glow.
+// The closing band — a LIGHT cyan-tint card (no dark slab) pairing the one real
+// cross-product CTA (jobs / alerts) with a conditional archive list. Elevation +
+// a serif line keep it editorial.
 export function CareerColophon({ archive = [] }: CareerColophonProps) {
   const hasArchive = archive.length > 0;
 
   return (
     <section
       aria-label="Keep going"
-      className="relative overflow-hidden rounded-2xl border border-[var(--color-primary-700)] bg-[var(--color-primary-900)] p-6 sm:p-8"
+      className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-accent-50)] p-8 shadow-[var(--shadow-card)] sm:p-11"
     >
-      <svg aria-hidden="true" className="pointer-events-none absolute inset-0 size-full">
-        <defs>
-          <pattern id="colophon-dots" width="16" height="16" patternUnits="userSpaceOnUse">
-            <circle cx="2" cy="2" r="1.3" fill="rgba(255,255,255,0.08)" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#colophon-dots)" />
-      </svg>
-
-      <div className={`relative grid gap-8 ${hasArchive ? 'lg:grid-cols-2' : ''}`}>
-        <div className="max-w-md">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-accent-400)]">
-            Advice into action
-          </p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            Ready to apply?
+      <div className={`grid items-center gap-8 ${hasArchive ? 'lg:grid-cols-2' : ''}`}>
+        <div className="max-w-[46ch]">
+          <h2 className="font-editorial text-3xl font-semibold tracking-tight text-[var(--color-fg)] sm:text-4xl">
+            Read it, then land it.
           </h2>
-          <p className="mt-2 text-sm leading-relaxed text-[var(--color-primary-100)]">
-            Put what you&rsquo;ve read to work — find roles that match your skills, and get alerted
-            when new ones open.
+          <p className="mt-3 text-base leading-relaxed text-[var(--color-fg-muted)]">
+            Put the advice to work — find roles that match your skills, and get alerted when new ones
+            open.
           </p>
-          <div className="mt-5 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href="/jobs"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[var(--color-primary-700)] transition-colors hover:bg-[var(--color-primary-100)]"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-primary-600)] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--color-primary-700)]"
             >
               <Briefcase className="size-4" aria-hidden="true" />
               Browse jobs
             </Link>
             <Link
               href="/alerts/new"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-5 py-2.5 text-sm font-semibold text-[var(--color-fg)] transition-colors hover:bg-[var(--color-bg-muted)]"
             >
               <Bell className="size-4" aria-hidden="true" />
               Set a job alert
@@ -66,15 +52,15 @@ export function CareerColophon({ archive = [] }: CareerColophonProps) {
 
         {hasArchive && (
           <div className="lg:justify-self-end">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-accent-400)]">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-accent-700)]">
               More in the archive
-            </h2>
+            </h3>
             <ul className="mt-3 space-y-2.5">
               {archive.map((a) => (
                 <li key={a.slug}>
                   <Link
                     href={`/career-advice/${a.slug}`}
-                    className="text-sm font-medium leading-snug text-[var(--color-primary-100)] transition-colors hover:text-white hover:underline"
+                    className="font-editorial text-lg font-medium leading-snug text-[var(--color-fg)] transition-colors hover:text-[var(--color-primary-600)] hover:underline"
                   >
                     {a.title}
                   </Link>

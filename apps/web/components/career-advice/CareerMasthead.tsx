@@ -1,41 +1,82 @@
+import Link from 'next/link';
 import { ArticleSearch } from './ArticleSearch';
+import { tagLabel } from './article-format';
+
+export interface MastheadTopic {
+  slug: string;
+  count: number;
+}
 
 export interface CareerMastheadProps {
-  /** Total published stories (real) — shown in the issue-line. */
-  total: number;
-  /** Newest article's publish date (real) — the "Updated …" stamp. */
-  latestDate: Date | null;
+  topics: MastheadTopic[];
+  activeTag: string | null;
+  query: string | null;
   initialQuery?: string;
 }
 
-// The magazine masthead: a hairline "issue-line" (identity + real issue stats),
-// an oversized editorial wordmark, a one-line dek, and the article search. The
-// issue framing is what makes a handful of posts read as a curated edition
-// rather than a sparse blog list. Flat brand, borders over shadows.
-export function CareerMasthead({ total, latestDate, initialQuery = '' }: CareerMastheadProps) {
-  const updated = latestDate
-    ? latestDate.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
-    : null;
+function topicHref(slug: string | null, q: string | null): string {
+  const params = new URLSearchParams();
+  if (slug) params.set('tag', slug);
+  if (q) params.set('q', q);
+  const qs = params.toString();
+  return qs ? `/career-advice?${qs}` : '/career-advice';
+}
+
+// The editorial masthead: a small kicker, an oversized serif statement, a dek,
+// the article search, and a topic pill row — all on light. Type carries the
+// page. The pills are the topic nav (they wrap and stay usable on every
+// breakpoint, so no separate mobile control is needed).
+export function CareerMasthead({ topics, activeTag, query, initialQuery = '' }: CareerMastheadProps) {
+  const pills: Array<{ key: string; slug: string | null; label: string }> = [
+    { key: 'all', slug: null, label: 'All' },
+    ...topics.map((t) => ({ key: t.slug, slug: t.slug, label: tagLabel(t.slug) })),
+  ];
 
   return (
-    <section>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b-2 border-[var(--color-primary-600)] pb-2 text-[11px] font-semibold uppercase tracking-[0.16em]">
-        <span className="text-[var(--color-accent-700)]">Career Queue · The Editorial</span>
-        <span className="text-[var(--color-fg-muted)]">
-          {total} {total === 1 ? 'story' : 'stories'}
-          {updated && <> · Updated {updated}</>}
-        </span>
-      </div>
+    <section className="border-b border-[var(--color-border)] pb-10">
+      <div className="grid items-end gap-x-14 gap-y-8 lg:grid-cols-[1.5fr_0.95fr]">
+        <div>
+          <span className="inline-flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.17em] text-[var(--color-accent-700)]">
+            <span aria-hidden="true" className="h-0.5 w-6 bg-[var(--color-accent-500)]" />
+            The Career Queue Editorial
+          </span>
+          <h1 className="font-editorial mt-5 font-semibold tracking-tight text-balance text-[var(--color-fg)]">
+            <span className="block text-[clamp(2.8rem,6.5vw,5.5rem)] leading-[0.98]">Get hired,</span>
+            <span className="block text-[clamp(2.8rem,6.5vw,5.5rem)] leading-[0.98]">
+              on <em className="italic text-[var(--color-accent-700)]">purpose</em>.
+            </span>
+          </h1>
+        </div>
 
-      <h1 className="mt-6 max-w-[16ch] text-4xl font-bold leading-[1.04] tracking-tight text-[var(--color-fg)] sm:text-5xl lg:text-6xl">
-        Career advice, <span className="text-[var(--color-accent-700)]">worth reading</span>
-      </h1>
-      <p className="mt-4 max-w-[58ch] text-base leading-relaxed text-[var(--color-fg-muted)] sm:text-lg">
-        Resumes, interviews, salary, and getting hired — written for job seekers in India.
-      </p>
-
-      <div className="mt-6">
-        <ArticleSearch initialQuery={initialQuery} />
+        <div>
+          <p className="max-w-[42ch] text-lg leading-relaxed text-[var(--color-fg-muted)]">
+            Field-tested writing on resumes, interviews, and salary — from the people who see what
+            recruiters actually do.
+          </p>
+          <div className="mt-5">
+            <ArticleSearch initialQuery={initialQuery} />
+          </div>
+          <nav aria-label="Browse topics" className="mt-4 flex flex-wrap gap-2">
+            {pills.map((p) => {
+              const active = p.slug === activeTag;
+              return (
+                <Link
+                  key={p.key}
+                  href={topicHref(p.slug, query)}
+                  aria-current={active ? 'true' : undefined}
+                  className={
+                    'rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors ' +
+                    (active
+                      ? 'border-[var(--color-primary-600)] bg-[var(--color-primary-600)] text-white'
+                      : 'border-[var(--color-border-strong)] text-[var(--color-fg-muted)] hover:border-[var(--color-primary-300)] hover:text-[var(--color-fg)]')
+                  }
+                >
+                  {p.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
       </div>
     </section>
   );

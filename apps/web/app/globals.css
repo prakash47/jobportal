@@ -88,6 +88,16 @@
   .card-lift:hover { transform: none; }
 }
 
+/* Editorial serif — used ONLY on the /career-advice hub headlines for a
+   magazine voice distinct from the Inter UI. A system-serif stack (no webfont
+   to load); ui-serif maps to the OS display serif, with elegant fallbacks. Kept
+   OUTSIDE @layer utilities so it is ALWAYS emitted (Tailwind 4 tree-shakes
+   custom classes inside the utilities layer). */
+.font-editorial {
+  font-family: ui-serif, "Charter", "Iowan Old Style", "Palatino Linotype", Georgia, "Times New Roman", serif;
+  font-feature-settings: "liga" 1, "kern" 1;
+}
+
 /* Thin, subtle scrollbar for scrollable overlays (the auth modal on short
    viewports). Kept OUTSIDE @layer utilities so it is ALWAYS emitted — Tailwind 4
    tree-shakes custom classes inside the utilities layer. Replaces the chunky
