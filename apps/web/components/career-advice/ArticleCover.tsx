@@ -11,7 +11,7 @@ const VB = '0 0 400 225';
 
 function Frame({ bg, children }: { bg: string; children: ReactNode }) {
   return (
-    <svg viewBox={VB} className="size-full" preserveAspectRatio="xMidYMid slice" role="img" aria-hidden="true">
+    <svg viewBox={VB} className="size-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
       <rect width="400" height="225" fill={bg} />
       {children}
     </svg>
