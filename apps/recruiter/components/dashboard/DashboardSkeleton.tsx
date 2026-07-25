@@ -23,7 +23,11 @@ function PanelSkeleton({ rows }: { rows: number }) {
 /** Stand-in for the streamed KPI half while its six aggregate queries run. */
 export function KpiSkeleton() {
   return (
-    <div role="status" aria-label="Loading your metrics" className="space-y-6">
+    <div role="status" className="space-y-6">
+      {/* Real text, not an aria-label: a live region announces its CONTENT, and
+          every box below is aria-hidden, so an aria-label alone would leave the
+          region silent. */}
+      <span className="sr-only">Loading your metrics…</span>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }, (_, i) => (
           <div

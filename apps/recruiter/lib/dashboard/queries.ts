@@ -21,7 +21,7 @@ import { prisma } from '@jobportal/db';
 import { readUserFromCookie } from '../auth/server-session';
 import type { KycBadgeStatus } from '../../components/kyc/KycStatusBadge';
 import type { JobStatus } from '../../components/jobs/JobStatusBadge';
-import type { CompanyProfileFields, KycFields } from './verification';
+import { filled, type CompanyProfileFields, type KycFields } from './verification';
 
 export type ApplicationStatus =
   | 'APPLIED'
@@ -139,13 +139,16 @@ export const getDashboardRecruiter = cache(async (): Promise<DashboardRecruiter 
       employeeCount: row.company.employeeCount,
       foundedYear: row.company.foundedYear,
     },
+    // The three identifiers collapse to booleans HERE, at the boundary, so the
+    // raw GSTIN / legal name / authorized-person name never enter the returned
+    // object and cannot reach a render tree or an RSC payload by accident. The
+    // card only ever asks "was this provided?".
     kyc: row.company.kyc
       ? {
           status: row.company.kyc.status as KycBadgeStatus,
-          legalName: row.company.kyc.legalName,
-          // Presence is all that leaves this function — never the number itself.
-          gstNumber: row.company.kyc.gstNumber,
-          authorizedPersonName: row.company.kyc.authorizedPersonName,
+          hasLegalName: filled(row.company.kyc.legalName),
+          hasGstNumber: filled(row.company.kyc.gstNumber),
+          hasAuthorizedPersonName: filled(row.company.kyc.authorizedPersonName),
           docTypes: row.company.kyc.documents.map((d) => d.docType),
           rejectionReason: row.company.kyc.rejectionReason,
         }
@@ -159,10 +162,12 @@ export interface TopJob {
   status: JobStatus;
   applications: number;
   /**
-   * Whether the viewer posted this job. The list is company-wide but
-   * /jobs/[id] is owner-or-collaborator scoped and 404s for anyone else, so
-   * only own rows are linked — the same guard the Jobs list applies to
-   * teammate rows, and the reason it does.
+   * Whether the viewer posted this job. The list is company-wide, but
+   * /jobs/[id] is scoped to the poster plus any collaborators and 404s for
+   * everyone else. Rather than spend another round-trip resolving collaborator
+   * rows, only the viewer's own jobs are linked: a collaborator therefore sees
+   * their row as plain text — under-linked, never a dead click. This is the
+   * same conservative line the Jobs list draws on teammate rows.
    */
   isOwn: boolean;
 }

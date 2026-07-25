@@ -5,12 +5,12 @@ import { JOB_STATUS_META, type JobStatus } from '../jobs/JobStatusBadge';
 // into the Jobs list already filtered to it (/jobs?status=…) — the same
 // destination the sidebar's "Draft Jobs" item uses.
 //
-// Open and Draft always render, because they are the two states a recruiter
-// acts on daily and a visible zero is information. The other three only render
-// when they actually hold something: PENDING_MODERATION is unreachable while
-// moderation.jobs.enabled is OFF, and nothing in the system flips a job to
-// EXPIRED on its own, so permanently-empty rows would just be noise.
-const ALWAYS_SHOWN: readonly JobStatus[] = ['ACTIVE', 'DRAFT'];
+// Open, Draft, Expired and Closed always render — all four are reachable states
+// a recruiter acts on, and a visible zero is information. (Expiry is real: the
+// job-lifecycle worker sweeps past-due postings to EXPIRED daily.)
+// PENDING_MODERATION is the exception: it is unreachable while
+// moderation.jobs.enabled is OFF, so it appears only if it actually holds rows.
+const ALWAYS_SHOWN: readonly JobStatus[] = ['ACTIVE', 'DRAFT', 'EXPIRED', 'CLOSED'];
 const ORDER: readonly JobStatus[] = ['ACTIVE', 'DRAFT', 'PENDING_MODERATION', 'EXPIRED', 'CLOSED'];
 
 export function JobStatusBreakdown({

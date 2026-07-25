@@ -133,7 +133,19 @@ export function VerificationCard({ progress }: { progress: VerificationProgress 
 function StepRow({ step }: { step: VerificationStep }) {
   const style = STATE_STYLE[step.state];
   const Icon = style.icon;
-  const showCount = step.total > 1 && step.state !== 'DONE' && step.state !== 'IN_REVIEW';
+  // Only show "N of M" while it still tells the recruiter something. A rejected
+  // submission keeps all five requirements on file, so "5 of 5" beside an
+  // Action-needed chip would read as a contradiction; the reason line carries
+  // the meaning there.
+  const showCount =
+    step.total > 1 &&
+    step.state !== 'DONE' &&
+    step.state !== 'IN_REVIEW' &&
+    step.done < step.total;
+  // "Not started" is wrong once some sub-items are filled in — the same row
+  // announces "5 of 8" right next to it.
+  const srLabel =
+    step.state === 'TODO' && step.done > 0 ? 'In progress' : style.srLabel;
 
   return (
     <li className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
@@ -151,7 +163,7 @@ function StepRow({ step }: { step: VerificationStep }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <span className="text-sm font-medium text-[var(--color-fg)]">{step.label}</span>
-          <span className="sr-only">— {style.srLabel}</span>
+          <span className="sr-only">— {srLabel}</span>
           {showCount && (
             <span className="text-xs tabular-nums text-[var(--color-fg-muted)]">
               {step.done} of {step.total}

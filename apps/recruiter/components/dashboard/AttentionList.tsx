@@ -88,7 +88,13 @@ export function AttentionList({
             <li key={item.key}>
               <Link
                 href={item.href}
-                className="group flex items-start gap-3 py-3 first:pt-0 last:pb-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-ring)]"
+                // Uniform py-3, deliberately WITHOUT first:pt-0/last:pb-0: the
+                // link is the sole child of its <li>, so it always matches both
+                // :first-child and :last-child and those modifiers would zero
+                // the padding on every row (the bug that flattened the seeker
+                // rail rows). Keeping the padding on the link also keeps the
+                // whole row as the tap target.
+                className="group flex items-start gap-3 py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-ring)]"
               >
                 <item.icon
                   className="mt-0.5 size-4 shrink-0 text-[var(--color-fg-muted)]"

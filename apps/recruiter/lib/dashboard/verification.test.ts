@@ -4,6 +4,7 @@ import {
   KYC_TOTAL,
   companyProfileDone,
   computeVerificationProgress,
+  filled,
   formatList,
   missingCompanyFields,
   missingKycRequirements,
@@ -23,11 +24,13 @@ const FULL_COMPANY: CompanyProfileFields = {
   foundedYear: 2016,
 };
 
+// Presence-only by design — the raw GSTIN / legal name never leave the query
+// layer, so this logic only ever sees booleans.
 const FULL_KYC: KycFields = {
   status: 'NOT_SUBMITTED',
-  legalName: 'Example Pvt Ltd',
-  gstNumber: '29ABCDE1234F1Z5',
-  authorizedPersonName: 'Priya Sharma',
+  hasLegalName: true,
+  hasGstNumber: true,
+  hasAuthorizedPersonName: true,
   docTypes: ['BUSINESS_REGISTRATION', 'AUTHORIZED_PERSON_ID'],
   rejectionReason: null,
 };
@@ -90,13 +93,22 @@ describe('missingKycRequirements', () => {
   });
 
   it('detects each missing identifier independently', () => {
-    expect(missingKycRequirements({ ...FULL_KYC, legalName: null })).toEqual([
+    expect(missingKycRequirements({ ...FULL_KYC, hasLegalName: false })).toEqual([
       'legal company name',
     ]);
-    expect(missingKycRequirements({ ...FULL_KYC, gstNumber: '  ' })).toEqual(['GST number']);
-    expect(missingKycRequirements({ ...FULL_KYC, authorizedPersonName: '' })).toEqual([
+    expect(missingKycRequirements({ ...FULL_KYC, hasGstNumber: false })).toEqual(['GST number']);
+    expect(missingKycRequirements({ ...FULL_KYC, hasAuthorizedPersonName: false })).toEqual([
       'authorized person name',
     ]);
+  });
+
+  // The query layer reduces the identifiers to booleans with this same helper,
+  // so a whitespace-only GSTIN must not count as provided.
+  it('treats blank and whitespace-only identifiers as absent via filled()', () => {
+    expect(filled('  ')).toBe(false);
+    expect(filled('')).toBe(false);
+    expect(filled(null)).toBe(false);
+    expect(filled('29ABCDE1234F1Z5')).toBe(true);
   });
 
   it('detects each missing document independently', () => {
@@ -280,6 +292,40 @@ describe('computeVerificationProgress — totals', () => {
     );
     expect(p.steps[1]!.done).toBe(4);
     expect(p.percent).toBe(50);
+  });
+
+  // Regression: a REJECTED row still has all five requirements on file — the
+  // API cannot reach PENDING without them and a review writes only the status
+  // and reason. Crediting that as 5/5 drove the bar to 100% while the headline
+  // beside it still read "2 of 3 complete", and screen readers were told
+  // "Verification 100% complete" on an account that had just been turned down.
+  it('never shows a full bar on a rejected submission', () => {
+    const p = computeVerificationProgress(input({ kyc: { ...FULL_KYC, status: 'REJECTED' } }));
+    expect(p.steps[2]!.done).toBe(KYC_TOTAL); // all five ARE on file...
+    expect(p.steps[2]!.fractionComplete).toBeLessThan(1); // ...but the step is not finished
+    expect(p.stepsDone).toBe(2);
+    expect(p.percent).toBeLessThan(100);
+    expect(p.percent).toBe(93);
+  });
+
+  // The bar and the counter must never contradict each other, in any state.
+  it('reaches 100% only when the headline counter is also complete', () => {
+    const cases: VerificationInput[] = [
+      input(),
+      input({ workEmailVerified: false }),
+      input({ company: null }),
+      input({ kyc: null }),
+      input({ kyc: { ...FULL_KYC, status: 'PENDING' } }),
+      input({ kyc: { ...FULL_KYC, status: 'REJECTED' } }),
+      input({ kyc: { ...FULL_KYC, status: 'VERIFIED' } }),
+      input({ kyc: null, kycDisabled: true }),
+      input({ workEmailVerified: false, company: null, kyc: null }),
+      input({ company: { ...FULL_COMPANY, logoUrl: null }, kyc: { ...FULL_KYC, status: 'REJECTED' } }),
+    ];
+    for (const c of cases) {
+      const p = computeVerificationProgress(c);
+      expect(p.percent === 100).toBe(p.complete);
+    }
   });
 
   it('counts a submitted-but-unreviewed KYC toward the total', () => {

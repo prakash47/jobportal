@@ -53,15 +53,17 @@ export async function DashboardKpis({ companyId, userId }: { companyId: number; 
             hint={kpis.postedByYou > 0 ? `${kpis.postedByYou} posted by you` : undefined}
             icon={Briefcase}
             href="/jobs"
-            ariaNoun="jobs posted — view all jobs"
+            ariaAction="View all jobs"
           />
+          {/* "Open", not "Active" — that is the label JOB_STATUS_META gives
+              ACTIVE everywhere else on this page and across the Jobs list. */}
           <KpiTile
-            label="Active jobs"
+            label="Open jobs"
             value={jobsByStatus.ACTIVE}
             hint={kpis.expiringSoon > 0 ? `${kpis.expiringSoon} expiring soon` : 'Live for candidates'}
             icon={TrendingUp}
             href="/jobs?status=ACTIVE"
-            ariaNoun="active jobs — view open jobs"
+            ariaAction="View open jobs"
           />
           <KpiTile
             label="Draft jobs"
@@ -69,23 +71,29 @@ export async function DashboardKpis({ companyId, userId }: { companyId: number; 
             hint="Saved but not published"
             icon={FileText}
             href="/jobs?status=DRAFT"
-            ariaNoun="draft jobs — view drafts"
+            ariaAction="View drafts"
           />
+          {/* Applications, not applicants: one candidate applying to three of
+              your jobs is three rows here. Naming it "applicants" would claim a
+              distinct-people count this query does not compute. */}
           <KpiTile
-            label="Total applicants"
+            label="Applications received"
             value={kpis.totalApplications}
             hint={`${kpis.inPipeline.toLocaleString('en-IN')} still in the pipeline`}
             icon={Users}
             href="/jobs"
-            ariaNoun="applications received — view jobs"
+            ariaAction="View jobs"
           />
+          {/* APPLIED means "no status transition yet". Nothing records whether
+              a recruiter has opened the application, so the hint describes the
+              stage rather than claiming an unread state. */}
           <KpiTile
             label="Needs review"
             value={appsByStatus.APPLIED}
-            hint="Not opened yet"
+            hint="Awaiting a first decision"
             icon={ClipboardList}
             href="/jobs"
-            ariaNoun="applications awaiting review — view jobs"
+            ariaAction="View jobs"
           />
           <KpiTile
             label="Candidates hired"
@@ -96,7 +104,6 @@ export async function DashboardKpis({ companyId, userId }: { companyId: number; 
                 : 'Marked hired by your team'
             }
             icon={UserPlus}
-            ariaNoun="candidates hired"
           />
         </div>
       </section>

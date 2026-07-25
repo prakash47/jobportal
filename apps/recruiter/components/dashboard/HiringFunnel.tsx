@@ -44,25 +44,30 @@ export function HiringFunnel({
           // "none"; zero stays a flat empty track.
           const pct = max > 0 && value > 0 ? Math.max(2, (value / max) * 100) : 0;
           return (
-            <div key={status} className="grid grid-cols-[7.5rem_1fr_3rem] items-center gap-3">
+            // A <div> inside <dl> may wrap a dt/dd pair, but nothing else is
+            // allowed between them — so the bar lives INSIDE the <dd> alongside
+            // its number rather than as a third sibling.
+            <div key={status} className="grid grid-cols-[7.5rem_1fr] items-center gap-3">
               <dt className="truncate text-sm text-[var(--color-fg-muted)]">{label}</dt>
-              <div
-                aria-hidden="true"
-                className="h-1.5 overflow-hidden rounded-full bg-[var(--color-bg-muted)]"
-              >
-                <div
-                  className="h-full rounded-full bg-[var(--color-primary-600)]"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <dd
-                className={
-                  value === 0
-                    ? 'text-right text-sm tabular-nums text-[var(--color-fg-muted)]'
-                    : 'text-right text-sm font-medium tabular-nums text-[var(--color-fg)]'
-                }
-              >
-                {value.toLocaleString('en-IN')}
+              <dd className="grid grid-cols-[1fr_3rem] items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="block h-1.5 overflow-hidden rounded-full bg-[var(--color-bg-muted)]"
+                >
+                  <span
+                    className="block h-full rounded-full bg-[var(--color-primary-600)]"
+                    style={{ width: `${pct}%` }}
+                  />
+                </span>
+                <span
+                  className={
+                    value === 0
+                      ? 'text-right text-sm tabular-nums text-[var(--color-fg-muted)]'
+                      : 'text-right text-sm font-medium tabular-nums text-[var(--color-fg)]'
+                  }
+                >
+                  {value.toLocaleString('en-IN')}
+                </span>
               </dd>
             </div>
           );

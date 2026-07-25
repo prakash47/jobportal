@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { JobStatusBadge } from '../jobs/JobStatusBadge';
+import { JobStatusBadge, JOB_STATUS_META } from '../jobs/JobStatusBadge';
 import type { TopJob } from '../../lib/dashboard/queries';
 
 // The company's postings ranked by how many applications they have pulled in —
@@ -58,7 +58,11 @@ export function TopJobs({ jobs }: { jobs: TopJob[] }) {
                 {job.isOwn ? (
                   <Link
                     href={`/jobs/${job.id}`}
-                    aria-label={`${job.title} — ${job.applications} applications`}
+                    // Includes the status, which the badge conveys visually —
+                    // an aria-label replaces the row's content entirely, so
+                    // omitting it would announce status on teammates' unlinked
+                    // rows but drop it from your own.
+                    aria-label={`${job.title}. ${JOB_STATUS_META[job.status].label}. ${job.applications} applications`}
                     className="flex items-center gap-3 py-2.5 transition-colors hover:text-[var(--color-primary-700)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-ring)]"
                   >
                     {title}
