@@ -129,7 +129,9 @@ export default async function AuthedLayout({ children }: { children: React.React
           <Link
             href="/dashboard"
             aria-label="Career Queue Recruiter — dashboard"
-            className="flex items-center gap-2.5 px-4 py-4"
+            /* focus-visible:outline-white — the inherited ring (primary-500) is
+               only 1.96:1 on this navy rail (see SidebarNav's FOCUS_ON_NAVY). */
+            className="flex items-center gap-2.5 px-4 py-4 focus-visible:outline-white"
           >
             <Logo variant="mark" onDark priority className="h-7 w-auto" />
             <span className="text-[15px] font-semibold text-white">Recruiter</span>

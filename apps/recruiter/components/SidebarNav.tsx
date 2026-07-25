@@ -89,13 +89,25 @@ function isActive(pathname: string, href: string): boolean {
 // follow the light/dark token swap, so its states are alpha-white rather than
 // surface tokens — same approach as the seeker dashboard's rail. Contrast on
 // #192249: white/70 = 8.3:1, white/60 = 6.3:1, cyan accent-500 = 5.2:1.
-const ROW = 'mt-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors';
+// FOCUS: theme.css's base rule paints :focus-visible with --color-ring
+// (= --color-primary-500). That was a 7.5:1 outline back when this rail was
+// white, but against the navy rail (--color-primary-600) it measures 1.96:1 —
+// below the 3:1 WCAG 1.4.11 floor for a focus indicator, on the portal's whole
+// primary navigation. Because theme.css sets an author `outline`, the browser's
+// own adaptive ring is suppressed, so there is no fallback. Re-point just the
+// colour to white (~15:1 on navy); width/offset stay inherited. theme.css is
+// shared with apps/web and must not be edited, so this is done here.
+const FOCUS_ON_NAVY = 'focus-visible:outline-white';
+
+const ROW =
+  `mt-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${FOCUS_ON_NAVY}`;
 const ROW_ACTIVE = 'bg-white/10 font-medium text-white';
 const ROW_IDLE = 'text-white/70 hover:bg-white/5 hover:text-white';
 
 // Child rows carry no icon of their own; the left padding lines their label up
 // with the parents' labels (px-3 = 12px, icon 18px, gap-3 = 12px → 42px).
-const CHILD_ROW = 'mt-0.5 block rounded-lg py-2 pr-3 pl-[42px] text-sm transition-colors';
+const CHILD_ROW =
+  `mt-0.5 block rounded-lg py-2 pr-3 pl-[42px] text-sm transition-colors ${FOCUS_ON_NAVY}`;
 
 const ICON = 'size-[18px] shrink-0';
 // Brand cyan on the active row's icon only — the seeker rail's single accent.

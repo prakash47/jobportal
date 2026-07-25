@@ -1,5 +1,6 @@
-import { Badge, type BadgeVariant } from '@jobportal/ui';
+import { Badge, cn, type BadgeVariant } from '@jobportal/ui';
 import type { SupportTicketStatus } from '@jobportal/db';
+import { NEUTRAL_ON_ANY_SURFACE } from '../badge-surface';
 
 // Ticket lifecycle status shown as a coloured, labelled Badge (colour + text
 // together — never colour alone, WCAG 1.4.1). Server-compatible (no client
@@ -14,7 +15,11 @@ const CONFIG: Record<SupportTicketStatus, { variant: BadgeVariant; label: string
 export function TicketStatusBadge({ status }: { status: SupportTicketStatus }) {
   const { variant, label } = CONFIG[status];
   return (
-    <Badge variant={variant} aria-label={`Ticket status: ${label}`}>
+    <Badge
+      variant={variant}
+      className={cn(variant === 'neutral' && NEUTRAL_ON_ANY_SURFACE)}
+      aria-label={`Ticket status: ${label}`}
+    >
       {label}
     </Badge>
   );

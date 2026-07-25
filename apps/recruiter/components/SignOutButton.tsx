@@ -39,7 +39,9 @@ export function SignOutButton() {
       disabled={busy}
       aria-label="Sign out"
       aria-busy={busy || undefined}
-      className="shrink-0 rounded-md p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
+      /* focus-visible:outline-white — theme.css's base focus ring is
+         --color-primary-500, only 1.96:1 against this navy rail (see SidebarNav). */
+      className="shrink-0 rounded-md p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-white disabled:opacity-50"
     >
       {busy ? (
         <Loader2 className="size-[18px] animate-spin" aria-hidden />

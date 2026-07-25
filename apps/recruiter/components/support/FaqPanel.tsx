@@ -80,6 +80,10 @@ export function FaqPanel() {
 
       {results.length === 0 ? (
         <EmptyState
+          // The shared EmptyState has no fill of its own; on the muted canvas it
+          // needs the elevated surface to read as a panel (the app's other empty
+          // states carry this fill directly).
+          className="bg-[var(--color-bg-elevated)]"
           title="No matching questions"
           description="Try a different search or topic. If you still can’t find an answer, contact us and we’ll help."
           action={

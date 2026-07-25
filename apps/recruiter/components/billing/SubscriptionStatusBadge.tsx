@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
-import { Badge, type BadgeVariant } from '@jobportal/ui';
+import { Badge, cn, type BadgeVariant } from '@jobportal/ui';
+import { NEUTRAL_ON_ANY_SURFACE } from '../badge-surface';
 
 // Display status for the company's recruiter subscription. Derived at read
 // time (an ACTIVE row whose period has lapsed renders as EXPIRED — no cron
@@ -30,7 +31,11 @@ const CONFIG: Record<
 export function SubscriptionStatusBadge({ status }: { status: SubscriptionBadgeStatus }) {
   const { variant, label, icon } = CONFIG[status];
   return (
-    <Badge variant={variant} className="gap-1" aria-label={`Subscription status: ${label}`}>
+    <Badge
+      variant={variant}
+      className={cn('gap-1', variant === 'neutral' && NEUTRAL_ON_ANY_SURFACE)}
+      aria-label={`Subscription status: ${label}`}
+    >
       {icon}
       <span>{label}</span>
     </Badge>

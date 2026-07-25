@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Input, Label, Textarea, cn } from '@jobportal/ui';
 import type { JobType } from '../../lib/job-types';
+import { NEUTRAL_ON_ANY_SURFACE } from '../badge-surface';
 import { SalaryTrendsPanel } from './SalaryTrendsPanel';
 import { ReachMeter } from './ReachMeter';
 
@@ -900,7 +901,15 @@ function ChipPicker({
             className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
             aria-pressed={selected.has(e.id)}
           >
-            <Badge variant={selected.has(e.id) ? 'primary' : 'neutral'}>{e.name}</Badge>
+            {/* The unselected chip is Badge `neutral`, whose --color-bg-muted fill
+                is now the page canvas colour — without an explicit surface the
+                chip would vanish on this (uncarded) wizard form. */}
+            <Badge
+              variant={selected.has(e.id) ? 'primary' : 'neutral'}
+              className={selected.has(e.id) ? undefined : NEUTRAL_ON_ANY_SURFACE}
+            >
+              {e.name}
+            </Badge>
           </button>
         ))}
       </div>

@@ -58,12 +58,17 @@ export function KpiSkeleton() {
 export function DashboardPageSkeleton() {
   return (
     <div data-wide className="space-y-8">
+      {/* These three sit directly on the page canvas, not inside a card. The
+          shared Skeleton fills with --color-bg-muted, which IS the canvas colour
+          now — so the header of the post-sign-in loading state would be blank.
+          Step one token darker; the ones inside the white card below are fine as
+          they are. */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Skeleton className="h-7 w-40" />
-          <Skeleton className="mt-2 h-4 w-72" />
+          <Skeleton className="h-7 w-40 bg-[var(--color-border)]" />
+          <Skeleton className="mt-2 h-4 w-72 bg-[var(--color-border)]" />
         </div>
-        <Skeleton className="h-9 w-28" />
+        <Skeleton className="h-9 w-28 bg-[var(--color-border)]" />
       </div>
       <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-5 sm:p-6">
         <Skeleton className="h-5 w-32" />
