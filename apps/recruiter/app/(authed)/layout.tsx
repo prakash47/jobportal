@@ -26,30 +26,44 @@ const BELL_FEED_LIMIT = 20;
 export default async function AuthedLayout({ children }: { children: React.ReactNode }) {
   const user = await requireRecruiter();
 
-  // Company identity for the top bar (logo + name + KYC status), shown on every
-  // authed page. Reads-direct via Prisma. Null only for a just-registered
-  // recruiter whose row isn't ready yet — the cluster is simply omitted then.
-  const recruiter = await prisma.recruiter.findUnique({
-    where: { userId: user.sub },
-    select: {
-      company: {
-        select: { id: true, name: true, logoUrl: true, kyc: { select: { status: true } } },
+  // These four reads are mutually independent, so they run together rather than
+  // in series. The shell blocks every authed page's first paint — including the
+  // dashboard, the landing page after sign-in — so the cost here is paid on the
+  // slowest of the four, not their sum.
+  //
+  //  • Company identity for the top bar (logo + name + KYC status), shown on
+  //    every authed page. Reads-direct via Prisma. Null only for a
+  //    just-registered recruiter whose row isn't ready yet — the cluster is
+  //    simply omitted then.
+  //  • Plans & Billing nav group, gated on RECRUITER_PLANS_VISIBLE (seeded ON)
+  //    so every recruiter — including Free-plan ones, i.e. all of them on day
+  //    one — sees the group. Cosmetic only; the middleware (L1) and pages (L2)
+  //    enforce visibility for real, and the API (L3) enforces purchasability
+  //    separately via SUBSCRIPTION_SYSTEM.
+  //  • The notification bell's killswitch (L2 — ON hides the bell entirely).
+  //  • The KYC killswitch. /kyc already 404s when it is ON, but this badge kept
+  //    rendering regardless, so a recruiter saw a "Not started" / "Action
+  //    needed" verification status pointing at a feature that had been switched
+  //    off, with no page to go and resolve it.
+  const [recruiter, billingEnabled, notificationsKilled, kycKilled] = await Promise.all([
+    prisma.recruiter.findUnique({
+      where: { userId: user.sub },
+      select: {
+        company: {
+          select: { id: true, name: true, logoUrl: true, kyc: { select: { status: true } } },
+        },
       },
-    },
-  });
+    }),
+    isFlagEnabled(FLAG.RECRUITER_PLANS_VISIBLE),
+    isFlagEnabled('killswitch.recruiter_notifications'),
+    isFlagEnabled('killswitch.recruiter_kyc'),
+  ]);
   const company = recruiter?.company ?? null;
-
-  // Plans & Billing nav group. Gated on RECRUITER_PLANS_VISIBLE (seeded ON) so
-  // every recruiter — including Free-plan ones, i.e. all of them on day one —
-  // sees the group. Cosmetic only; the middleware (L1) and pages (L2) enforce
-  // visibility for real, and the API (L3) enforces purchasability separately
-  // via SUBSCRIPTION_SYSTEM.
-  const billingEnabled = await isFlagEnabled(FLAG.RECRUITER_PLANS_VISIBLE);
+  const notificationsEnabled = !notificationsKilled;
+  const kycEnabled = !kycKilled;
 
   // Reads-direct topology: server-render the bell's initial unread count + feed
-  // via Prisma (the client island then polls + refreshes through the BFF). When
-  // killswitch.recruiter_notifications is ON the bell is hidden entirely (L2).
-  const notificationsEnabled = !(await isFlagEnabled('killswitch.recruiter_notifications'));
+  // via Prisma (the client island then polls + refreshes through the BFF).
   let initialUnreadCount = 0;
   let initialItems: NotificationItem[] = [];
   if (notificationsEnabled) {
@@ -118,7 +132,7 @@ export default async function AuthedLayout({ children }: { children: React.React
                 <span className="truncate text-sm font-medium text-[var(--color-fg)]">
                   {company.name}
                 </span>
-                <KycStatusBadge status={company.kyc?.status ?? 'NOT_SUBMITTED'} />
+                {kycEnabled && <KycStatusBadge status={company.kyc?.status ?? 'NOT_SUBMITTED'} />}
               </div>
             ) : (
               // Keep the bell pinned right (justify-between) even with no company.
