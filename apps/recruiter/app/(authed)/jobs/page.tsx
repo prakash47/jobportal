@@ -280,7 +280,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
       <JobsFilterBar locations={locations} posters={posters} />
 
       {rows.length === 0 ? (
-        <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">
+        <div className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-10 text-center">
           <p className="text-sm font-medium text-[var(--color-fg)]">
             {filtered ? 'No jobs match these filters' : 'No jobs yet'}
           </p>

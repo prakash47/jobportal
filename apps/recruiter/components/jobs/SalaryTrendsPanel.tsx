@@ -50,7 +50,7 @@ export function SalaryTrendsPanel({ title, cityId }: { title: string; cityId: nu
   }, [title, cityId]);
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] p-4">
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4">
       <h3 className="text-sm font-semibold text-[var(--color-fg)]">Salary trends</h3>
       {title.trim().length < 3 ? (
         <p className="mt-2 text-xs text-[var(--color-fg-muted)]">

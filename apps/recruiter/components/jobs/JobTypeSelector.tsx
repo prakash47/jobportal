@@ -34,9 +34,12 @@ export function JobTypeSelector({ availability, onSelect, onBack }: JobTypeSelec
               key={meta.type}
               className={cn(
                 'flex flex-col rounded-lg border p-5 transition-colors',
+                // Cards sit on the muted canvas, so an available card is an
+                // elevated white surface; an unavailable one is the same card
+                // held back to a translucent fill so it reads as dimmed.
                 available
-                  ? 'border-[var(--color-border)]'
-                  : 'border-[var(--color-border)] bg-[var(--color-bg-muted)]/40',
+                  ? 'border-[var(--color-border)] bg-[var(--color-bg-elevated)]'
+                  : 'border-[var(--color-border)] bg-[var(--color-bg-elevated)]/50',
                 meta.recommended && available && 'border-[var(--color-primary-600)]',
               )}
             >

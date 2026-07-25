@@ -53,7 +53,7 @@ export default async function TicketsPage() {
       </header>
 
       {tickets.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] p-10 text-center">
+        <div className="rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-10 text-center">
           <p className="text-sm font-medium text-[var(--color-fg)]">No tickets yet</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-[var(--color-fg-muted)]">
             Raise a ticket when you hit a problem you want us to track. You&rsquo;ll see replies and
@@ -64,7 +64,7 @@ export default async function TicketsPage() {
           </div>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-[var(--color-border)]">
+        <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
           <table className="w-full text-sm">
             <thead>
               <tr>

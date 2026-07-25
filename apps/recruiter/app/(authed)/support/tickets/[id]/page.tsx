@@ -82,8 +82,11 @@ export default async function TicketDetailPage({
               <li
                 key={m.id}
                 className={`rounded-lg border p-4 ${
+                  // Both bubbles sit on the muted canvas, so both need a fill of
+                  // their own. Support is tinted with the brand navy's lightest
+                  // step; the recruiter's own messages stay plain elevated.
                   m.fromSupport
-                    ? 'border-[var(--color-border-strong)] bg-[var(--color-bg-muted)]'
+                    ? 'border-[var(--color-primary-200)] bg-[var(--color-primary-50)]'
                     : 'border-[var(--color-border)] bg-[var(--color-bg-elevated)]'
                 }`}
               >

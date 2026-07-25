@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
-import { Badge, type BadgeVariant } from '@jobportal/ui';
+import { Badge, cn, type BadgeVariant } from '@jobportal/ui';
+import { NEUTRAL_ON_ANY_SURFACE } from '../badge-surface';
 
 // The four verification states the recruiter sees. Mirrors the Prisma KycStatus
 // enum (kept as a local union so this presentational component pulls no Prisma
@@ -19,7 +20,11 @@ const CONFIG: Record<KycBadgeStatus, { variant: BadgeVariant; label: string; ico
 export function KycStatusBadge({ status }: { status: KycBadgeStatus }) {
   const { variant, label, icon } = CONFIG[status];
   return (
-    <Badge variant={variant} className="gap-1" aria-label={`Verification status: ${label}`}>
+    <Badge
+      variant={variant}
+      className={cn('gap-1', variant === 'neutral' && NEUTRAL_ON_ANY_SURFACE)}
+      aria-label={`Verification status: ${label}`}
+    >
       {icon}
       <span>{label}</span>
     </Badge>

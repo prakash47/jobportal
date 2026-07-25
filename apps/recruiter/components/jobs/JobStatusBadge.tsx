@@ -1,4 +1,5 @@
 import { Badge, cn, type BadgeVariant } from '@jobportal/ui';
+import { NEUTRAL_ON_ANY_SURFACE } from '../badge-surface';
 
 export type JobStatus = 'DRAFT' | 'PENDING_MODERATION' | 'ACTIVE' | 'EXPIRED' | 'CLOSED';
 
@@ -35,7 +36,10 @@ export const JOB_STATUS_META: Record<JobStatus, StatusMeta> = {
 export function JobStatusBadge({ status }: { status: JobStatus }) {
   const meta = JOB_STATUS_META[status];
   return (
-    <Badge variant={meta.variant} className={cn('gap-1.5', meta.fgClass)}>
+    <Badge
+      variant={meta.variant}
+      className={cn('gap-1.5', meta.fgClass, meta.variant === 'neutral' && NEUTRAL_ON_ANY_SURFACE)}
+    >
       <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-current" />
       {meta.label}
     </Badge>

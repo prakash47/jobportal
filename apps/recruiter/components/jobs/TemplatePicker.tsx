@@ -76,7 +76,7 @@ export function TemplatePicker({ pastJobs, onSelect, onBack, loadingId, error }:
       )}
 
       {pastJobs.length === 0 ? (
-        <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">
+        <div className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-10 text-center">
           <p className="text-sm font-medium text-[var(--color-fg)]">No previous jobs yet</p>
           <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
             Once you post a job it will show up here as a template.
@@ -129,11 +129,11 @@ export function TemplatePicker({ pastJobs, onSelect, onBack, loadingId, error }:
           </div>
 
           {filtered.length === 0 ? (
-            <p className="rounded-md border border-dashed border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-fg-muted)]">
+            <p className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-8 text-center text-sm text-[var(--color-fg-muted)]">
               No jobs match these filters.
             </p>
           ) : (
-            <ul className="divide-y divide-[var(--color-border)] rounded-md border border-[var(--color-border)]">
+            <ul className="divide-y divide-[var(--color-border)] rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
               {filtered.map((j) => (
                 <li key={j.id} className="flex items-center justify-between gap-4 px-4 py-3">
                   <div className="min-w-0">

@@ -24,7 +24,7 @@ export default async function KycPage() {
 
   if (!recruiter) {
     return (
-      <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center text-sm text-[var(--color-fg-muted)]">
+      <div className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-10 text-center text-sm text-[var(--color-fg-muted)]">
         Recruiter profile not found. If you just registered, please reload.
       </div>
     );

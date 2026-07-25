@@ -12,12 +12,29 @@ import {
   type NotificationItem,
 } from '../../components/notifications/NotificationBell';
 
-// Linear-app-shell: fixed 240px sidebar + main pane. Sidebar holds the nav
-// and a sign-out at the bottom; a sticky top bar in the main pane carries the
+// App-shell: fixed 256px sidebar + main pane. The rail sits on the brand navy
+// (--color-primary-600) and holds the nav plus an account row (avatar + name +
+// sign-out) at the bottom; a sticky WHITE top bar in the main pane carries the
 // company identity (logo + name + KYC status) on the left and the notification
-// bell on the right, so both show on every authed page.
+// bell on the right, so both show on every authed page. The colour system —
+// navy rail, cyan accent, muted canvas, elevated cards — mirrors the job-seeker
+// dashboard shell (apps/web/components/dashboard/DashboardChrome.tsx) so the
+// two portals read as one product.
+//
+// The rail's navy does NOT follow the light/dark token swap, so everything on
+// it is styled in alpha-white (and the Logo is forced to its reverse asset via
+// `onDark`) rather than with the surface tokens.
 
 export const dynamic = 'force-dynamic';
+
+// Initials for the account-row avatar: first + last word of the display name.
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  const first = parts[0]?.[0] ?? '';
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
+  return (first + last).toUpperCase() || '?';
+}
 
 // Matches the BFF list page size (RecruiterNotificationsService.PAGE_SIZE) so the
 // server-rendered feed and the client's first refresh show the same set.
@@ -49,6 +66,9 @@ export default async function AuthedLayout({ children }: { children: React.React
     prisma.recruiter.findUnique({
       where: { userId: user.sub },
       select: {
+        // Display name for the sidebar account row. Widens the select the shell
+        // already ran rather than adding a second query — no extra round-trip.
+        user: { select: { name: true } },
         company: {
           select: { id: true, name: true, logoUrl: true, kyc: { select: { status: true } } },
         },
@@ -61,6 +81,9 @@ export default async function AuthedLayout({ children }: { children: React.React
   const company = recruiter?.company ?? null;
   const notificationsEnabled = !notificationsKilled;
   const kycEnabled = !kycKilled;
+  // Falls back to the email when the profile has no name yet (a just-registered
+  // recruiter); the email line below is then suppressed so it isn't shown twice.
+  const displayName = recruiter?.user.name?.trim() || user.email;
 
   // Reads-direct topology: server-render the bell's initial unread count + feed
   // via Prisma (the client island then polls + refreshes through the BFF).
@@ -100,27 +123,40 @@ export default async function AuthedLayout({ children }: { children: React.React
   // and each pane scrolls independently. The sidebar stays fixed while the main
   // content pane scrolls on its own.
   return (
-    <div className="h-screen overflow-hidden bg-[var(--color-bg)]">
-      <div className="grid h-screen grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="hidden h-screen border-r border-[var(--color-border)] md:flex md:flex-col md:justify-between md:overflow-y-auto md:p-4">
-          <div className="space-y-6">
-            <Link
-              href="/dashboard"
-              aria-label="Career Queue Recruiter — dashboard"
-              className="flex items-center gap-2 px-3"
-            >
-              <Logo variant="mark" priority className="h-7 w-auto" />
-              <span className="text-sm font-medium text-[var(--color-fg-muted)]">Recruiter</span>
-            </Link>
+    <div className="h-screen overflow-hidden bg-[var(--color-bg-muted)]">
+      <div className="grid h-screen grid-cols-1 md:grid-cols-[256px_minmax(0,1fr)]">
+        <aside className="hidden h-screen bg-[var(--color-primary-600)] md:flex md:flex-col">
+          <Link
+            href="/dashboard"
+            aria-label="Career Queue Recruiter — dashboard"
+            /* focus-visible:outline-white — the inherited ring (primary-500) is
+               only 1.96:1 on this navy rail (see SidebarNav's FOCUS_ON_NAVY). */
+            className="flex items-center gap-2.5 px-4 py-4 focus-visible:outline-white"
+          >
+            <Logo variant="mark" onDark priority className="h-7 w-auto" />
+            <span className="text-[15px] font-semibold text-white">Recruiter</span>
+          </Link>
+          <div className="flex-1 overflow-y-auto px-2 pb-4">
             <SidebarNav showBilling={billingEnabled} />
           </div>
-          <div className="space-y-2 border-t border-[var(--color-border)] pt-4">
-            <p className="truncate px-3 text-xs text-[var(--color-fg-muted)]">{user.email}</p>
+          <div className="mt-auto flex items-center gap-3 border-t border-white/10 px-3 py-3">
+            <span
+              aria-hidden="true"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent-500)] text-[13px] font-medium text-[var(--color-primary-950)]"
+            >
+              {initials(displayName)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13px] font-medium text-white">{displayName}</div>
+              {displayName !== user.email && (
+                <div className="truncate text-[11px] text-white/50">{user.email}</div>
+              )}
+            </div>
             <SignOutButton />
           </div>
         </aside>
         <main className="h-screen min-w-0 overflow-y-auto">
-          <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)] px-6">
+          <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-6">
             {company ? (
               <div className="flex min-w-0 items-center gap-2.5">
                 <CompanyLogo

@@ -48,7 +48,7 @@ export default async function ProfilePage() {
 
   if (!recruiter) {
     return (
-      <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center text-sm text-[var(--color-fg-muted)]">
+      <div className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-10 text-center text-sm text-[var(--color-fg-muted)]">
         Recruiter profile not found. If you just registered, please reload.
       </div>
     );
@@ -65,7 +65,7 @@ export default async function ProfilePage() {
         </div>
         <Link
           href="/kyc"
-          className="flex items-center gap-2 rounded-md px-2 py-1 text-sm text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]"
+          className="flex items-center gap-2 rounded-md px-2 py-1 text-sm text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)]"
         >
           <span>Company verification</span>
           <KycStatusBadge status={recruiter.company.kyc?.status ?? 'NOT_SUBMITTED'} />

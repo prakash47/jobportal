@@ -51,7 +51,7 @@ export function ReachMeter({ skillIds, cityId, experienceMonths }: ReachMeterPro
   const barPct = count === null ? 0 : Math.min(100, Math.max(4, (count / BAR_CAP) * 100));
 
   return (
-    <div className="rounded-lg border border-[var(--color-border)] p-4">
+    <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4">
       <h3 className="text-sm font-semibold text-[var(--color-fg)]">Estimated reach</h3>
       {!hasInputs ? (
         <p className="mt-2 text-xs text-[var(--color-fg-muted)]">

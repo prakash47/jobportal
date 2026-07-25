@@ -62,7 +62,7 @@ export function FaqPanel() {
               onClick={() => setCategory(c.key)}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                 category === c.key
-                  ? 'border-[var(--color-fg)] bg-[var(--color-fg)] text-[var(--color-bg)]'
+                  ? 'border-[var(--color-primary-600)] bg-[var(--color-primary-600)] text-white'
                   : 'border-[var(--color-border)] text-[var(--color-fg-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-fg)]'
               }`}
             >
@@ -80,6 +80,10 @@ export function FaqPanel() {
 
       {results.length === 0 ? (
         <EmptyState
+          // The shared EmptyState has no fill of its own; on the muted canvas it
+          // needs the elevated surface to read as a panel (the app's other empty
+          // states carry this fill directly).
+          className="bg-[var(--color-bg-elevated)]"
           title="No matching questions"
           description="Try a different search or topic. If you still can’t find an answer, contact us and we’ll help."
           action={

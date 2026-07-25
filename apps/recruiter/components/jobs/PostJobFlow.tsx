@@ -142,7 +142,7 @@ export function PostJobFlow({
   const meta = jobTypeMeta(jobType);
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)]/40 px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-2.5">
         <p className="text-sm text-[var(--color-fg-muted)]">
           Posting a <span className="font-medium text-[var(--color-fg)]">{meta.label}</span>
           {templateJobId !== null && ' · copied from a previous job'}
@@ -152,8 +152,10 @@ export function PostJobFlow({
         </Button>
       </div>
 
+      {/* Fill note: this used bg-[var(--color-surface-subtle)], a token that was
+          never defined in theme.css, so the notice rendered with no fill. */}
       {templateJobId !== null && (
-        <p className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-4 py-2.5 text-sm text-[var(--color-fg-muted)]">
+        <p className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-2.5 text-sm text-[var(--color-fg-muted)]">
           Details were copied from a previous job. Review everything — especially the
           location and salary — before publishing.
         </p>
@@ -185,7 +187,7 @@ function StartCard({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex flex-col rounded-lg border border-[var(--color-border)] p-5">
+    <div className="flex flex-col rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-5">
       <h3 className="text-sm font-semibold text-[var(--color-fg)]">{title}</h3>
       <p className="mt-1.5 flex-1 text-sm text-[var(--color-fg-muted)]">{description}</p>
       <div className="mt-4">

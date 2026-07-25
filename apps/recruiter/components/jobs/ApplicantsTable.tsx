@@ -77,7 +77,7 @@ export function ApplicantsTable({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">
+      <div className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-10 text-center">
         <p className="text-sm font-medium text-[var(--color-fg)]">
           {emptyTitle ?? 'No applicants yet'}
         </p>
@@ -92,7 +92,7 @@ export function ApplicantsTable({
 
   return (
     <>
-      <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
+      <div className="overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg-muted)] text-left text-xs font-medium uppercase tracking-wide text-[var(--color-fg-muted)]">

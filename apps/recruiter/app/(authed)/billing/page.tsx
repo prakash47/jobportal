@@ -145,7 +145,7 @@ export default async function BillingPage({
         // success meaning without relying on colour for the copy.
         <p
           role="status"
-          className="flex items-center gap-2 rounded-md border border-[var(--color-success)] bg-[var(--color-bg-muted)] px-4 py-3 text-sm font-medium text-[var(--color-fg)]"
+          className="flex items-center gap-2 rounded-md border border-[var(--color-success)] bg-[var(--color-bg-elevated)] px-4 py-3 text-sm font-medium text-[var(--color-fg)]"
         >
           <Check aria-hidden className="size-4 shrink-0 text-[var(--color-success)]" />
           Payment successful — your plan is active. The invoice appears below once generated.

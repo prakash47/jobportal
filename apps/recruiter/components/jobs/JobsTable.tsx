@@ -196,7 +196,7 @@ export function JobsTable({
   publishEnabled: boolean;
 }) {
   return (
-    <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
+    <div className="overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
       {/* Desktop / tablet table. Focusable region so the horizontal scroll (used
           on narrow desktops / tablets, below min-w) is reachable by keyboard
           even on teammate rows that have no focusable cell (WCAG 2.1.1). */}
@@ -241,6 +241,12 @@ export function JobsTable({
             {rows.map((r) => (
               <tr
                 key={r.id}
+                // Deliberate deviation from the seeker's list-row hover
+                // (--color-bg): measured against this white card that is only a
+                // ~2% delta, too weak for a dense 50-row table. The seeker can
+                // afford it because its rows are large cards. bg-muted keeps the
+                // affordance and cannot collide with the canvas — rows sit on
+                // the card, not on the page.
                 className="border-b border-[var(--color-border)] transition-colors last:border-b-0 hover:bg-[var(--color-bg-muted)]"
               >
                 <td className="max-w-[16rem] px-4 py-3">

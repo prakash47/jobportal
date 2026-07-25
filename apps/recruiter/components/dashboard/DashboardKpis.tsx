@@ -26,7 +26,7 @@ export async function DashboardKpis({ companyId, userId }: { companyId: number; 
   // wall of zeroes, which would read as a broken page on day one.
   if (kpis.totalJobs === 0) {
     return (
-      <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center">
+      <div className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-10 text-center">
         <p className="text-sm font-medium text-[var(--color-fg)]">No jobs posted yet</p>
         <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
           Post your first opening and start receiving applicants.

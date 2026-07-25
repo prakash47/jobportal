@@ -387,7 +387,7 @@ function Section({
   error: string | null;
 }) {
   return (
-    <section className="space-y-5 rounded-md border border-[var(--color-border)] p-6">
+    <section className="space-y-5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-6">
       <header>
         <h2 className="text-lg font-semibold tracking-tight text-[var(--color-fg)]">{title}</h2>
         <p className="mt-1 text-sm text-[var(--color-fg-muted)]">{description}</p>

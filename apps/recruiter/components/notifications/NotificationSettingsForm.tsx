@@ -58,7 +58,7 @@ export function NotificationSettingsForm({ initial }: { initial: NotificationPre
   }
 
   return (
-    <section className="space-y-1 rounded-md border border-[var(--color-border)]">
+    <section className="space-y-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
       <ToggleRow
         id={emailId}
         title="Email notifications"
