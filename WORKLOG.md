@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
-| | | | |
+| Prakash | `feature/recruiter-dashboard-insights` | **Recruiter Dashboard rebuild** (`/dashboard`, recruiter-only). Verification-progress card FIRST (work email + company profile + company KYC), then KPI cards + insights (jobs by status, application funnel incl. HIRED, hiring activity, attention list). New `apps/recruiter/app/(authed)/dashboard/{page,loading}.tsx` + `apps/recruiter/components/dashboard/*` + `apps/recruiter/lib/dashboard/*`. Read-only RSC (reads-direct Prisma, no API endpoint, no new flag). `apps/web`+`apps/services`+`packages/*` untouched. | **none** — no schema/migration, no `theme.css`, no `packages/types`, no `keys.ts`, no barrel |
 
 ---
 
