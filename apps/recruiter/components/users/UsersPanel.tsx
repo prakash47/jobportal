@@ -87,7 +87,7 @@ export function UsersPanel({
           )}
         </div>
 
-        <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
+        <div className="overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
           <table className="w-full text-sm">
             <thead>
               <tr className={TH}>
@@ -156,11 +156,11 @@ export function UsersPanel({
           </div>
 
           {pendingInvites.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[var(--color-border)] p-8 text-center text-sm text-[var(--color-fg-muted)]">
+            <div className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-8 text-center text-sm text-[var(--color-fg-muted)]">
               No pending invitations.
             </div>
           ) : (
-            <div className="overflow-hidden rounded-md border border-[var(--color-border)]">
+            <div className="overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
               <table className="w-full text-sm">
                 <thead>
                   <tr className={TH}>

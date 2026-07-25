@@ -71,7 +71,7 @@ export default async function PostJobPage({ searchParams }: PageProps) {
 
   if (!recruiter) {
     return (
-      <div className="rounded-md border border-dashed border-[var(--color-border)] p-10 text-center text-sm text-[var(--color-fg-muted)]">
+      <div className="rounded-md border border-dashed border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-10 text-center text-sm text-[var(--color-fg-muted)]">
         Recruiter profile not found.
       </div>
     );
@@ -79,7 +79,7 @@ export default async function PostJobPage({ searchParams }: PageProps) {
 
   if (!recruiter.workEmailVerified) {
     return (
-      <div className="space-y-4 rounded-md border border-[var(--color-border)] p-10">
+      <div className="space-y-4 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-10">
         <h1 className="text-xl font-semibold tracking-tight text-[var(--color-fg)]">
           Verify your email first
         </h1>

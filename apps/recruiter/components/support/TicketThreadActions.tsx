@@ -27,7 +27,7 @@ export function TicketThreadActions({
 
   if (status === 'CLOSED') {
     return (
-      <p className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-muted)] p-4 text-sm text-[var(--color-fg-muted)]">
+      <p className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4 text-sm text-[var(--color-fg-muted)]">
         This ticket is closed. Raise a new ticket if you need more help.
       </p>
     );

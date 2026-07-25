@@ -38,7 +38,7 @@ export function ApplicantsSortToggle() {
             className={cn(
               'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
               active
-                ? 'border-[var(--color-fg)] bg-[var(--color-fg)] text-[var(--color-bg)]'
+                ? 'border-[var(--color-primary-600)] bg-[var(--color-primary-600)] text-white'
                 : 'border-[var(--color-border)] text-[var(--color-fg-muted)] hover:border-[var(--color-border-strong)] hover:text-[var(--color-fg)]',
             )}
           >

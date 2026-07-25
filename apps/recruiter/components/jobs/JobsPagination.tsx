@@ -111,8 +111,11 @@ export function JobsPagination({ page, totalPages, total, perPage }: JobsPaginat
                       'inline-flex size-8 items-center justify-center rounded-md text-sm tabular-nums transition-colors',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]',
                       item === page
-                        ? 'bg-[var(--color-fg)] font-medium text-[var(--color-bg)]'
-                        : 'text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]',
+                        ? 'bg-[var(--color-primary-600)] font-medium text-white'
+                        // Pagination sits directly on the muted canvas, so the
+                        // hover lifts to the elevated surface — hovering to
+                        // bg-muted here would be invisible.
+                        : 'text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)]',
                     )}
                   >
                     {item}
@@ -169,7 +172,7 @@ function EdgeLink({
       aria-label={label}
       className={cn(
         base,
-        'text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]',
+        'text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-fg)]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]',
       )}
     >

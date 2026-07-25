@@ -223,7 +223,7 @@ export function PlansPanel({
           admin has the master switch off is not "on the Free plan", and saying
           so would contradict the "Current plan" badge on their own paid card. */}
       {banner && (
-        <p className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)] px-4 py-3 text-sm text-[var(--color-fg-muted)]">
+        <p className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-3 text-sm text-[var(--color-fg-muted)]">
           {banner}
         </p>
       )}

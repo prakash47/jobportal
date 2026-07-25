@@ -404,7 +404,7 @@ export function PostJobWizard({
       {/* Section: Job details */}
       <Section title="Job details">
         <Field label="Company">
-          <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)]/40 px-3 py-2">
+          <div className="flex items-center justify-between gap-3 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-3 py-2">
             <span className="text-sm font-medium text-[var(--color-fg)]">{companyName}</span>
             {/* A posted job can't move between companies — no Change while editing. */}
             {!isEdit && (
@@ -708,8 +708,10 @@ export function PostJobWizard({
         </p>
       )}
 
+      {/* Fill note: this used bg-[var(--color-surface-subtle)], a token that was
+          never defined in theme.css, so the panel rendered with no fill. */}
       {exhausted && (
-        <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-subtle)] p-4 text-sm">
+        <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4 text-sm">
           <p className="font-medium text-[var(--color-fg)]">Daily or monthly post limit reached.</p>
           <p className="mt-1 text-[var(--color-fg-muted)]">
             {quota?.upgradeAvailable
@@ -796,7 +798,7 @@ function ToolbarButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className="rounded border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]"
+      className="rounded border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2 py-1 text-xs text-[var(--color-fg-muted)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-fg)]"
     >
       {children}
     </button>
@@ -842,7 +844,7 @@ function Segmented({
   options: { value: string; label: string }[];
 }) {
   return (
-    <div className="inline-flex flex-wrap gap-1 rounded-md border border-[var(--color-border)] p-1">
+    <div className="inline-flex flex-wrap gap-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-1">
       {options.map((o) => {
         const active = o.value === value;
         return (

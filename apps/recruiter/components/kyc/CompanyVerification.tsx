@@ -124,7 +124,7 @@ export function CompanyVerification({ initial }: { initial: KycInitial }) {
       <StatusBanner status={status} rejectionReason={initial.rejectionReason} />
 
       {/* Business details */}
-      <section className="space-y-5 rounded-md border border-[var(--color-border)] p-6">
+      <section className="space-y-5 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-6">
         <header>
           <h2 className="text-lg font-semibold tracking-tight text-[var(--color-fg)]">Business details</h2>
           <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
@@ -222,7 +222,7 @@ export function CompanyVerification({ initial }: { initial: KycInitial }) {
       </section>
 
       {/* Documents */}
-      <section className="space-y-4 rounded-md border border-[var(--color-border)] p-6">
+      <section className="space-y-4 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-6">
         <header>
           <h2 className="text-lg font-semibold tracking-tight text-[var(--color-fg)]">Documents</h2>
           <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
@@ -248,7 +248,7 @@ export function CompanyVerification({ initial }: { initial: KycInitial }) {
 
       {/* Submit */}
       {!locked && (
-        <section className="space-y-3 rounded-md border border-[var(--color-border)] p-6">
+        <section className="space-y-3 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-6">
           <p className="text-sm text-[var(--color-fg-muted)]">
             When you&rsquo;ve added your business details and both documents, submit for review. Our team
             verifies most companies within 1&ndash;2 business days.
@@ -310,7 +310,7 @@ function StatusBanner({
   };
   const c = config[status];
   const tone: Record<string, string> = {
-    neutral: 'border-[var(--color-border)] bg-[var(--color-bg-muted)]',
+    neutral: 'border-[var(--color-border)] bg-[var(--color-bg-elevated)]',
     warning: 'border-[oklch(0.85_0.08_80)] bg-[oklch(0.97_0.04_80)]',
     success: 'border-[oklch(0.85_0.08_145)] bg-[oklch(0.97_0.03_145)]',
     danger: 'border-[oklch(0.85_0.08_25)] bg-[oklch(0.97_0.03_25)]',

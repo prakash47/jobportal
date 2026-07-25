@@ -1,20 +1,46 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useState, type ComponentType, type SVGProps } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@jobportal/ui';
-import { ChevronDown } from '@jobportal/ui/icons';
+import {
+  Briefcase,
+  ChevronDown,
+  CreditCard,
+  LayoutDashboard,
+  MessageCircle,
+  Plus,
+  Settings,
+  ShieldCheck,
+  User,
+  Users,
+} from '@jobportal/ui/icons';
 
-// Top-level items — flat, text-only (the portal's Linear-restraint rail).
+type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
+
+// Top-level items. Each carries an 18px icon so the rail matches the seeker
+// dashboard's (apps/web DashboardChrome) — the icon is the only place brand
+// cyan appears in the nav, and only on the ACTIVE row.
+//
 // "Jobs" is NOT here — it's a collapsible group (see JOBS_ITEMS) rendered
 // between the Dashboard (above) and the remaining flat items (below).
-const TOP_ITEMS_ABOVE = [{ href: '/dashboard', label: 'Dashboard' }] as const;
-const TOP_ITEMS_BELOW = [
-  { href: '/post-job', label: 'Post a Job' },
-  { href: '/profile', label: 'Profile' },
-  { href: '/kyc', label: 'Verification' },
-  { href: '/users', label: 'Users' },
+const TOP_ITEMS_ABOVE = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard as NavIcon },
+] as const;
+
+// Rendered immediately after the Jobs group, under the "Hiring" eyebrow.
+const HIRING_ITEMS_BELOW = [
+  { href: '/post-job', label: 'Post a Job', icon: Plus as NavIcon },
+] as const;
+
+// Rendered under the "Company" eyebrow. Order is unchanged from before the
+// eyebrows existed — the labels only partition the existing list, they never
+// reorder or regroup a destination.
+const COMPANY_ITEMS = [
+  { href: '/profile', label: 'Profile', icon: User as NavIcon },
+  { href: '/kyc', label: 'Verification', icon: ShieldCheck as NavIcon },
+  { href: '/users', label: 'Users', icon: Users as NavIcon },
 ] as const;
 
 // "Jobs" is a collapsible group (same disclosure pattern as Settings): the
@@ -59,15 +85,30 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-const ROW = 'rounded-md px-3 py-1.5 transition-colors';
-const ROW_ACTIVE = 'bg-[var(--color-bg-muted)] font-medium text-[var(--color-fg)]';
-const ROW_IDLE =
-  'text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)]';
+// The rail sits on a FIXED navy surface (--color-primary-600) that does not
+// follow the light/dark token swap, so its states are alpha-white rather than
+// surface tokens — same approach as the seeker dashboard's rail. Contrast on
+// #192249: white/70 = 8.3:1, white/60 = 6.3:1, cyan accent-500 = 5.2:1.
+const ROW = 'mt-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors';
+const ROW_ACTIVE = 'bg-white/10 font-medium text-white';
+const ROW_IDLE = 'text-white/70 hover:bg-white/5 hover:text-white';
 
-// Linear-style left rail. Active state via aria-current; subtle hover row rather
-// than a heavy fill (CLAUDE.md §2 — restraint). "Jobs", "Settings", "Billing" and
-// "Help & Support" are disclosures: the parent button toggles, the sub-items are
-// the real destinations.
+// Child rows carry no icon of their own; the left padding lines their label up
+// with the parents' labels (px-3 = 12px, icon 18px, gap-3 = 12px → 42px).
+const CHILD_ROW = 'mt-0.5 block rounded-lg py-2 pr-3 pl-[42px] text-sm transition-colors';
+
+const ICON = 'size-[18px] shrink-0';
+// Brand cyan on the active row's icon only — the seeker rail's single accent.
+const ICON_ACTIVE = 'text-[var(--color-accent-500)]';
+const ICON_IDLE = 'text-white/70';
+
+// Section eyebrow. Sentence case, not uppercase (matches the seeker).
+const GROUP_LABEL = 'px-3 pb-1 pt-5 text-[11px] font-medium tracking-wide text-white/60';
+
+// Left rail on the navy surface. Active state via aria-current; a translucent
+// white pill rather than a heavy fill (CLAUDE.md §2 — restraint). "Jobs",
+// "Settings", "Billing" and "Help & Support" are disclosures: the parent button
+// toggles, the sub-items are the real destinations.
 export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -92,9 +133,10 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
   const [helpOpen, setHelpOpen] = useState(helpActive);
 
   return (
-    <nav aria-label="Recruiter portal" className="flex flex-col gap-0.5 text-sm">
+    <nav aria-label="Recruiter portal" className="flex flex-col text-sm">
       {TOP_ITEMS_ABOVE.map((item) => {
         const active = isActive(pathname, item.href);
+        const Icon = item.icon;
         return (
           <Link
             key={item.href}
@@ -102,10 +144,13 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
             aria-current={active ? 'page' : undefined}
             className={cn(ROW, active ? ROW_ACTIVE : ROW_IDLE)}
           >
+            <Icon className={cn(ICON, active ? ICON_ACTIVE : ICON_IDLE)} aria-hidden />
             {item.label}
           </Link>
         );
       })}
+
+      <div className={GROUP_LABEL}>Hiring</div>
 
       {/* Jobs — collapsible group. Parent is highlighted (not aria-current) when
           any jobs route is active, so the active page stays the sub-item. */}
@@ -114,13 +159,12 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
         aria-expanded={jobsOpen}
         aria-controls={jobsMenuId}
         onClick={() => setJobsOpen((v) => !v)}
-        className={cn(
-          ROW,
-          'flex items-center justify-between gap-2 text-left',
-          jobsActive ? ROW_ACTIVE : ROW_IDLE,
-        )}
+        className={cn(ROW, 'justify-between text-left', jobsActive ? ROW_ACTIVE : ROW_IDLE)}
       >
-        <span>Jobs</span>
+        <span className="flex items-center gap-3">
+          <Briefcase className={cn(ICON, jobsActive ? ICON_ACTIVE : ICON_IDLE)} aria-hidden />
+          Jobs
+        </span>
         <ChevronDown
           aria-hidden
           className={cn(
@@ -130,7 +174,7 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
         />
       </button>
 
-      <ul id={jobsMenuId} className={cn('mt-0.5 flex-col gap-0.5 pl-3', jobsOpen ? 'flex' : 'hidden')}>
+      <ul id={jobsMenuId} className={cn('flex-col', jobsOpen ? 'flex' : 'hidden')}>
         {JOBS_ITEMS.map((item) => {
           // "All jobs" is active on any jobs route except the draft-filtered one;
           // "Draft Jobs" only when ?status=DRAFT is present.
@@ -140,7 +184,7 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
               <Link
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={cn(ROW, 'block', active ? ROW_ACTIVE : ROW_IDLE)}
+                className={cn(CHILD_ROW, active ? ROW_ACTIVE : ROW_IDLE)}
               >
                 {item.label}
               </Link>
@@ -149,8 +193,9 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
         })}
       </ul>
 
-      {TOP_ITEMS_BELOW.map((item) => {
+      {HIRING_ITEMS_BELOW.map((item) => {
         const active = isActive(pathname, item.href);
+        const Icon = item.icon;
         return (
           <Link
             key={item.href}
@@ -158,10 +203,31 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
             aria-current={active ? 'page' : undefined}
             className={cn(ROW, active ? ROW_ACTIVE : ROW_IDLE)}
           >
+            <Icon className={cn(ICON, active ? ICON_ACTIVE : ICON_IDLE)} aria-hidden />
             {item.label}
           </Link>
         );
       })}
+
+      <div className={GROUP_LABEL}>Company</div>
+
+      {COMPANY_ITEMS.map((item) => {
+        const active = isActive(pathname, item.href);
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={active ? 'page' : undefined}
+            className={cn(ROW, active ? ROW_ACTIVE : ROW_IDLE)}
+          >
+            <Icon className={cn(ICON, active ? ICON_ACTIVE : ICON_IDLE)} aria-hidden />
+            {item.label}
+          </Link>
+        );
+      })}
+
+      <div className={GROUP_LABEL}>Account</div>
 
       {showBilling && (
         <>
@@ -170,13 +236,15 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
             aria-expanded={billingOpen}
             aria-controls={billingMenuId}
             onClick={() => setBillingOpen((v) => !v)}
-            className={cn(
-              ROW,
-              'flex items-center justify-between gap-2 text-left',
-              billingActive ? ROW_ACTIVE : ROW_IDLE,
-            )}
+            className={cn(ROW, 'justify-between text-left', billingActive ? ROW_ACTIVE : ROW_IDLE)}
           >
-            <span>Billing</span>
+            <span className="flex items-center gap-3">
+              <CreditCard
+                className={cn(ICON, billingActive ? ICON_ACTIVE : ICON_IDLE)}
+                aria-hidden
+              />
+              Billing
+            </span>
             <ChevronDown
               aria-hidden
               className={cn(
@@ -185,10 +253,7 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
               )}
             />
           </button>
-          <ul
-            id={billingMenuId}
-            className={cn('mt-0.5 flex-col gap-0.5 pl-3', billingOpen ? 'flex' : 'hidden')}
-          >
+          <ul id={billingMenuId} className={cn('flex-col', billingOpen ? 'flex' : 'hidden')}>
             {BILLING_ITEMS.map((item) => {
               const active = isActive(pathname, item.href);
               return (
@@ -196,7 +261,7 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
                   <Link
                     href={item.href}
                     aria-current={active ? 'page' : undefined}
-                    className={cn(ROW, 'block', active ? ROW_ACTIVE : ROW_IDLE)}
+                    className={cn(CHILD_ROW, active ? ROW_ACTIVE : ROW_IDLE)}
                   >
                     {item.label}
                   </Link>
@@ -214,18 +279,24 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
         aria-expanded={open}
         aria-controls={submenuId}
         onClick={() => setOpen((v) => !v)}
-        className={cn(ROW, 'flex items-center justify-between gap-2 text-left', settingsActive ? ROW_ACTIVE : ROW_IDLE)}
+        className={cn(ROW, 'justify-between text-left', settingsActive ? ROW_ACTIVE : ROW_IDLE)}
       >
-        <span>Settings</span>
+        <span className="flex items-center gap-3">
+          <Settings className={cn(ICON, settingsActive ? ICON_ACTIVE : ICON_IDLE)} aria-hidden />
+          Settings
+        </span>
         <ChevronDown
           aria-hidden
-          className={cn('size-4 shrink-0 transition-transform duration-200', open ? 'rotate-0' : '-rotate-90')}
+          className={cn(
+            'size-4 shrink-0 transition-transform duration-200',
+            open ? 'rotate-0' : '-rotate-90',
+          )}
         />
       </button>
 
       {/* display toggled via class (not the `hidden` attr) to avoid Tailwind's
           class-vs-UA specificity gotcha; when closed the links leave the tab order. */}
-      <ul id={submenuId} className={cn('mt-0.5 flex-col gap-0.5 pl-3', open ? 'flex' : 'hidden')}>
+      <ul id={submenuId} className={cn('flex-col', open ? 'flex' : 'hidden')}>
         {SETTINGS_ITEMS.map((item) => {
           const active = isActive(pathname, item.href);
           return (
@@ -233,7 +304,7 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
               <Link
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={cn(ROW, 'block', active ? ROW_ACTIVE : ROW_IDLE)}
+                className={cn(CHILD_ROW, active ? ROW_ACTIVE : ROW_IDLE)}
               >
                 {item.label}
               </Link>
@@ -248,16 +319,22 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
         aria-expanded={helpOpen}
         aria-controls={helpMenuId}
         onClick={() => setHelpOpen((v) => !v)}
-        className={cn(ROW, 'flex items-center justify-between gap-2 text-left', helpActive ? ROW_ACTIVE : ROW_IDLE)}
+        className={cn(ROW, 'justify-between text-left', helpActive ? ROW_ACTIVE : ROW_IDLE)}
       >
-        <span>Help &amp; Support</span>
+        <span className="flex items-center gap-3">
+          <MessageCircle className={cn(ICON, helpActive ? ICON_ACTIVE : ICON_IDLE)} aria-hidden />
+          Help &amp; Support
+        </span>
         <ChevronDown
           aria-hidden
-          className={cn('size-4 shrink-0 transition-transform duration-200', helpOpen ? 'rotate-0' : '-rotate-90')}
+          className={cn(
+            'size-4 shrink-0 transition-transform duration-200',
+            helpOpen ? 'rotate-0' : '-rotate-90',
+          )}
         />
       </button>
 
-      <ul id={helpMenuId} className={cn('mt-0.5 flex-col gap-0.5 pl-3', helpOpen ? 'flex' : 'hidden')}>
+      <ul id={helpMenuId} className={cn('flex-col', helpOpen ? 'flex' : 'hidden')}>
         {HELP_ITEMS.map((item) => {
           const active = isActive(pathname, item.href);
           return (
@@ -265,7 +342,7 @@ export function SidebarNav({ showBilling = false }: { showBilling?: boolean }) {
               <Link
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={cn(ROW, 'block', active ? ROW_ACTIVE : ROW_IDLE)}
+                className={cn(CHILD_ROW, active ? ROW_ACTIVE : ROW_IDLE)}
               >
                 {item.label}
               </Link>
