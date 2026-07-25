@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
-| | | | |
+| Prakash | `feature/recruiter-brand-theme` | **Recruiter portal visual re-skin onto the seeker dashboard's colour theme** (`apps/recruiter` ONLY — visual, zero functional change). Navy `--color-primary-600` sidebar rail + cyan `--color-accent-500` accents + `bg-muted` canvas + white `bg-elevated` top bar/cards, mirroring `apps/web/components/dashboard/DashboardChrome.tsx`. Touches: `app/(authed)/layout.tsx`, `components/SidebarNav.tsx`, `components/SignOutButton.tsx`, `components/brand/Logo.tsx` (+`onDark`), panel fills across dashboard/jobs/kyc/billing/users/support/profile, and the 4 near-black selection states (`ApplicantsFilterTabs`/`ApplicantsSortToggle`/`JobsPagination`/`FaqPanel`) → navy. | **NONE.** `theme.css`, `packages/ui`, `packages/types`, `feature-flags/keys.ts` and all barrels are **untouched** — the tokens already exist and are already imported; only `apps/recruiter` classNames change. `apps/web`/`apps/services` byte-untouched. No schema/migration/flag. |
 
 ---
 
