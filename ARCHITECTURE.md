@@ -83,6 +83,7 @@ jobportal/
 │   ├── web/          # Next.js 16 — job-seeker site            (port 3000)
 │   ├── recruiter/    # Next.js 16 — recruiter portal           (port 3001)
 │   ├── services/     # Next.js 16 — paid services site         (port 3002)
+│   ├── sadmin/       # Next.js 16 — internal Super Admin portal (port 3003, basePath /sadmin)
 │   └── api/          # NestJS 11 — BFF for all clients         (port 4000)
 ├── packages/
 │   ├── ui/           # Shared design system (Tailwind 4 @theme + components)
@@ -121,7 +122,16 @@ Where recruiters register (with work-email verification), post jobs through a wi
 ### 5.3 `apps/services` — Paid services site (port 3002)
 Placeholder for Phase-2 paid services (resume writing, etc.). Minimal today; the Services menu is hidden and `/pricing` 404s while the freemium gate is on.
 
-### 5.4 `apps/api` — NestJS BFF (port 4000)
+### 5.4 `apps/sadmin` — Internal Super Admin portal (port 3003, basePath `/sadmin`)
+Staff-only console for operating the platform: reviewing and approving job posts, processing recruiter business verification (KYC), handling support tickets. Today it ships the sign-in page and a dashboard of platform totals.
+
+Two things make it different from the other frontends:
+- **It is the only app with a `basePath`** (`/sadmin`), set on one line of `next.config.ts`. Application code never writes the prefix — Next applies it — with one exception worth knowing: `next/image` does **not** prefix a string `src`, so local images use static imports (see `components/brand/Logo.tsx`).
+- **Access is role-only, not flag-gated.** Admin surfaces in this repo are deliberately never behind a killswitch (killing the console is the opposite of what you want during an incident). The gate is `requireSuperAdmin()` in the `(authed)` layout plus `AdminGuard` on any API route it calls. Sign-in goes through **`POST /auth/admin/login`**, which rejects non-`ADMIN` accounts *after* verifying the password so it cannot be used to discover which addresses are admins.
+
+The `ADMIN` role is assigned only by the seed or a direct DB write — never through a UI (CLAUDE.md §9).
+
+### 5.5 `apps/api` — NestJS BFF (port 4000)
 The brain. Every frontend calls this over typed REST. It is the **only trusted layer**:
 - **Database:** Prisma only — no raw SQL except `Prisma.sql` tagged templates.
 - **Search:** through the `@jobportal/search` package only.

@@ -65,7 +65,7 @@ git pull
 
 ### C.1 — Set up `.env` files (read this carefully)
 
-There is a committed `.env.example` at the repo root. **You need a `.env` at the root AND a copy inside each of the three runtime apps** — Next.js and NestJS auto-load `.env` from their *own* directory, not the monorepo root. (This was discovered the hard way; skipping it causes `SASL: client password must be a string` errors.)
+There is a committed `.env.example` at the repo root. **You need a `.env` at the root AND a copy inside each of the four runtime apps** — Next.js and NestJS auto-load `.env` from their *own* directory, not the monorepo root. (This was discovered the hard way; skipping it causes `SASL: client password must be a string` errors.)
 
 ```bash
 # Root .env
@@ -74,6 +74,7 @@ cp .env.example .env
 # Per-app copies — REQUIRED
 cp .env apps/web/.env
 cp .env apps/recruiter/.env
+cp .env apps/sadmin/.env
 cp .env apps/api/.env
 ```
 
@@ -82,6 +83,7 @@ cp .env apps/api/.env
 > Copy-Item .env.example .env
 > Copy-Item .env apps/web/.env
 > Copy-Item .env apps/recruiter/.env
+> Copy-Item .env apps/sadmin/.env
 > Copy-Item .env apps/api/.env
 > ```
 
@@ -139,11 +141,34 @@ pnpm db:generate
 pnpm db:migrate:dev
 
 # 3. Seed REFERENCE data first — feature flags, industries, cities, skills, plans, articles
+#    (this also creates the Super Admin login — see the note below step 4)
 pnpm db:seed
 
 # 4. Seed the DEMO overlay + applications, then index into Elasticsearch
 pnpm --filter @jobportal/db db:seed:demo:full
 ```
+
+> ### 🔑 Super Admin login
+>
+> `pnpm db:seed` (step 3) also creates the internal **Super Admin** account, so the portal at
+> **http://localhost:3003/sadmin** works as soon as you finish setup:
+>
+> | Email | Password |
+> |---|---|
+> | `admin@careerqueue.in` | `Admin@123` |
+>
+> The password is **re-applied on every seed run**, so re-seeding resets a locally-changed one — that
+> is deliberate, so all three machines converge on the same documented credential. Override it with
+> `SADMIN_SEED_PASSWORD` in `.env` if you want your own.
+>
+> This account is `role = ADMIN`, so it also unlocks the older `/admin` console inside the seeker app
+> (feature flags, KYC review, support) — which previously nobody could reach, because no admin user
+> was seeded anywhere. There is no sign-up page for it by design: `ADMIN` is granted only by this
+> seed or a direct DB write (CLAUDE.md §9).
+>
+> **Not seeded on remote databases.** While the password is still the repo default, this step is
+> skipped unless `DATABASE_URL` looks local — the same guard the demo seed uses — so a committed
+> credential can never land on staging or production.
 
 > ### ⚠️ Why two seed commands?
 > `pnpm --filter @jobportal/db db:seed:demo:full` chains **demo companies/jobs → demo candidates/applications → Elasticsearch reindex**. It does **not** include the reference data (industries, cities, skills, flags). The demo seed will refuse to run with *"Reference data not seeded. Run `pnpm db:seed` first"* if you skip step 3. **Always run `pnpm db:seed` before `pnpm --filter @jobportal/db db:seed:demo:full`.**

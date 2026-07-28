@@ -1,0 +1,22 @@
+@import "tailwindcss";
+@import "@jobportal/ui/styles/theme.css";
+
+/* LOAD-BEARING. Tailwind 4 auto-detects sources in THIS app, but not the
+   workspace UI package (it resolves via a node_modules symlink, which Tailwind
+   ignores). Without this line, utility classes used ONLY inside @jobportal/ui —
+   e.g. the primary Button's `bg-[var(--color-primary-600)]` — are never
+   generated, and those components render unstyled with NO error anywhere.
+   The relative depth assumes this file sits at apps/<app>/app/globals.css.
+   (apps/web and apps/recruiter both do the same; apps/services omits it, which
+   is why it must never be used as a scaffold template.) */
+@source "../../../packages/ui/src";
+
+/* Dark mode is driven by [data-theme="dark"] on <html>. Register the matching
+   Tailwind variant so `dark:` utilities key off that attribute rather than
+   prefers-color-scheme, keeping them in lockstep with theme.css's token swap.
+   NOTE: this app mounts no ThemeProvider (same as apps/recruiter), so the
+   attribute is never set and `dark:` utilities are inert — which is exactly why
+   the Logo on the navy rail must be forced with `onDark` rather than relying on
+   the `dark:block` path. The variant is registered anyway so that adding a
+   ThemeProvider later is a one-line change. */
+@custom-variant dark ([data-theme="dark"] &);

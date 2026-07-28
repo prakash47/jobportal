@@ -114,6 +114,7 @@ pnpm dev
 | Job-seeker site | http://localhost:3000 |
 | Recruiter portal | http://localhost:3001 |
 | Services site | http://localhost:3002 |
+| Super Admin portal (internal) | http://localhost:3003/sadmin |
 | API | http://localhost:4000 |
 
 ---

@@ -140,6 +140,36 @@ export class AuthController {
     return { user: publicUser(result.user) };
   }
 
+  // Sign-in for the internal Super Admin portal (apps/sadmin). Separate from
+  // /auth/login because that endpoint is deliberately role-agnostic: it will
+  // happily issue cookies to a CANDIDATE who posts to the admin sign-in form.
+  // Mounted under /auth/* like every other session route, so the refresh cookie
+  // (path=/auth) stays reachable if refresh is ever wired up.
+  //
+  // Same guards and rate limits as /auth/login — PerEmailThrottleGuard is not
+  // global and must be listed explicitly, or this becomes the one unthrottled
+  // password endpoint in the app, on the highest-privilege account class.
+  @Post('admin/login')
+  @UseGuards(PerEmailThrottleGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  async adminLogin(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const parsed = LoginDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+
+    const result = await this.auth.adminLogin(
+      parsed.data,
+      req.headers['user-agent'] ? String(req.headers['user-agent']) : undefined,
+      req.ip,
+    );
+    setAuthCookies(res, result.accessToken, result.refreshToken, cookieEnvFromProcess());
+    return { user: publicUser(result.user) };
+  }
+
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
