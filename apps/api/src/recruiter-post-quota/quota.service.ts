@@ -112,11 +112,25 @@ export class RecruiterPostQuotaService {
   // the natural TTL roll-over reconciles within 26h.
   async refund(userId: number): Promise<void> {
     try {
-      await this.redis.client().decr(this.keyDaily(userId));
-      await this.redis.client().decr(this.keyMonthly(userId));
+      await this.decrNonNegative(this.keyDaily(userId));
+      await this.decrNonNegative(this.keyMonthly(userId));
     } catch (err) {
       this.logger.warn(`refund() failed for user ${userId}: ${(err as Error).message}`);
     }
+  }
+
+  // DECR, but never leave the counter below zero.
+  //
+  // Redis DECR on a MISSING key creates it at -1 with no TTL, and only consume()
+  // ever sets an expiry — so the key would sit there negative indefinitely,
+  // silently granting an extra post. That was near-unreachable while refunds
+  // only happened on a lost publish race, but admin moderation makes refunds
+  // routine: a job submitted on Monday and rejected on Wednesday has a daily
+  // key that expired long before the decision. Deleting the key instead leaves
+  // the next consume() to recreate it with a correct TTL.
+  private async decrNonNegative(key: string): Promise<void> {
+    const next = await this.redis.client().decr(key);
+    if (next < 0) await this.redis.client().del(key);
   }
 
   // Layer 3 — atomic. INCR both keys; if either now exceeds the limit, DECR

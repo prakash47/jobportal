@@ -35,6 +35,7 @@ vi.mock('@jobportal/search', () => ({
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { prisma } from '@jobportal/db';
 import { syncJob } from '@jobportal/search';
+import { JobPublishEffectsService } from '../job-effects/job-publish-effects.service';
 import { RecruiterJobsService } from './recruiter-jobs.service';
 
 const mockedFlag = isFlagEnabled as ReturnType<typeof vi.fn>;
@@ -103,11 +104,19 @@ describe('RecruiterJobsService', () => {
     mockedSync.mockResolvedValue(undefined);
     mocked.user.findUnique.mockResolvedValue({ email: 'recruiter@acme.com' });
     mocked.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) => fn(prisma));
+    // The ES / alerts / cache-purge / email fan-out moved into
+    // JobPublishEffectsService (shared with the admin moderation approve path).
+    // Wire a REAL instance over the same fakes rather than stubbing the service
+    // out, so every assertion below still checks the effect that actually
+    // reaches Elasticsearch, the alerts hook and the mail queue — stubbing it
+    // would downgrade those to "some method was called".
     service = new RecruiterJobsService(
       fakeQuota as unknown as never,
-      fakeAlertsHook as unknown as never,
-      fakeCachePurge as unknown as never,
-      fakeEmail as unknown as never,
+      new JobPublishEffectsService(
+        fakeAlertsHook as unknown as never,
+        fakeCachePurge as unknown as never,
+        fakeEmail as unknown as never,
+      ),
     );
   });
 
@@ -175,6 +184,10 @@ describe('RecruiterJobsService', () => {
       const out = await service.create(42, validInput);
       expect(out.status).toBe('PENDING_MODERATION');
       expect(fakeQuota.consume).toHaveBeenCalledWith(42); // still consumed
+      const created = mocked.job.create.mock.calls[0]?.[0].data;
+      expect(created.submittedForReviewAt).toBeInstanceOf(Date);
+      // A slot WAS spent here, so a rejection of this job has one to give back.
+      expect(created.postQuotaConsumed).toBe(true);
       await Promise.resolve();
       expect(mockedSync).not.toHaveBeenCalled();
       expect(fakeAlertsHook.onJobIndexed).not.toHaveBeenCalled();
@@ -350,6 +363,98 @@ describe('RecruiterJobsService', () => {
     it('reopen on DRAFT → BadRequestException', async () => {
       mocked.job.findFirst.mockResolvedValue({ id: 5, postedById: 42, status: 'DRAFT' });
       await expect(service.reopen(42, 5)).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    // Reopening is a transition INTO the public market, so it honours moderation
+    // like create() and publish(). Before this, reopen() set ACTIVE
+    // unconditionally without ever reading the flag, which made Close → Reopen a
+    // two-click bypass of the review gate — and Close → Edit → Reopen a way to
+    // publish content no admin had seen, since PATCH never triggers review.
+    it('reopen + moderation ON → PENDING_MODERATION, no ES sync, no email', async () => {
+      flagState[MODERATION_FLAG] = true;
+      mocked.job.findFirst.mockResolvedValue({
+        id: 5,
+        postedById: 42,
+        status: 'CLOSED',
+        canonicalSlug: 'foo-5',
+      });
+      mocked.job.update.mockResolvedValue({
+        id: 5,
+        status: 'PENDING_MODERATION',
+        canonicalSlug: 'foo-5',
+      });
+
+      const out = await service.reopen(42, 5);
+
+      const data = mocked.job.update.mock.calls[0]?.[0].data;
+      expect(data.status).toBe('PENDING_MODERATION');
+      // Stamped so the admin queue can order and age it. Nothing else asserts
+      // this, and dropping it would silently break the queue's ordering.
+      expect(data.submittedForReviewAt).toBeInstanceOf(Date);
+      expect(out.status).toBe('PENDING_MODERATION');
+      await Promise.resolve();
+      expect(mockedSync).not.toHaveBeenCalled();
+      expect(fakeAlertsHook.onJobIndexed).not.toHaveBeenCalled();
+      expect(fakeEmail.enqueueJobPostedConfirmation).not.toHaveBeenCalled();
+    });
+
+    // Relisting an existing job is not posting a new one, so reopen() takes no
+    // slot. It must therefore mark the review as non-refundable, or a later
+    // rejection would hand the recruiter a post they never paid for.
+    it('reopen consumes no quota and marks the review as non-refundable', async () => {
+      flagState[MODERATION_FLAG] = true;
+      mocked.job.findFirst.mockResolvedValue({
+        id: 5,
+        postedById: 42,
+        status: 'CLOSED',
+        canonicalSlug: 'foo-5',
+      });
+      mocked.job.update.mockResolvedValue({
+        id: 5,
+        status: 'PENDING_MODERATION',
+        canonicalSlug: 'foo-5',
+      });
+
+      await service.reopen(42, 5);
+
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.update.mock.calls[0]?.[0].data.postQuotaConsumed).toBe(false);
+    });
+
+    // An EXPIRED job carries a past expiresAt by definition, so relisting without
+    // clearing it lets the nightly sweep re-expire the job immediately.
+    it('reopen clears an expiry that has already passed', async () => {
+      mocked.job.findFirst.mockResolvedValue({
+        id: 5,
+        postedById: 42,
+        status: 'EXPIRED',
+        canonicalSlug: 'foo-5',
+        expiresAt: new Date('2020-01-01'),
+      });
+      mocked.job.update.mockResolvedValue({ id: 5, status: 'ACTIVE', canonicalSlug: 'foo-5' });
+
+      await service.reopen(42, 5);
+
+      expect(mocked.job.update.mock.calls[0]?.[0].data.expiresAt).toBeNull();
+    });
+
+    // A job that was sent back by an admin and then closed still carries the old
+    // reason; relisting must not resurface a rejection that no longer applies.
+    it('reopen clears a stale moderation decision', async () => {
+      mocked.job.findFirst.mockResolvedValue({
+        id: 5,
+        postedById: 42,
+        status: 'CLOSED',
+        canonicalSlug: 'foo-5',
+      });
+      mocked.job.update.mockResolvedValue({ id: 5, status: 'ACTIVE', canonicalSlug: 'foo-5' });
+
+      await service.reopen(42, 5);
+
+      const data = mocked.job.update.mock.calls[0]?.[0].data;
+      expect(data.rejectionReason).toBeNull();
+      expect(data.reviewedAt).toBeNull();
+      expect(data.reviewedById).toBeNull();
     });
   });
 

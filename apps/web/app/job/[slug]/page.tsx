@@ -18,6 +18,7 @@ import {
 // RelatedRoles is server-only (ES + Prisma) — deep import, not via the barrel.
 import { RelatedRoles } from '../../../components/job/RelatedRoles';
 import { readApplied, readSaved, readUserFromCookie } from '../../../lib/job';
+import { canViewJob } from '../../../lib/job/visibility';
 import { readApplyQuota } from '../../../lib/applications/quota-state';
 import { classifyQuota } from '../../../lib/applications/quota-ui-state';
 import { jobPosting } from '../../../lib/seo/json-ld';
@@ -52,6 +53,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const job = await loadJob(parsed.id);
   if (!job) return { title: 'Job not found — JobPortal' };
 
+  // Same visibility rule the page body applies. generateMetadata runs
+  // independently of the component, so without this an unapproved job's title
+  // would still be emitted into <title> and og:title for a viewer the page
+  // itself is about to 404.
+  if (!(await canViewJob(await readUserFromCookie(), job))) {
+    return { title: 'Job not found — JobPortal' };
+  }
+
   const noindex = job.status !== 'ACTIVE';
   const title = `${job.title} at ${job.company.name} — JobPortal`;
   const description = job.shortDescription ?? job.description.slice(0, 160);
@@ -72,13 +81,26 @@ export default async function JobDetailPage({ params }: PageProps) {
   const job = await loadJob(parsed.id);
   if (!job) notFound();
 
+  // Resolve the viewer BEFORE anything else acts on the row. A job that has
+  // never been public (DRAFT / PENDING_MODERATION) must be indistinguishable
+  // from a non-existent one for everyone except its owner, its collaborators
+  // and platform admins — otherwise admin moderation is decorative, since
+  // anyone holding the URL could read the posting the admin has not approved.
+  //
+  // This has to run ahead of the canonical redirect below: permanentRedirect()
+  // puts the real canonicalSlug — which contains the job title — in the
+  // Location header, so redirecting first would disclose the title of an
+  // unapproved job to an unauthenticated caller who simply guessed the id.
+  const user = await readUserFromCookie();
+  if (!(await canViewJob(user, job))) notFound();
+
   // SRS §6.1 — slug drift handling. The numeric ID is the permalink; the
   // descriptive slug can change. Always 308 to the canonical form.
   if (slug !== job.canonicalSlug) {
     permanentRedirect(`/job/${job.canonicalSlug}`);
   }
 
-  const [skills, cities, user] = await Promise.all([
+  const [skills, cities] = await Promise.all([
     job.skillIds.length > 0
       ? prisma.skill.findMany({
           where: { id: { in: job.skillIds } },
@@ -91,7 +113,6 @@ export default async function JobDetailPage({ params }: PageProps) {
           select: { id: true, name: true },
         })
       : Promise.resolve<{ id: number; name: string }[]>([]),
-    readUserFromCookie(),
   ]);
 
   const userId = user?.sub;

@@ -70,8 +70,14 @@ export class ApplicationsService {
     });
     if (!job) throw new NotFoundException('Job not found');
     if (job.status !== 'ACTIVE') {
+      // Never interpolate the raw Postgres enum into user-facing copy: it leaks
+      // internal vocabulary ("pending_moderation") and the old "no longer"
+      // wording was factually wrong for a job that was never live in the first
+      // place — which is exactly the case for a job awaiting moderation.
       throw new ForbiddenException(
-        `This job is ${job.status.toLowerCase()} and no longer accepts applications.`,
+        job.status === 'PENDING_MODERATION' || job.status === 'DRAFT'
+          ? 'This job is not open for applications yet.'
+          : 'This job is no longer accepting applications.',
       );
     }
 

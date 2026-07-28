@@ -135,4 +135,46 @@ export class NotificationsProducerService {
       },
     });
   }
+
+  // An admin approved a posting that was waiting in review, or sent it back to
+  // the recruiter with a reason (moderation.jobs.enabled). Notifies the job's
+  // OWNER only — unlike a KYC decision, which is company-level and notifies
+  // every recruiter on the company, a posting belongs to the person who posted
+  // it. Called fire-and-log from the admin service — wrap in .catch(log).
+  //
+  // recruiterUserId is Job.postedById, which is nullable (SetNull when a
+  // recruiter departs), so the caller passes null for an orphaned job and this
+  // is a no-op rather than a crash — the same guard notifyNewApplication uses.
+  async notifyJobModerationDecision(input: {
+    recruiterUserId: number | null;
+    jobId: number;
+    jobTitle: string;
+    decision: 'APPROVED' | 'REJECTED';
+    rejectionReason?: string | null;
+  }): Promise<void> {
+    if (await isFlagEnabled(NOTIFICATIONS_KILLSWITCH_FLAG)) return;
+    if (input.recruiterUserId == null) return;
+
+    const approved = input.decision === 'APPROVED';
+    const reason = input.rejectionReason?.trim();
+
+    await prisma.notification.create({
+      data: {
+        userId: input.recruiterUserId,
+        type: approved ? 'JOB_APPROVED' : 'JOB_REJECTED',
+        title: approved ? 'Job approved and live' : 'Job needs changes',
+        body: approved
+          ? `"${input.jobTitle}" has been approved and is now live.`
+          : reason
+            ? `"${input.jobTitle}" was not approved: ${reason}`
+            : // Same generic fallback notifyKycDecision uses — the API requires a
+              // reason on reject, so this only covers a legacy/blank row.
+              `"${input.jobTitle}" was not approved. Review it and submit again.`,
+        // A rejected job is back in DRAFT, so the job detail page is where the
+        // recruiter can read the reason and resubmit. Recruiter-portal-relative:
+        // NotificationBell does router.push() inside apps/recruiter.
+        linkUrl: `/jobs/${input.jobId}`,
+      },
+    });
+  }
 }
