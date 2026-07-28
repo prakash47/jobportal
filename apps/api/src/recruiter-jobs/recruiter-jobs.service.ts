@@ -9,10 +9,7 @@ import {
 } from '@nestjs/common';
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { prisma, Prisma, type Job, type JobStatus } from '@jobportal/db';
-import { syncJob } from '@jobportal/search';
-import { AlertsIndexerHook } from '../alerts/alerts.indexer-hook';
-import { CachePurgeService } from '../cache-purge/cache-purge.service';
-import { EmailService } from '../email/email.service';
+import { JobPublishEffectsService } from '../job-effects/job-publish-effects.service';
 import { RecruiterPostQuotaService } from '../recruiter-post-quota/quota.service';
 import { missingPublishFields } from './dto';
 import { jobManageableWhere } from './job-access';
@@ -53,9 +50,10 @@ export class RecruiterJobsService {
 
   constructor(
     private readonly quota: RecruiterPostQuotaService,
-    private readonly alertsHook: AlertsIndexerHook,
-    private readonly cachePurge: CachePurgeService,
-    private readonly email: EmailService,
+    // The publish/remove side effects live in a shared service so the admin
+    // moderation approve path fires the identical sequence — see
+    // JobPublishEffectsService for why that matters.
+    private readonly effects: JobPublishEffectsService,
   ) {}
 
   async list(
@@ -266,6 +264,11 @@ export class RecruiterJobsService {
       // window between the L1 preflight and here.
       await this.quota.consume(userId);
     }
+    // Stamped only when the job actually enters review, so it stays null for
+    // the DRAFT and straight-to-ACTIVE paths. It duplicates postedAt today and
+    // earns its keep later: approval moves postedAt to the go-live moment, and
+    // this is then the only surviving record of when the recruiter submitted.
+    const submittedForReviewAt = finalStatus === 'PENDING_MODERATION' ? new Date() : null;
 
     // Insert with a placeholder slug, then patch with the real one. Keeps
     // the slug deterministic (`<title-slug>-<id>`) without round-tripping
@@ -292,6 +295,7 @@ export class RecruiterJobsService {
             workMode: input.workMode ?? 'ONSITE',
             jobType: input.jobType ?? 'FREE',
             status: finalStatus,
+            submittedForReviewAt,
             salaryMinPaise: input.salaryMinPaise ?? null,
             salaryMaxPaise: input.salaryMaxPaise ?? null,
             experienceMinYears: input.experienceMinYears ?? null,
@@ -328,12 +332,12 @@ export class RecruiterJobsService {
     // All side effects fire-and-log so the response doesn't block on
     // backend latency.
     if (created.status === 'ACTIVE') {
-      this.firePublishSideEffects(created);
+      this.effects.firePublishSideEffects(created);
       // SRS §4.13 — confirmation to the recruiter that the listing went
       // live. Only on first publish (and reopen below); editing an already-
       // ACTIVE job re-fires firePublishSideEffects but should NOT spam the
       // recruiter with a fresh "your job is live" email.
-      this.fireJobPostedEmail(userId, created).catch((err: unknown) => {
+      this.effects.fireJobPostedEmail(userId, created).catch((err: unknown) => {
         this.logger.warn(
           `job-posted email enqueue failed for job ${created.id}: ${(err as Error).message}`,
         );
@@ -383,7 +387,7 @@ export class RecruiterJobsService {
 
     // Re-sync ES if the live job changed. CLOSED/EXPIRED stay out of ES.
     if (existing.status === 'ACTIVE') {
-      this.firePublishSideEffects(updated);
+      this.effects.firePublishSideEffects(updated);
     }
     return updated;
   }
@@ -416,7 +420,7 @@ export class RecruiterJobsService {
         'Jobs with applications cannot be deleted — close the job instead',
       );
     }
-    this.fireRemoveSideEffects(existing);
+    this.effects.fireRemoveSideEffects(existing);
   }
 
   // Recruiter-driven close. Removes from ES, purges cache. Idempotent.
@@ -430,7 +434,7 @@ export class RecruiterJobsService {
       where: { id },
       data: { status: 'CLOSED' },
     });
-    this.fireRemoveSideEffects(updated);
+    this.effects.fireRemoveSideEffects(updated);
     return updated;
   }
 
@@ -439,16 +443,45 @@ export class RecruiterJobsService {
     if (existing.status !== 'CLOSED' && existing.status !== 'EXPIRED') {
       throw new BadRequestException('Only closed or expired jobs can be reopened');
     }
-    const updated = await prisma.job.update({
-      where: { id },
-      data: { status: 'ACTIVE' },
-    });
-    this.firePublishSideEffects(updated);
-    this.fireJobPostedEmail(userId, updated).catch((err: unknown) => {
-      this.logger.warn(
-        `job-posted email enqueue failed for job ${updated.id}: ${(err as Error).message}`,
-      );
-    });
+
+    // Reopening is a transition INTO the public market, so it honours moderation
+    // exactly like create() and publish(). Before this, reopen() set ACTIVE
+    // unconditionally and fired the full side-effect trio + the "your job is
+    // live" email without ever reading the flag — which made Close → Reopen a
+    // two-click bypass of the review gate.
+    //
+    // It re-reviews rather than trusting the earlier approval because update()
+    // (PATCH) may freely rewrite a CLOSED job's title and description and never
+    // triggers review: trusting the old decision would make Close → Edit →
+    // Reopen a laundering path for content no admin has seen. Quota is
+    // deliberately NOT consumed — relisting an existing job is not posting a
+    // new one, and that was true before this change too.
+    const moderate = await isFlagEnabled(MODERATION_FLAG);
+    const finalStatus: JobStatus = moderate ? 'PENDING_MODERATION' : 'ACTIVE';
+    const now = new Date();
+
+    const data: Prisma.JobUpdateInput = {
+      status: finalStatus,
+      submittedForReviewAt: finalStatus === 'PENDING_MODERATION' ? now : null,
+      rejectionReason: null,
+      reviewedAt: null,
+      reviewedById: null,
+    };
+    // An EXPIRED job carries a past expiresAt by definition; leaving it would let
+    // the nightly sweep re-expire the job the moment it goes live again. publish()
+    // clears it for the same reason.
+    if (existing.expiresAt && existing.expiresAt <= now) data.expiresAt = null;
+
+    const updated = await prisma.job.update({ where: { id }, data });
+
+    if (updated.status === 'ACTIVE') {
+      this.effects.firePublishSideEffects(updated);
+      this.effects.fireJobPostedEmail(userId, updated).catch((err: unknown) => {
+        this.logger.warn(
+          `job-posted email enqueue failed for job ${updated.id}: ${(err as Error).message}`,
+        );
+      });
+    }
     return updated;
   }
 
@@ -501,6 +534,16 @@ export class RecruiterJobsService {
     // never sets one, but a direct-API draft can carry a past expiresAt).
     const data: Prisma.JobUpdateManyMutationInput = { status: finalStatus, postedAt: now };
     if (existing.expiresAt && existing.expiresAt <= now) data.expiresAt = null;
+    // See create(): stamped only on the review path.
+    data.submittedForReviewAt = finalStatus === 'PENDING_MODERATION' ? now : null;
+    // A draft reaching here may be one an admin previously sent back with a
+    // reason. That reason described the OLD submission, so clear it now the
+    // recruiter has resubmitted — otherwise the recruiter portal would keep
+    // showing a rejection notice against a job that is once again under review
+    // (or, with moderation off, already live).
+    data.rejectionReason = null;
+    data.reviewedAt = null;
+    data.reviewedById = null;
 
     // Atomic DRAFT→final flip, guarded on `status: 'DRAFT'` (the delete()
     // pattern). Both requests of a double-click/retry/second-tab race consume a
@@ -529,55 +572,13 @@ export class RecruiterJobsService {
     // Only an ACTIVE (moderation-off) publish is indexed + emailed; a
     // PENDING_MODERATION job waits for admin approval (as in create()).
     if (updated.status === 'ACTIVE') {
-      this.firePublishSideEffects(updated);
-      this.fireJobPostedEmail(userId, updated).catch((err: unknown) => {
+      this.effects.firePublishSideEffects(updated);
+      this.effects.fireJobPostedEmail(userId, updated).catch((err: unknown) => {
         this.logger.warn(
           `job-posted email enqueue failed for job ${updated.id}: ${(err as Error).message}`,
         );
       });
     }
     return updated;
-  }
-
-  // Fire-and-log the publish-side-effect trio. Do NOT await — the response
-  // returns to the recruiter while ES + alerts + Cloudflare run in the
-  // background. Errors log to stdout; the next list/edit will reconcile.
-  private firePublishSideEffects(job: Job): void {
-    syncJob(job.id, 'index').catch((err: unknown) => {
-      this.logger.warn(`syncJob(${job.id}, index) failed: ${(err as Error).message}`);
-    });
-    this.alertsHook.onJobIndexed(job.id).catch((err: unknown) => {
-      this.logger.warn(`alertsHook.onJobIndexed(${job.id}) failed: ${(err as Error).message}`);
-    });
-    this.cachePurge.purgeJob(job.canonicalSlug).catch((err: unknown) => {
-      this.logger.warn(`cachePurge.purgeJob failed: ${(err as Error).message}`);
-    });
-  }
-
-  private fireRemoveSideEffects(job: Job): void {
-    syncJob(job.id, 'remove').catch((err: unknown) => {
-      this.logger.warn(`syncJob(${job.id}, remove) failed: ${(err as Error).message}`);
-    });
-    this.cachePurge.purgeJob(job.canonicalSlug).catch((err: unknown) => {
-      this.logger.warn(`cachePurge.purgeJob failed: ${(err as Error).message}`);
-    });
-  }
-
-  // SRS §4.13 — recruiter notification on first publish + reopen. Looks up
-  // the recruiter's Email ID (User.email) — the canonical channel for
-  // transactional notifications, matching password reset etc.
-  private async fireJobPostedEmail(userId: number, job: Job): Promise<void> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true },
-    });
-    if (!user) return;
-    const webBase = process.env.WEB_URL ?? 'http://localhost:3000';
-    const recruiterBase = process.env.RECRUITER_URL ?? 'http://localhost:3001';
-    await this.email.enqueueJobPostedConfirmation(user.email, userId, {
-      jobTitle: job.title,
-      jobUrl: `${webBase}/job/${job.canonicalSlug}`,
-      applicantsUrl: `${recruiterBase}/jobs/${job.id}/applicants`,
-    });
   }
 }

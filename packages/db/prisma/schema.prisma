@@ -203,6 +203,12 @@ enum ProfileAuditAction {
   KYC_DOCUMENT_DELETE
   KYC_APPROVED
   KYC_REJECTED
+  // Admin job moderation. Both are written with the REVIEWING ADMIN's User id.
+  // The diff carries the job id, the status transition and (on reject) the
+  // admin-authored reason — never the job's title or description, matching the
+  // minimisation rule the KYC and support audit rows already follow.
+  JOB_APPROVED
+  JOB_REJECTED
   // Recruiter self-service password change (Settings → Change Password). Written
   // with the recruiter's own User id. The raw/old/new passwords are never stored
   // in the audit metadata — only the fact of the change.
@@ -286,6 +292,12 @@ enum NotificationType {
   // Job Detail → Collaborate: a job owner added this recruiter as a collaborator
   // (linkUrl points at /jobs/:id).
   JOB_COLLABORATION
+  // Admin job moderation (moderation.jobs.enabled). An admin approved a posting
+  // that was waiting in PENDING_MODERATION, or sent it back to DRAFT with a
+  // reason. One value per outcome, mirroring the KYC_VERIFIED/KYC_REJECTED
+  // split rather than a single generic JOB_MODERATED. linkUrl → /jobs/:id.
+  JOB_APPROVED
+  JOB_REJECTED
 }
 
 // SRS §4.9 — recruiter Team / User-management in-company role (RBAC). This is
@@ -817,8 +829,30 @@ model Job {
   workMode           WorkMode        @default(ONSITE)
   // Post a Job Phase 3 — posting product/type. Default so existing rows backfill to FREE.
   jobType            JobType         @default(FREE)
+  // postedAt means "reached the market", NOT "the row was created" — publish()
+  // refreshes it at go-live, and under moderation the approve path refreshes it
+  // again at APPROVAL, because that is when a seeker can first see the job.
+  // (It is NOT NULL DEFAULT now(), so a DRAFT carries one too — do not treat a
+  // non-null postedAt as proof a job was ever live.)
   postedAt           DateTime        @default(now())
   expiresAt          DateTime?
+  // Admin job moderation (moderation.jobs.enabled). All four are null for a job
+  // that never went through review, so they are additive and backfill-free.
+  //   submittedForReviewAt — set when the job ENTERS PENDING_MODERATION. While a
+  //     job is pending this equals postedAt, so the QUEUE sorts on postedAt and
+  //     rides the existing @@index([status, postedAt]) — no new index needed.
+  //     It earns its place after approval, when postedAt moves to the go-live
+  //     moment and would otherwise erase how long the job actually waited
+  //     (reviewedAt − submittedForReviewAt is the only record of review latency).
+  //   reviewedAt / reviewedById — who decided, and when. reviewedById is a loose
+  //     User id with no FK, matching CompanyKyc.reviewedById: a deleted admin
+  //     must not cascade into job rows or block the delete.
+  //   rejectionReason — the admin's note, surfaced to the recruiter. Cleared on
+  //     approve and on re-publish, so it always describes the CURRENT state.
+  submittedForReviewAt DateTime?
+  reviewedAt           DateTime?
+  reviewedById         Int?
+  rejectionReason      String?
   salaryMinPaise     Int?
   salaryMaxPaise     Int?
   experienceMinYears Int?

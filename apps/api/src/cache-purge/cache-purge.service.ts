@@ -79,6 +79,12 @@ const PATH_MAP: Record<string, string[]> = {
   // so it doesn't hit the defensive ['/'] default and needlessly purge the
   // job-seeker homepage, which this flag cannot affect.
   'recruiter.plans_visible': [],
+  // Decides whether a NEW posting goes live immediately or waits for admin
+  // review. It changes nothing about any page that is already cached — jobs
+  // already live stay live either way — so, like recruiter.plans_visible, it is
+  // mapped explicitly to [] rather than falling through to the defensive ['/']
+  // and purging the seeker homepage for no reason.
+  'moderation.jobs.enabled': [],
 };
 
 export function pathsForFlag(flagKey: string): string[] {

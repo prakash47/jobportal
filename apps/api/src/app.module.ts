@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SentryModule } from '@sentry/nestjs/setup';
+import { AdminJobsModule } from './admin-jobs/admin-jobs.module';
 import { AdminKycModule } from './admin-kyc/admin-kyc.module';
 import { AdminSupportModule } from './admin-support/admin-support.module';
 import { AlertsModule } from './alerts/alerts.module';
@@ -59,6 +60,7 @@ import { StorageModule } from './storage/storage.module';
     RecruiterUsersModule,
     RecruiterBillingModule,
     RecruiterSupportModule,
+    AdminJobsModule,
     AdminKycModule,
     AdminSupportModule,
     JobLifecycleModule,
