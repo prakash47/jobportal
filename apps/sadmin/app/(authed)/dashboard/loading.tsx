@@ -46,6 +46,17 @@ export default function DashboardLoading() {
           </div>
         ))}
       </div>
+
+      {/* Pending approvals — awaited with the KPIs in wave 1, so it belongs in
+          this route-level skeleton. The trend cards below it are NOT here: they
+          stream behind their own <Suspense> in page.tsx and have their own
+          fallback, so duplicating them would flash two different placeholders. */}
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-5">
+        <div className={`${BAR} h-5 w-36`} />
+        <div className={`${BAR} mt-2 h-4 w-48`} />
+        <div className={`${BAR} mt-5 h-6 w-full`} />
+        <div className={`${BAR} mt-3 h-6 w-full`} />
+      </div>
     </div>
   );
 }

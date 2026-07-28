@@ -50,6 +50,11 @@ const config: NextConfig = {
     '@jobportal/auth',
     '@jobportal/types',
     '@jobportal/observability',
+    // The dashboard evaluates moderation.jobs.enabled through this package
+    // (CLAUDE.md §4 — never an inline flag read). apps/recruiter omits it from
+    // its own list despite importing it in middleware; declaring it here avoids
+    // relying on that working by accident.
+    '@jobportal/feature-flags',
   ],
 };
 

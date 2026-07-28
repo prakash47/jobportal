@@ -16,6 +16,7 @@
   "dependencies": {
     "@jobportal/auth": "workspace:*",
     "@jobportal/db": "workspace:*",
+    "@jobportal/feature-flags": "workspace:*",
     "@jobportal/observability": "workspace:*",
     "@jobportal/types": "workspace:*",
     "@jobportal/ui": "workspace:*",
