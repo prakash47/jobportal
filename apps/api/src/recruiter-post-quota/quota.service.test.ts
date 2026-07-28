@@ -43,6 +43,11 @@ function makeRedisStub() {
         expires[key] = ttl;
         return 1;
       }),
+      del: vi.fn(async (key: string) => {
+        const had = store.delete(key);
+        delete expires[key];
+        return had ? 1 : 0;
+      }),
     }),
   };
 }
@@ -196,5 +201,46 @@ describe('RecruiterPostQuotaService.preflight + consume', () => {
       return;
     }
     throw new Error('expected throw');
+  });
+});
+
+describe('RecruiterPostQuotaService refund', () => {
+  it('gives the slot back on both windows', async () => {
+    const redis = makeRedisStub();
+    const svc = new RecruiterPostQuotaService(redis as never);
+    redis.store.set(svc.keyDaily(42), 3);
+    redis.store.set(svc.keyMonthly(42), 9);
+
+    await svc.refund(42);
+
+    expect(redis.store.get(svc.keyDaily(42))).toBe(2);
+    expect(redis.store.get(svc.keyMonthly(42))).toBe(8);
+  });
+
+  // Redis DECR on a MISSING key creates it at -1 with no TTL, and only consume()
+  // ever sets an expiry — so the counter would sit negative indefinitely and
+  // silently grant an extra post. This was near-unreachable while refunds only
+  // fired on a lost publish race, but admin moderation makes them routine: a job
+  // submitted on Monday and rejected on Wednesday has a daily key that expired
+  // long before the decision.
+  it('never leaves a counter negative when the window has already rolled over', async () => {
+    const redis = makeRedisStub();
+    const svc = new RecruiterPostQuotaService(redis as never);
+
+    await svc.refund(42);
+
+    expect(redis.store.has(svc.keyDaily(42))).toBe(false);
+    expect(redis.store.has(svc.keyMonthly(42))).toBe(false);
+  });
+
+  it('deletes rather than clamps, so the next consume() recreates the key with a TTL', async () => {
+    const redis = makeRedisStub();
+    const svc = new RecruiterPostQuotaService(redis as never);
+    redis.store.set(svc.keyDaily(42), 0);
+
+    await svc.refund(42);
+
+    // A key left at 0 with no expiry would never roll over on its own.
+    expect(redis.store.has(svc.keyDaily(42))).toBe(false);
   });
 });
