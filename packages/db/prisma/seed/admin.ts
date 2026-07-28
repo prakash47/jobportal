@@ -25,27 +25,61 @@
 import argon2 from 'argon2';
 import type { PrismaClient } from '../../generated/client';
 
-/** Documented default — see README/ONBOARDING. Override with SADMIN_SEED_PASSWORD. */
+/** Documented default — see ONBOARDING.md §E and README.md. Override with SADMIN_SEED_PASSWORD. */
 const DEFAULT_PASSWORD = 'Admin@123';
+const DEFAULT_EMAIL = 'admin@careerqueue.in';
 
-const SUPER_ADMIN_EMAIL = (process.env.SADMIN_SEED_EMAIL ?? 'admin@careerqueue.in').toLowerCase();
-const SUPER_ADMIN_PASSWORD = process.env.SADMIN_SEED_PASSWORD ?? DEFAULT_PASSWORD;
 const SUPER_ADMIN_NAME = 'Super Admin';
 
+/** Mirrors seed-demo.ts's locality test so both credential-creating seeds agree on "local". */
+const LOOKS_LOCAL =
+  /(?:localhost|127\.0\.0\.1|::1|\.local(?::|\/|$)|\.internal(?::|\/|$))/i;
+
 export async function seedSuperAdmin(prisma: PrismaClient): Promise<void> {
-  // The reference seed, unlike the demo seeds, has NO local-database guard — it
-  // is the seed you would legitimately run against staging or production to
-  // populate flags/plans/cities. A committed, publicly-known credential must
-  // therefore never survive into such an environment. Skip loudly rather than
-  // throw: failing the whole seed would block the legitimate reference data
-  // from being planted, and an operator who genuinely wants an admin there can
-  // set SADMIN_SEED_PASSWORD to a real secret.
-  if (process.env.NODE_ENV === 'production' && SUPER_ADMIN_PASSWORD === DEFAULT_PASSWORD) {
-    console.warn(
-      '  -> SKIPPED: refusing to seed the super admin with the default password in production. ' +
-        'Set SADMIN_SEED_PASSWORD to provision one.',
-    );
-    return;
+  // Read env INSIDE the function, never at module top level.
+  //
+  // seed.ts loads dotenv with a config() call that sits BETWEEN its imports, but this module is
+  // evaluated as part of that import graph — i.e. BEFORE config() runs. A module-level
+  // `process.env.SADMIN_SEED_PASSWORD` therefore reads undefined even when the variable IS set in
+  // .env, silently ignoring the override the docs promise (verified: setting it in .env left the
+  // account on the default password) and, worse, making the guard below compare the default against
+  // itself. By the time this function is CALLED, dotenv has run.
+  //
+  // `||`, not `??`: .env.example ships SADMIN_SEED_EMAIL="" / SADMIN_SEED_PASSWORD="" and everyone
+  // copies that file verbatim, so these arrive as EMPTY STRINGS. `??` only falls back on
+  // null/undefined, so it would seed an account with an empty email and an empty password. The rest
+  // of the repo uses truthy checks for exactly this class of blank-in-.env.example variable
+  // (packages/auth/src/cookies.ts's COOKIE_DOMAIN, next.config.ts's SENTRY_* options).
+  const SUPER_ADMIN_EMAIL = (process.env.SADMIN_SEED_EMAIL || DEFAULT_EMAIL).toLowerCase();
+  const SUPER_ADMIN_PASSWORD = process.env.SADMIN_SEED_PASSWORD || DEFAULT_PASSWORD;
+
+  // The reference seed, unlike the demo seeds, has no local-only guard of its own — it is the seed
+  // you would legitimately run against staging or production to populate flags/plans/cities. A
+  // committed, publicly-known credential must never survive into such an environment.
+  //
+  // Defence in depth, mirroring seed-demo.ts, because NODE_ENV alone is NOT a reliable signal here:
+  // `pnpm db:seed` runs `tsx prisma/seed.ts` and nothing in that chain sets NODE_ENV, and
+  // .env.example does not define it — so an operator pointing DATABASE_URL at staging from their
+  // laptop has NODE_ENV undefined and would sail straight past a NODE_ENV-only check.
+  //
+  //   Guard 1: NODE_ENV must not be 'production'.
+  //   Guard 2: DATABASE_URL must look local.
+  //
+  // Either guard tripping skips ONLY this step while the default password is in use. Skipping
+  // rather than throwing is deliberate: the surrounding reference data (flags, plans, cities) is
+  // legitimate to plant remotely, so failing the whole seed would be the wrong trade. Setting
+  // SADMIN_SEED_PASSWORD to a real secret provisions an admin anywhere, intentionally.
+  if (SUPER_ADMIN_PASSWORD === DEFAULT_PASSWORD) {
+    const dbUrl = process.env.DATABASE_URL ?? '';
+    const unsafe = process.env.NODE_ENV === 'production' || !LOOKS_LOCAL.test(dbUrl);
+    if (unsafe) {
+      console.warn(
+        '  -> SKIPPED: refusing to seed the super admin with the repo default password against ' +
+          `a non-local database ("${dbUrl.replace(/:[^@]*@/, ':***@')}"). ` +
+          'Set SADMIN_SEED_PASSWORD to provision one deliberately.',
+      );
+      return;
+    }
   }
 
   const passwordHash = await argon2.hash(SUPER_ADMIN_PASSWORD, {
@@ -70,7 +104,7 @@ export async function seedSuperAdmin(prisma: PrismaClient): Promise<void> {
   // No explicit `id`: the demo seed ends by advancing the User sequence with
   // setval(..., 200020), so a hardcoded high id here could later be handed out
   // a second time by the sequence. Plain autoincrement has no such hazard.
-  await prisma.user.upsert({
+  const admin = await prisma.user.upsert({
     where: { email: SUPER_ADMIN_EMAIL },
     update: {
       passwordHash,
@@ -85,7 +119,25 @@ export async function seedSuperAdmin(prisma: PrismaClient): Promise<void> {
       emailVerified: true,
       provider: 'LOCAL',
     },
+    select: { id: true },
   });
 
-  console.log(`  -> super admin upserted (${SUPER_ADMIN_EMAIL})`);
+  // Revoke every existing session for this account.
+  //
+  // The `update` branch above will happily promote a row that someone else created — and
+  // registration is public, auto-issues a session, and hands out a 30-day refresh token, while
+  // AuthService.refresh() rebuilds its claims from the LIVE user row. So without this, anyone who
+  // registered this address first would keep a valid session that silently becomes an ADMIN session
+  // the moment the seed runs — including on the run where an operator sets a strong
+  // SADMIN_SEED_PASSWORD believing they are provisioning a fresh account.
+  //
+  // Unconditional rather than only-on-update: it is idempotent, and re-seeding is also exactly when
+  // the password is being reset, which should end existing sessions anyway. The only cost is that a
+  // developer who re-seeds is signed out of the portal.
+  const { count } = await prisma.session.deleteMany({ where: { userId: admin.id } });
+
+  console.log(
+    `  -> super admin upserted (${SUPER_ADMIN_EMAIL})` +
+      (count > 0 ? `; ${count} pre-existing session(s) revoked` : ''),
+  );
 }

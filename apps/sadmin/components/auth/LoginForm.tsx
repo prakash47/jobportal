@@ -48,13 +48,22 @@ export function LoginForm() {
         // valid non-admin credential, so being more specific there would
         // reconstruct the account-enumeration oracle the server avoids.
         //
-        // Everything else must NOT be reported as a credential problem. The
-        // login endpoint is rate-limited (5/min per email, plus a per-email
-        // guard), and telling a throttled admin their password is wrong sends
-        // them off resetting a password that was never the problem — which is
-        // exactly what happened while verifying this form.
+        // Everything else must NOT be reported as a credential problem. Telling
+        // a throttled admin their password is wrong sends them off resetting a
+        // password that was never the problem — exactly what happened while
+        // verifying this form.
+        //
+        // Two independent limiters can produce a 429, with very different
+        // windows, and the response does not reliably say which fired:
+        //   • the global ThrottlerGuard — 5 requests / 60s, keyed on IP;
+        //   • PerEmailThrottleGuard — 10 failed attempts / HOUR, keyed on email
+        //     (per-email-throttle.guard.ts, SRS §4.12.7).
+        // So the copy has to cover both; promising "wait a minute" would strand
+        // someone in the hour-long branch retrying against a wall.
         if (res.status === 429) {
-          throw new Error('Too many sign-in attempts. Wait a minute and try again.');
+          throw new Error(
+            'Too many sign-in attempts. Wait a minute and try again — after repeated failures this email is locked for up to an hour.',
+          );
         }
         if (res.status >= 500) {
           throw new Error('The server is having trouble. Please try again shortly.');

@@ -27,7 +27,11 @@ export default async function DashboardPage() {
   const kpis = await getPlatformKpis();
 
   return (
-    <>
+    // data-wide opts into the (authed) layout's max-w-6xl column. A three-across
+    // metric grid does not fit the default max-w-3xl reading column — without
+    // this the cards render ~27% narrower than the identical tiles on the
+    // recruiter dashboard, which sets data-wide for exactly this reason.
+    <div data-wide className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Dashboard</h1>
         <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
@@ -35,7 +39,7 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <section aria-labelledby="sadmin-kpi-heading" className="mt-6">
+      <section aria-labelledby="sadmin-kpi-heading">
         <h2 id="sadmin-kpi-heading" className="sr-only">
           Key metrics
         </h2>
@@ -65,6 +69,6 @@ export default async function DashboardPage() {
           />
         </div>
       </section>
-    </>
+    </div>
   );
 }

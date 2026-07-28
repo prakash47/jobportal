@@ -22,6 +22,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 export const config = {
   runtime: 'nodejs',
   matcher: [
+    // The bare root is listed separately. Under basePath, Next compiles the
+    // catch-all below into a pattern whose path group is mandatory, so it
+    // requires a literal "/" after "/sadmin" and never matches "/sadmin"
+    // itself — leaving the portal's own entry URL without the X-Robots-Tag
+    // this file exists to set. (Verified against the production build:
+    // /sadmin had no header while /sadmin/login and /sadmin/dashboard did.)
+    '/',
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|webp|ico|woff2?|css|js|json|xml|txt)).*)',
   ],
 };

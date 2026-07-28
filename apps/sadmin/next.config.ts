@@ -4,10 +4,18 @@ import { withSentryConfig } from '@sentry/nextjs';
 const config: NextConfig = {
   // The owner's requirement: this portal is addressed at the /sadmin slug.
   //
-  // Everything is prefixed automatically — page routes, /_next/static assets,
-  // <Link href>, router.push() and next/image sources — so application code
-  // NEVER writes the prefix itself. Writing href="/sadmin/dashboard" would
-  // double-apply it and 404; always write href="/dashboard".
+  // Page routes, /_next/* assets, <Link href> and router.push() are prefixed
+  // automatically, so application code NEVER writes the prefix itself. Writing
+  // href="/sadmin/dashboard" would double-apply it and 404; always write
+  // href="/dashboard".
+  //
+  // IMPORTANT EXCEPTION: next/image does NOT prefix a STRING src. `<Image
+  // src="/brand/x.png">` — the form apps/web and apps/recruiter both use — would
+  // request /brand/x.png while the asset is only served at /sadmin/brand/x.png,
+  // and turning the optimizer on does not help because its own `url=` param is
+  // un-prefixed too. components/brand/Logo.tsx documents the workaround (static
+  // imports, whose /_next/* URL IS prefixed, plus `unoptimized`). Use that
+  // pattern for any local image added to this app.
   //
   // Two consequences worth remembering:
   //  • middleware sees the path with the basePath already STRIPPED, so its
@@ -36,7 +44,13 @@ const config: NextConfig = {
   // Workspace packages ship raw TypeScript (their package.json `main` points at
   // src/index.ts), so Next must transpile every one this app imports. Omitting
   // one produces an opaque parse error at build time, not a helpful message.
-  transpilePackages: ['@jobportal/ui', '@jobportal/db', '@jobportal/auth', '@jobportal/types'],
+  transpilePackages: [
+    '@jobportal/ui',
+    '@jobportal/db',
+    '@jobportal/auth',
+    '@jobportal/types',
+    '@jobportal/observability',
+  ],
 };
 
 // Phase 1 item 18 — sourcemap upload + tracing defaults, same shape as the other

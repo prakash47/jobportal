@@ -237,6 +237,7 @@ POSTHOG_KEY=""
 WEB_URL="http://localhost:3000"
 RECRUITER_URL="http://localhost:3001"
 SERVICES_URL="http://localhost:3002"
+SADMIN_URL="http://localhost:3003"
 API_URL="http://localhost:4000"
 ```
 
@@ -262,6 +263,7 @@ Apps will be available on:
 - **web**: http://localhost:3000
 - **recruiter**: http://localhost:3001
 - **services**: http://localhost:3002
+- **sadmin** (internal Super Admin): http://localhost:3003/sadmin
 - **api**: http://localhost:4000
 - **Prisma Studio** (DB GUI): `pnpm db:studio` → http://localhost:5555
 

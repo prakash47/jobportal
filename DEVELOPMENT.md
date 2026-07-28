@@ -172,7 +172,7 @@ Run from the repo root; Turborepo runs the task across every workspace.
 |---|---|
 | `pnpm typecheck` | TypeScript strict mode across all apps + packages. Must be 0 errors. |
 | `pnpm test` | Vitest unit tests across packages + apps. Must all pass. |
-| `pnpm build` | Production build of all four apps. Must succeed. |
+| `pnpm build` | Production build of all five apps. Must succeed. |
 | `pnpm lint` | ESLint where configured. |
 
 TypeScript runs in **strict** mode with `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` on. No `any` without a justification comment. Coverage target is 80% on `packages/*`.
