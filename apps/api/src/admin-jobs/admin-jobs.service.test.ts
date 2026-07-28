@@ -62,6 +62,9 @@ function pendingJob(over: Record<string, unknown> = {}) {
     companyId: 7,
     skillIds: [],
     cityIds: [],
+    // True for the paths that actually spent a slot (create(PUBLISH), publish()).
+    // reopen() produces a pending job with this false — see the refund tests.
+    postQuotaConsumed: true,
     ...over,
   };
 }
@@ -108,16 +111,21 @@ describe('AdminJobsService', () => {
       });
     });
 
-    // A review queue is FIFO: the job that has waited longest is the one to work
-    // next. Browsing views are the opposite.
-    it('orders the pending queue oldest-first and other views newest-first', async () => {
+    // A review queue is FIFO: the job that has waited longest is worked next.
+    // It must sort on submittedForReviewAt, NOT postedAt — reopen() returns a
+    // previously-live job to the queue without touching postedAt, so a job
+    // reopened today can carry a months-old postedAt and would jump the queue.
+    it('orders the pending queue by when jobs entered review, not by postedAt', async () => {
       await service.listJobs({});
       expect(m.job.findMany.mock.calls[0]?.[0].orderBy).toEqual([
-        { postedAt: 'asc' },
+        { submittedForReviewAt: 'asc' },
         { id: 'asc' },
       ]);
+    });
 
-      m.job.findMany.mockClear();
+    // Those rows may have no submittedForReviewAt at all (never reviewed), so
+    // browsing views sort on postedAt instead.
+    it('orders the browsing views newest-first on postedAt', async () => {
       await service.listJobs({ status: 'ACTIVE' });
       expect(m.job.findMany.mock.calls[0]?.[0].orderBy).toEqual([
         { postedAt: 'desc' },
@@ -195,10 +203,37 @@ describe('AdminJobsService', () => {
       expect(call.data).not.toHaveProperty('postedAt');
     });
 
-    it('REJECT refunds the post slot consumed at submit time', async () => {
+    it('REJECT refunds the post slot when one was actually consumed', async () => {
+      m.job.findUnique.mockResolvedValueOnce(pendingJob({ postQuotaConsumed: true }));
       m.job.findUniqueOrThrow.mockResolvedValue(decidedJob({ status: 'DRAFT' }));
       await service.moderate(ADMIN, JOB, { decision: 'REJECT', reason: 'Nope' });
       expect(fakeQuota.refund).toHaveBeenCalledWith(42);
+    });
+
+    // Not every route into review spends a slot. reopen() puts a previously-live
+    // job back into the queue and deliberately does NOT consume, so refunding
+    // here would hand back something that was never taken — reopen → reject
+    // would mint a free post, farmable once per closed job the recruiter owns.
+    it('REJECT does NOT refund a job that reached review without consuming a slot', async () => {
+      m.job.findUnique.mockResolvedValueOnce(pendingJob({ postQuotaConsumed: false }));
+      m.job.findUniqueOrThrow.mockResolvedValue(decidedJob({ status: 'DRAFT' }));
+      await service.moderate(ADMIN, JOB, { decision: 'REJECT', reason: 'Nope' });
+      expect(fakeQuota.refund).not.toHaveBeenCalled();
+    });
+
+    // Whichever way it goes, the job stops holding a slot: spent on approval,
+    // handed back on rejection. Leaving it true would let a later decision on a
+    // re-submitted job refund twice.
+    it.each([
+      ['APPROVE', undefined],
+      ['REJECT', 'Nope'],
+    ])('%s settles the quota flag', async (decision, reason) => {
+      m.job.findUniqueOrThrow.mockResolvedValue(decidedJob({ status: 'DRAFT' }));
+      await service.moderate(ADMIN, JOB, {
+        decision: decision as 'APPROVE' | 'REJECT',
+        ...(reason ? { reason } : {}),
+      });
+      expect(m.job.updateMany.mock.calls[0]?.[0].data.postQuotaConsumed).toBe(false);
     });
 
     // Two admins hitting Approve both pass the status read; only the one whose

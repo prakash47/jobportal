@@ -184,6 +184,10 @@ describe('RecruiterJobsService', () => {
       const out = await service.create(42, validInput);
       expect(out.status).toBe('PENDING_MODERATION');
       expect(fakeQuota.consume).toHaveBeenCalledWith(42); // still consumed
+      const created = mocked.job.create.mock.calls[0]?.[0].data;
+      expect(created.submittedForReviewAt).toBeInstanceOf(Date);
+      // A slot WAS spent here, so a rejection of this job has one to give back.
+      expect(created.postQuotaConsumed).toBe(true);
       await Promise.resolve();
       expect(mockedSync).not.toHaveBeenCalled();
       expect(fakeAlertsHook.onJobIndexed).not.toHaveBeenCalled();
@@ -382,12 +386,39 @@ describe('RecruiterJobsService', () => {
 
       const out = await service.reopen(42, 5);
 
-      expect(mocked.job.update.mock.calls[0]?.[0].data.status).toBe('PENDING_MODERATION');
+      const data = mocked.job.update.mock.calls[0]?.[0].data;
+      expect(data.status).toBe('PENDING_MODERATION');
+      // Stamped so the admin queue can order and age it. Nothing else asserts
+      // this, and dropping it would silently break the queue's ordering.
+      expect(data.submittedForReviewAt).toBeInstanceOf(Date);
       expect(out.status).toBe('PENDING_MODERATION');
       await Promise.resolve();
       expect(mockedSync).not.toHaveBeenCalled();
       expect(fakeAlertsHook.onJobIndexed).not.toHaveBeenCalled();
       expect(fakeEmail.enqueueJobPostedConfirmation).not.toHaveBeenCalled();
+    });
+
+    // Relisting an existing job is not posting a new one, so reopen() takes no
+    // slot. It must therefore mark the review as non-refundable, or a later
+    // rejection would hand the recruiter a post they never paid for.
+    it('reopen consumes no quota and marks the review as non-refundable', async () => {
+      flagState[MODERATION_FLAG] = true;
+      mocked.job.findFirst.mockResolvedValue({
+        id: 5,
+        postedById: 42,
+        status: 'CLOSED',
+        canonicalSlug: 'foo-5',
+      });
+      mocked.job.update.mockResolvedValue({
+        id: 5,
+        status: 'PENDING_MODERATION',
+        canonicalSlug: 'foo-5',
+      });
+
+      await service.reopen(42, 5);
+
+      expect(fakeQuota.consume).not.toHaveBeenCalled();
+      expect(mocked.job.update.mock.calls[0]?.[0].data.postQuotaConsumed).toBe(false);
     });
 
     // An EXPIRED job carries a past expiresAt by definition, so relisting without

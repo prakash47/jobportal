@@ -838,21 +838,29 @@ model Job {
   expiresAt          DateTime?
   // Admin job moderation (moderation.jobs.enabled). All four are null for a job
   // that never went through review, so they are additive and backfill-free.
-  //   submittedForReviewAt — set when the job ENTERS PENDING_MODERATION. While a
-  //     job is pending this equals postedAt, so the QUEUE sorts on postedAt and
-  //     rides the existing @@index([status, postedAt]) — no new index needed.
-  //     It earns its place after approval, when postedAt moves to the go-live
-  //     moment and would otherwise erase how long the job actually waited
-  //     (reviewedAt − submittedForReviewAt is the only record of review latency).
+  //   submittedForReviewAt — set when the job ENTERS PENDING_MODERATION, and the
+  //     column the review queue sorts on. It is NOT interchangeable with
+  //     postedAt: reopen() puts a previously-live job back into review without
+  //     touching postedAt, so a job reopened today can carry a postedAt from
+  //     months ago and would jump an oldest-first queue ordered on it. It is
+  //     also the only surviving record of the wait once approval moves postedAt
+  //     to the go-live moment (reviewedAt − submittedForReviewAt).
   //   reviewedAt / reviewedById — who decided, and when. reviewedById is a loose
   //     User id with no FK, matching CompanyKyc.reviewedById: a deleted admin
   //     must not cascade into job rows or block the delete.
   //   rejectionReason — the admin's note, surfaced to the recruiter. Cleared on
   //     approve and on re-publish, so it always describes the CURRENT state.
+  //   postQuotaConsumed — whether a post-quota slot was actually spent to put
+  //     this job into review. create(PUBLISH) and publish() consume one;
+  //     reopen() deliberately does not, because relisting an existing job is not
+  //     posting a new one. A rejection refunds the slot, so without this flag it
+  //     would refund one that was never taken and reopen → reject would mint a
+  //     free post. Cleared whenever the job leaves PENDING_MODERATION.
   submittedForReviewAt DateTime?
   reviewedAt           DateTime?
   reviewedById         Int?
   rejectionReason      String?
+  postQuotaConsumed    Boolean   @default(false)
   salaryMinPaise     Int?
   salaryMaxPaise     Int?
   experienceMinYears Int?
@@ -869,6 +877,10 @@ model Job {
   collaborators JobCollaborator[]
 
   @@index([status, postedAt])
+  // Backs the admin review queue: WHERE status='PENDING_MODERATION'
+  // ORDER BY submittedForReviewAt. @@index([status, postedAt]) cannot serve it —
+  // see the submittedForReviewAt comment for why the two columns diverge.
+  @@index([status, submittedForReviewAt])
   @@index([primaryCityId, status])
   @@index([companyId, status])
   @@index([postedById, status])

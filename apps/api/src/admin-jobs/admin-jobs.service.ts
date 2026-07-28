@@ -27,10 +27,16 @@ export class AdminJobsService {
   // ACTIVE/DRAFT are available so the console can show what was recently
   // approved or sent back.
   //
-  // Ordering: oldest-first for the pending queue, because a review queue is
-  // FIFO and the job that has waited longest is the one to work next. The other
-  // views are browsing rather than working, so they read newest-first. Both
-  // directions ride the existing @@index([status, postedAt]).
+  // Ordering: the pending queue is FIFO — the job that has waited longest is the
+  // one to work next — and it sorts on submittedForReviewAt, NOT postedAt.
+  // reopen() puts a previously-live job back into review without touching
+  // postedAt, so a job reopened today can carry a postedAt from months ago and
+  // would jump the whole queue if it were ordered on that. Backed by
+  // @@index([status, submittedForReviewAt]).
+  //
+  // The ACTIVE/DRAFT views are browsing rather than working, and their rows may
+  // have no submittedForReviewAt at all (never reviewed), so they read
+  // newest-first on postedAt via @@index([status, postedAt]).
   async listJobs(query: ListAdminJobsQueryInput): Promise<{
     hits: unknown[];
     total: number;
@@ -40,15 +46,17 @@ export class AdminJobsService {
     const page = query.page ?? 1;
     const status: JobStatus = query.status ?? 'PENDING_MODERATION';
     const where: Prisma.JobWhereInput = { status };
-    const direction: Prisma.SortOrder = status === 'PENDING_MODERATION' ? 'asc' : 'desc';
+    const pending = status === 'PENDING_MODERATION';
 
     const [hits, total] = await Promise.all([
       prisma.job.findMany({
         where,
         // `id` breaks ties deterministically so a page boundary can't drop or
-        // duplicate a row when several jobs share a postedAt to the millisecond
+        // duplicate a row when several jobs share a timestamp to the millisecond
         // (a bulk seed or a scripted post does exactly that).
-        orderBy: [{ postedAt: direction }, { id: direction }],
+        orderBy: pending
+          ? [{ submittedForReviewAt: 'asc' }, { id: 'asc' }]
+          : [{ postedAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
         select: {
@@ -128,6 +136,7 @@ export class AdminJobsService {
         canonicalSlug: true,
         postedById: true,
         expiresAt: true,
+        postQuotaConsumed: true,
       },
     });
     if (!existing) throw new NotFoundException('Job not found');
@@ -147,6 +156,9 @@ export class AdminJobsService {
       reviewedAt: now,
       reviewedById: adminUserId,
       rejectionReason: reason,
+      // The job is leaving review either way, so any slot it was holding is
+      // settled here — spent on approval, handed back on rejection.
+      postQuotaConsumed: false,
     };
     if (approve) {
       // postedAt means "reached the market". The recruiter submitted it whenever
@@ -218,9 +230,14 @@ export class AdminJobsService {
       // the normal case here — it is cheap insurance for a job that reached
       // review by some other path.
       this.effects.fireRemoveSideEffects(updated);
-      // The slot was consumed at submit time, before anyone knew the job would
-      // be refused. Refund it: the recruiter never got a live listing.
-      if (updated.postedById != null) {
+      // Give the slot back — the recruiter never got a live listing — but ONLY
+      // if one was actually spent to get here. Not every route into review
+      // consumes: create(PUBLISH) and publish() do, while reopen() deliberately
+      // does not, because relisting an existing job is not posting a new one.
+      // Refunding unconditionally would hand back a slot that was never taken,
+      // and reopen → reject would mint a free post, farmable once per closed job
+      // the recruiter owns.
+      if (updated.postedById != null && existing.postQuotaConsumed) {
         await this.quota.refund(updated.postedById).catch((err: unknown) => {
           this.logger.warn(`quota refund failed for job ${jobId}: ${(err as Error).message}`);
         });

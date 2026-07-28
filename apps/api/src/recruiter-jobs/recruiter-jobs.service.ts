@@ -296,6 +296,9 @@ export class RecruiterJobsService {
             jobType: input.jobType ?? 'FREE',
             status: finalStatus,
             submittedForReviewAt,
+            // A quota slot was consumed above for any publish, so a rejection of
+            // this job has one to give back.
+            postQuotaConsumed: finalStatus === 'PENDING_MODERATION',
             salaryMinPaise: input.salaryMinPaise ?? null,
             salaryMaxPaise: input.salaryMaxPaise ?? null,
             experienceMinYears: input.experienceMinYears ?? null,
@@ -466,6 +469,9 @@ export class RecruiterJobsService {
       rejectionReason: null,
       reviewedAt: null,
       reviewedById: null,
+      // No quota was consumed above, so a rejection of THIS review must not
+      // refund a slot — doing so would hand the recruiter a free post.
+      postQuotaConsumed: false,
     };
     // An EXPIRED job carries a past expiresAt by definition; leaving it would let
     // the nightly sweep re-expire the job the moment it goes live again. publish()
@@ -536,6 +542,8 @@ export class RecruiterJobsService {
     if (existing.expiresAt && existing.expiresAt <= now) data.expiresAt = null;
     // See create(): stamped only on the review path.
     data.submittedForReviewAt = finalStatus === 'PENDING_MODERATION' ? now : null;
+    // quota.consume() ran above, so a rejection has a slot to refund.
+    data.postQuotaConsumed = finalStatus === 'PENDING_MODERATION';
     // A draft reaching here may be one an admin previously sent back with a
     // reason. That reason described the OLD submission, so clear it now the
     // recruiter has resubmitted — otherwise the recruiter portal would keep
