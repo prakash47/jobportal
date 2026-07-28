@@ -15,7 +15,7 @@ import { prisma } from '@jobportal/db';
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { formatDayLabel, type ChartPoint } from './chart';
 
-/** How many days the trend charts cover. */
+/** How many days the trend charts cover. Drives BOTH the labels and the SQL window. */
 export const TREND_DAYS = 30;
 
 // Every daily bucket below is computed in IST, not UTC, and the conversion is
@@ -36,6 +36,25 @@ export const TREND_DAYS = 30;
 // `generate_series` produces the full window server-side, so each series comes
 // back dense and zero-filled in ONE round trip — no 30 separate counts, and no
 // date arithmetic in JS (which would re-introduce the timezone problem).
+//
+// Each join also carries a redundant-looking range predicate on the RAW column:
+//
+//     ON col >= ((now() AT TIME ZONE 'UTC') - INTERVAL '31 days')
+//    AND (col AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = d::date
+//
+// The second line is the exact IST bucketing, but a join on an EXPRESSION can
+// never use an index, so on its own it forces a sequential scan of the whole
+// table on every dashboard load (confirmed with EXPLAIN ANALYZE: "Seq Scan on
+// Application"). Fine at 371 rows; linear in table size thereafter. The first
+// line is sargable — it compares the bare column to a constant — so it bounds
+// the scan to a month of rows and can use a plain btree index if one is ever
+// added. 31 days rather than 30 because the IST window starts 5h30m before the
+// UTC day does; the extra day is slack, and the exact filtering is still done
+// by the bucketing predicate beside it.
+//
+// It sits in the ON clause, NOT in a WHERE: moving it would filter away the
+// generated days that have no matching rows and silently turn the LEFT JOIN
+// into an inner join, collapsing the zero-filled series.
 
 export interface PlatformKpis {
   /** Recruiter accounts that can currently sign in. */
@@ -102,7 +121,7 @@ export interface PendingApprovals {
 export async function getPendingApprovals(): Promise<PendingApprovals> {
   const [companyVerification, jobPostings, moderationEnabled] = await Promise.all([
     // PENDING is the only reviewable state: NOT_SUBMITTED has nothing to look
-    // at, and APPROVED/REJECTED have already been decided.
+    // at, and VERIFIED/REJECTED have already been decided.
     prisma.companyKyc.count({ where: { status: 'PENDING' } }),
     prisma.job.count({ where: { status: 'PENDING_MODERATION' } }),
     // CLAUDE.md §4 — flag evaluation goes through @jobportal/feature-flags,
@@ -136,6 +155,13 @@ interface SignupRow {
 }
 
 export async function getSignupStats(): Promise<SignupStats> {
+  // One instant, captured here and passed into the query, rather than letting
+  // SQL call now() itself. Every chart on the page is then anchored to the SAME
+  // moment, so two series cannot land on different day domains when a request
+  // straddles IST midnight. This is not date ARITHMETIC in JS — just an instant
+  // handed to Postgres, which still does all of the timezone work.
+  const anchor = new Date();
+
   // ADMIN accounts are excluded from both series: internal staff logins are not
   // signups, and with a handful of real users a single seeded admin would
   // visibly distort "new signups today".
@@ -144,12 +170,13 @@ export async function getSignupStats(): Promise<SignupStats> {
            COUNT(u.id) FILTER (WHERE u.role = 'CANDIDATE')::int AS candidates,
            COUNT(u.id) FILTER (WHERE u.role = 'RECRUITER')::int AS recruiters
     FROM generate_series(
-           ((now() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '29 days'),
-           ((now() AT TIME ZONE 'Asia/Kolkata')::date),
+           ((${anchor}::timestamptz AT TIME ZONE 'Asia/Kolkata')::date - (INTERVAL '1 day' * ${TREND_DAYS - 1})),
+           ((${anchor}::timestamptz AT TIME ZONE 'Asia/Kolkata')::date),
            INTERVAL '1 day'
          ) AS d
     LEFT JOIN "User" u
-      ON (u."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = d::date
+      ON u."createdAt" >= ((${anchor}::timestamptz AT TIME ZONE 'UTC') - (INTERVAL '1 day' * ${TREND_DAYS + 1}))
+     AND (u."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = d::date
     GROUP BY d
     ORDER BY d
   `;
@@ -192,30 +219,54 @@ interface DayCountRow {
 }
 
 export async function getActivityTrends(): Promise<ActivityTrends> {
+  // Both series share one anchor instant, so they cannot end up on different day
+  // domains if the request straddles IST midnight — the sr-only data table pairs
+  // them positionally by row.
+  const anchor = new Date();
+
   const [jobRows, appRows] = await Promise.all([
-    // postedAt, not createdAt: a job enters the market when it is published.
-    // Drafts have a null postedAt and are excluded by the join.
+    // postedAt, not createdAt: this series measures when supply reached the
+    // market, not when a row was created.
+    //
+    // The status filter is load-bearing. `Job.postedAt` is NOT NULL DEFAULT
+    // now(), so a job saved as a DRAFT still gets a postedAt at creation — it
+    // does NOT come back null. Without this filter, unpublished drafts are
+    // counted as "jobs posted" (measured against the dev database: 53 reported
+    // where only 52 had actually been posted). PENDING_MODERATION is excluded
+    // on the same grounds — submitted but never live — and it is already
+    // surfaced in its own right by the Pending approvals card above.
+    //
+    // `NOT IN (DRAFT, PENDING_MODERATION)` rather than `= ACTIVE`: a job that
+    // genuinely went live and has since EXPIRED or been CLOSED still belongs in
+    // the history of what was posted that day.
+    //
+    // Note that publish() rewrites postedAt to the go-live moment, so publishing
+    // an old draft places it on the day it actually reached the market. That is
+    // correct for this series rather than a bug.
     prisma.$queryRaw<DayCountRow[]>`
       SELECT to_char(d, 'YYYY-MM-DD') AS day, COUNT(j.id)::int AS count
       FROM generate_series(
-             ((now() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '29 days'),
-             ((now() AT TIME ZONE 'Asia/Kolkata')::date),
+             ((${anchor}::timestamptz AT TIME ZONE 'Asia/Kolkata')::date - (INTERVAL '1 day' * ${TREND_DAYS - 1})),
+             ((${anchor}::timestamptz AT TIME ZONE 'Asia/Kolkata')::date),
              INTERVAL '1 day'
            ) AS d
       LEFT JOIN "Job" j
-        ON (j."postedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = d::date
+        ON j."postedAt" >= ((${anchor}::timestamptz AT TIME ZONE 'UTC') - (INTERVAL '1 day' * ${TREND_DAYS + 1}))
+       AND j.status NOT IN ('DRAFT', 'PENDING_MODERATION')
+       AND (j."postedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = d::date
       GROUP BY d
       ORDER BY d
     `,
     prisma.$queryRaw<DayCountRow[]>`
       SELECT to_char(d, 'YYYY-MM-DD') AS day, COUNT(a.id)::int AS count
       FROM generate_series(
-             ((now() AT TIME ZONE 'Asia/Kolkata')::date - INTERVAL '29 days'),
-             ((now() AT TIME ZONE 'Asia/Kolkata')::date),
+             ((${anchor}::timestamptz AT TIME ZONE 'Asia/Kolkata')::date - (INTERVAL '1 day' * ${TREND_DAYS - 1})),
+             ((${anchor}::timestamptz AT TIME ZONE 'Asia/Kolkata')::date),
              INTERVAL '1 day'
            ) AS d
       LEFT JOIN "Application" a
-        ON (a."appliedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = d::date
+        ON a."appliedAt" >= ((${anchor}::timestamptz AT TIME ZONE 'UTC') - (INTERVAL '1 day' * ${TREND_DAYS + 1}))
+       AND (a."appliedAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = d::date
       GROUP BY d
       ORDER BY d
     `,

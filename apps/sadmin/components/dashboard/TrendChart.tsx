@@ -40,6 +40,8 @@ export interface TrendChartProps {
 // the chart fills whatever width its container has without any client-side
 // measurement — no ResizeObserver, no 'use client', still a server component.
 const VIEW_W = 600;
+/** Half the line stroke width — see the viewBox note below. */
+const STROKE_PAD = 1;
 
 export function TrendChart({
   series,
@@ -48,7 +50,16 @@ export function TrendChart({
   emptyMessage = 'No activity in this period.',
   height = 120,
 }: TrendChartProps) {
-  const labels = series[0]?.points.map((p) => p.label) ?? [];
+  // Row labels come from the LONGEST series rather than series[0], so a short
+  // or empty series cannot truncate the table and hide another series' data.
+  // Callers are expected to pass series over a common day domain — getActivityTrends
+  // guarantees that by anchoring both of its queries to one instant — and the
+  // per-cell `?? 0` below keeps a mismatch from throwing if that ever changes.
+  const labels =
+    series.reduce<ChartPoint[]>(
+      (longest, s) => (s.points.length > longest.length ? s.points : longest),
+      [],
+    ).map((p) => p.label) ?? [];
 
   // Every series flat zero: say so plainly rather than drawing a line along the
   // baseline, which reads as real data showing "consistently zero" when the
@@ -72,7 +83,15 @@ export function TrendChart({
         </div>
       ) : (
         <svg
-          viewBox={`0 0 ${VIEW_W} ${height}`}
+          // Vertical inset of STROKE_PAD on each side. linePoints maps a zero
+          // value to exactly y=height and a peak to exactly y=0, so a 2px stroke
+          // centred on the path hangs 1px outside the box at either extreme —
+          // and an <svg> clips at its viewport by default, shaving the line in
+          // half exactly where it matters most. Widening the viewBox rather than
+          // insetting the geometry keeps chart.ts purely about data-to-pixels.
+          // Bars are unaffected (filled, unstroked) but share it so both
+          // variants stay dimensionally identical.
+          viewBox={`0 ${-STROKE_PAD} ${VIEW_W} ${height + STROKE_PAD * 2}`}
           preserveAspectRatio="none"
           className="w-full"
           style={{ height }}

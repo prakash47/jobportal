@@ -48,7 +48,7 @@ describe('getPendingApprovals', () => {
     });
   });
 
-  // NOT_SUBMITTED has nothing to review and APPROVED/REJECTED are already
+  // NOT_SUBMITTED has nothing to review and VERIFIED/REJECTED are already
   // decided — counting them would inflate the queue with work that does not exist.
   it('counts only PENDING company verifications', async () => {
     await getPendingApprovals();
@@ -131,6 +131,9 @@ describe('getSignupStats', () => {
     const sql = mocked.$queryRaw.mock.calls[0]![0].join('?');
     expect(sql).toContain(`AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata'`);
     expect(sql).toContain('generate_series');
+    // The window length comes from TREND_DAYS as a bound parameter, not a
+    // hardcoded interval that could drift from the labels.
+    expect(sql).not.toContain("INTERVAL '29 days'");
   });
 
   // Internal staff accounts are not signups.
@@ -181,14 +184,49 @@ describe('getActivityTrends', () => {
     }
   });
 
-  // A job enters the market when it is PUBLISHED. Drafts have a null postedAt
-  // and are excluded by the join rather than by a status filter.
   it('measures jobs by postedAt, not createdAt', async () => {
     mocked.$queryRaw.mockResolvedValue([]);
     await getActivityTrends();
     const jobSql = mocked.$queryRaw.mock.calls[0]![0].join('?');
     expect(jobSql).toContain('postedAt');
     expect(jobSql).not.toContain('createdAt');
+  });
+
+  // Job.postedAt is NOT NULL DEFAULT now(), so a DRAFT still carries one — it
+  // does NOT come back null. Without an explicit status filter, unpublished
+  // drafts are counted as "jobs posted". This test exists because the original
+  // implementation shipped exactly that bug behind a comment asserting the
+  // opposite.
+  it('excludes DRAFT and PENDING_MODERATION from "jobs posted"', async () => {
+    mocked.$queryRaw.mockResolvedValue([]);
+    await getActivityTrends();
+    const jobSql = mocked.$queryRaw.mock.calls[0]![0].join('?');
+    expect(jobSql).toContain('DRAFT');
+    expect(jobSql).toContain('PENDING_MODERATION');
+    expect(jobSql).toMatch(/status\s+NOT\s+IN/i);
+  });
+
+  // A job that went live and has since expired or closed WAS still posted that
+  // day; filtering to ACTIVE would erase it from history.
+  it('does not narrow "jobs posted" to currently-ACTIVE jobs', async () => {
+    mocked.$queryRaw.mockResolvedValue([]);
+    await getActivityTrends();
+    const jobSql = mocked.$queryRaw.mock.calls[0]![0].join('?');
+    expect(jobSql).not.toMatch(/status\s*=\s*'ACTIVE'/i);
+  });
+
+  // Two independently-evaluated now() calls could bucket onto different days if
+  // a request straddles IST midnight, silently misaligning the paired series in
+  // the sr-only data table.
+  it('anchors both series to a single shared instant', async () => {
+    mocked.$queryRaw.mockResolvedValue([]);
+    await getActivityTrends();
+    const [jobCall, appCall] = mocked.$queryRaw.mock.calls;
+    // The anchor is a bound parameter, not inline SQL.
+    expect(jobCall![1]).toBeInstanceOf(Date);
+    expect(appCall![1]).toBeInstanceOf(Date);
+    expect((jobCall![1] as Date).getTime()).toBe((appCall![1] as Date).getTime());
+    expect(jobCall![0].join('?')).not.toContain('now()');
   });
 
   it('returns zero totals for an empty window', async () => {

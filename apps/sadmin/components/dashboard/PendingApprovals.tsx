@@ -50,7 +50,13 @@ export function PendingApprovals({ data }: { data: PendingApprovalsData }) {
             </span>
             {companyVerification > 0 && (
               <a
-                href={`${WEB_URL}/admin/kyc-review`}
+                // ?status=PENDING, matching the count beside it. Without the
+                // param the admin queue applies no filter and resolves to
+                // "everything except NOT_SUBMITTED" — PENDING plus already
+                // decided VERIFIED and REJECTED rows — so a reviewer clicking a
+                // "1" would land on a longer list and have to find the one item
+                // that is actually waiting.
+                href={`${WEB_URL}/admin/kyc-review?status=PENDING`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-[var(--color-primary-700)] hover:underline"
