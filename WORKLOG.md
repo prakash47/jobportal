@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
-| | | | |
+| Jayesh | `feature/navbar-mega-menu` | **Seeker navbar → hover MEGA-MENU panels for Jobs + Companies** (`apps/web` shared `SiteHeader`, all public pages). Hover/focus the **Jobs** or **Companies** nav link → a smooth brand-flat panel of grouped browse links opens (distinct from Naukri's cramped 3-column look); **clicking the link still navigates** to `/jobs` / `/companies`. **100% real data** via a new cached `loadNavMenuData()`: top roles→`/jobs?q=`, cities→`/jobs?city=`, industries→`/jobs?industry=`, skills→`/jobs?skill=`, top companies→`/company/<slug>-overview-<id>`, company collections `/companies?category=<slug>` / `?hiring=1` / `?sort=reviews`. (Deliberately NOT using `mode`/`emp` filters — they no-op at the search layer.) New `components/nav/` (PrimaryNav client island + panel); `SiteHeader` fetches + passes data. **No schema/migration/flag; `theme.css` untouched** (existing tokens only). | Shared `apps/web/…/home/SiteHeader.tsx` (seeker navbar) + new `apps/web/components/nav/` — apps/web only |
 
 ---
 
