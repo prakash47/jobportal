@@ -14,8 +14,9 @@ export interface JobsFilterBarProps {
   posters: { id: number; name: string }[];
 }
 
-// Order the Status dropdown sensibly (Open first). PENDING_MODERATION only
-// appears when moderation is enabled (OFF on Day 0) — kept for exhaustiveness.
+// Order the Status dropdown sensibly (Open first). PENDING_MODERATION sits
+// second because it is now a routine state — moderation.jobs.enabled ships ON,
+// so every newly published job passes through "Under review" on its way live.
 const STATUS_ORDER: JobStatus[] = ['ACTIVE', 'PENDING_MODERATION', 'DRAFT', 'EXPIRED', 'CLOSED'];
 const CATEGORY_ORDER: JobCategory[] = ['FREE', 'HOT_VACANCY', 'SMB', 'INTERNSHIP'];
 

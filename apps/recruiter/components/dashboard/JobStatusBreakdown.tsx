@@ -5,12 +5,22 @@ import { JOB_STATUS_META, type JobStatus } from '../jobs/JobStatusBadge';
 // into the Jobs list already filtered to it (/jobs?status=…) — the same
 // destination the sidebar's "Draft Jobs" item uses.
 //
-// Open, Draft, Expired and Closed always render — all four are reachable states
-// a recruiter acts on, and a visible zero is information. (Expiry is real: the
-// job-lifecycle worker sweeps past-due postings to EXPIRED daily.)
-// PENDING_MODERATION is the exception: it is unreachable while
-// moderation.jobs.enabled is OFF, so it appears only if it actually holds rows.
-const ALWAYS_SHOWN: readonly JobStatus[] = ['ACTIVE', 'DRAFT', 'EXPIRED', 'CLOSED'];
+// Every state always renders, because all five are now reachable and a visible
+// zero is information. (Expiry is real: the job-lifecycle worker sweeps past-due
+// postings to EXPIRED daily.)
+//
+// PENDING_MODERATION used to be excluded and shown only when it held rows, on
+// the grounds that it was unreachable while moderation.jobs.enabled was OFF.
+// That flag now ships ON, so every newly published job passes through this state
+// — hiding the row at zero would mean a recruiter whose queue had just cleared
+// saw no trace that review is part of publishing at all.
+const ALWAYS_SHOWN: readonly JobStatus[] = [
+  'ACTIVE',
+  'DRAFT',
+  'PENDING_MODERATION',
+  'EXPIRED',
+  'CLOSED',
+];
 const ORDER: readonly JobStatus[] = ['ACTIVE', 'DRAFT', 'PENDING_MODERATION', 'EXPIRED', 'CLOSED'];
 
 export function JobStatusBreakdown({
@@ -56,7 +66,12 @@ export function JobStatusBreakdown({
               {value > 0 ? (
                 <Link
                   href={`/jobs?status=${status}`}
-                  aria-label={`${value} ${label.toLowerCase()} jobs`}
+                  // "Open: 3 jobs" rather than "3 open jobs" — the latter
+                  // template produced "3 under review jobs" once the moderation
+                  // label became a phrase rather than a single adjective. This
+                  // form also matches how the row reads visually (label left,
+                  // count right) and works for all five states.
+                  aria-label={`${label}: ${value} ${value === 1 ? 'job' : 'jobs'}`}
                   className="flex items-center justify-between gap-3 py-2.5 text-sm transition-colors hover:text-[var(--color-primary-700)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-ring)]"
                 >
                   <span className="text-[var(--color-fg)]">{label}</span>

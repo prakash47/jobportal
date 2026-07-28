@@ -24,8 +24,13 @@ const COPY = {
   },
   reopen: {
     title: (t: string) => `Reopen “${t}”?`,
+    // Worded like `publish` below, and for the same reason: reopen() honours the
+    // moderation flag, so with moderation on a reopened job goes to review
+    // first. The old copy promised it "goes live again immediately — it
+    // reappears in search and starts accepting applications", which is false
+    // under moderation: the job is not indexed and applications are refused.
     description:
-      'The job goes live again immediately — it reappears in search and starts accepting applications.',
+      'Reopening resubmits this job. Once it goes live it reappears in search and starts accepting applications again.',
     confirm: 'Reopen job',
     variant: 'primary' as const,
     fallbackError: 'Could not reopen this job.',

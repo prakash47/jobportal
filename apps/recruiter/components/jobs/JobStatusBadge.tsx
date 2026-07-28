@@ -16,15 +16,22 @@ interface StatusMeta {
 }
 
 // Color-coded so a recruiter can identify a posting's state at a glance.
-// Open = green, Draft = grey, Expired = amber, Closed = red. PENDING_MODERATION
-// is only reachable when `moderation.jobs.enabled` is ON (OFF on Day 0), so it
-// normally never renders — kept distinct (navy) for exhaustiveness.
+// Open = green, Draft = grey, Expired = amber, Closed = red, Under review = navy.
+//
+// PENDING_MODERATION is now a routine state, not a theoretical one:
+// `moderation.jobs.enabled` ships ON, so every newly published job passes
+// through it while a reviewer looks at it. It keeps the `primary` navy rather
+// than borrowing warning/amber (claimed by EXPIRED) or neutral/grey (claimed by
+// DRAFT), so the five states stay individually identifiable — and the label,
+// not the colour, is what actually conveys the state (WCAG 1.4.1).
 export const JOB_STATUS_META: Record<JobStatus, StatusMeta> = {
   ACTIVE: { variant: 'success', label: 'Open', fgClass: 'text-[oklch(0.52_0.15_145)]' },
   DRAFT: { variant: 'neutral', label: 'Draft' },
   EXPIRED: { variant: 'warning', label: 'Expired' },
   CLOSED: { variant: 'danger', label: 'Closed', fgClass: 'text-[oklch(0.52_0.20_25)]' },
-  PENDING_MODERATION: { variant: 'primary', label: 'Pending review' },
+  // "Under review" over "Pending review": it reads as something happening to the
+  // job rather than something the recruiter has left undone.
+  PENDING_MODERATION: { variant: 'primary', label: 'Under review' },
 };
 
 /**

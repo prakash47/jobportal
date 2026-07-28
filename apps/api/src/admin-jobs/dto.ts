@@ -4,16 +4,24 @@ import { z } from 'zod';
 // Shapes mirror admin-kyc/dto.ts: `.strict()` everywhere, and query params are
 // strings (Express) transformed to numbers rather than coerced.
 
-// The queue's own state plus the two states a decision can produce, so the UI
-// can offer "waiting / approved / sent back" views over the same endpoint.
-// Deliberately NOT the full JobStatus set — EXPIRED and CLOSED are lifecycle
-// outcomes, not moderation ones, and listing them here would imply this console
-// is a general job browser.
-export const JOB_REVIEW_STATUSES = ['PENDING_MODERATION', 'ACTIVE', 'DRAFT'] as const;
+// Two VIEWS, not a raw status filter.
+//
+// Filtering on JobStatus was the obvious design and it is wrong: `ACTIVE` is
+// every live job on the platform, the overwhelming majority of which were never
+// moderated, and `DRAFT` is every unfinished draft. A console offering those as
+// "approved" and "sent back" tabs would be stating something false — the review
+// console must only ever show jobs that actually went through review.
+//
+//   pending — awaiting a decision now (the queue).
+//   decided — has a reviewedAt, i.e. a human actually ruled on it. This is also
+//     the only place a moderation decision is readable at all: decisions write
+//     ProfileAuditLog rows, and that table has no read surface anywhere.
+export const JOB_REVIEW_VIEWS = ['pending', 'decided'] as const;
+export type JobReviewView = (typeof JOB_REVIEW_VIEWS)[number];
 
 export const ListAdminJobsQueryDto = z
   .object({
-    status: z.enum(JOB_REVIEW_STATUSES).optional(),
+    view: z.enum(JOB_REVIEW_VIEWS).optional(),
     page: z
       .string()
       .regex(/^\d+$/)

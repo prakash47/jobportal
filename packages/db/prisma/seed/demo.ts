@@ -635,7 +635,13 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
         cityIds: [primaryCityId],
         skillIds,
         industryId,
-        status: 'ACTIVE',
+        // `status` is deliberately NOT re-asserted here (the create branch above
+        // still sets it). Re-running this seed used to force every demo job back
+        // to ACTIVE, which silently emptied the moderation review queue of any
+        // job a developer had parked in PENDING_MODERATION to exercise it — the
+        // queue would just go quiet with nothing to explain why. seedFlags takes
+        // the same care for the opposite reason (`update: {}` so a reseed never
+        // clobbers an admin's toggle).
         employmentType: j.employmentType,
         workMode: j.workMode,
         postedAt,

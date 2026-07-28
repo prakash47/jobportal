@@ -40,7 +40,7 @@ export const JOBS_SORT_COLUMNS: Record<
 /**
  * Option labels for the mobile "Sort by" select (the card layout has no column
  * headers to click). Status order is the enum's lifecycle order — Draft →
- * Pending review → Open → Expired → Closed (see the page's ORDER_BY note).
+ * Under review → Open → Expired → Closed (see the page's ORDER_BY note).
  */
 export const JOBS_SORT_LABELS: Record<JobsSortKey, string> = {
   posted_desc: 'Date posted (newest first)',
