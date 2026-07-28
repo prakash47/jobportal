@@ -214,6 +214,9 @@ importers:
       '@jobportal/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@jobportal/feature-flags':
+        specifier: workspace:*
+        version: link:../../packages/feature-flags
       '@jobportal/observability':
         specifier: workspace:*
         version: link:../../packages/observability
