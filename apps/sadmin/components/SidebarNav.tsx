@@ -1,0 +1,71 @@
+'use client';
+
+import type { ComponentType, SVGProps } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { cn } from '@jobportal/ui';
+import { LayoutDashboard } from '@jobportal/ui/icons';
+
+type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
+
+// The Super Admin portal's navigation. Only "Dashboard" exists today; the
+// upcoming surfaces (job-post review/approval, KYC & business verification,
+// support tickets) each add one entry here. The structure is already the
+// recruiter rail's, so adding an item is a one-line change and adding a
+// collapsible group follows that portal's existing disclosure pattern.
+//
+// hrefs are basePath-RELATIVE. Next prefixes '/sadmin' itself, so writing
+// '/sadmin/dashboard' here would resolve to /sadmin/sadmin/dashboard.
+const NAV_ITEMS: readonly { href: string; label: string; icon: NavIcon }[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard as NavIcon },
+];
+
+function isActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+// The rail sits on a FIXED navy surface (--color-primary-600) that does NOT
+// follow the light/dark token swap, so its states are alpha-white rather than
+// surface tokens — the same approach as the seeker dashboard and the recruiter
+// portal. Contrast on #192249: white/70 = 8.3:1, cyan accent-500 = 5.2:1.
+//
+// FOCUS: theme.css's base rule paints :focus-visible with --color-ring
+// (= --color-primary-500), which measures just 1.96:1 against this navy —
+// below the 3:1 WCAG 1.4.11 floor, across the portal's entire primary
+// navigation. Because theme.css sets an AUTHOR outline, the browser's own
+// adaptive ring is suppressed and there is no fallback. Re-point the colour to
+// white (~15:1); width and offset stay inherited. theme.css is shared with
+// apps/web and must not be edited, so this is done at the call site.
+const FOCUS_ON_NAVY = 'focus-visible:outline-white';
+
+const ROW = `mt-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${FOCUS_ON_NAVY}`;
+const ROW_ACTIVE = 'bg-white/10 font-medium text-white';
+const ROW_IDLE = 'text-white/70 hover:bg-white/5 hover:text-white';
+
+const ICON = 'size-[18px] shrink-0';
+// Brand cyan on the active row's icon only — the rail's single accent.
+const ICON_ACTIVE = 'text-[var(--color-accent-500)]';
+const ICON_IDLE = 'text-white/70';
+
+export function SidebarNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav aria-label="Super Admin">
+      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        const active = isActive(pathname, href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? 'page' : undefined}
+            className={cn(ROW, active ? ROW_ACTIVE : ROW_IDLE)}
+          >
+            <Icon className={cn(ICON, active ? ICON_ACTIVE : ICON_IDLE)} aria-hidden="true" />
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
