@@ -33,7 +33,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/job-moderation-api` | 2026-07-29 | Held across PR 1 **and** PR 2 of the job-moderation series (PR 2's flag-flip migration lands in the same folder). Released the moment PR 2 merges. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
-| | | | |
+| Claude/Prakash | `feature/job-moderation-api` | **Job moderation — PR 1 of 3 (backend).** Resolves the `moderation.jobs.enabled` trapdoor: `PENDING_MODERATION` currently has NO exit (close/reopen/publish all 400, the expiry sweep skips it), so flipping the flag strands every posting. Adds `Job.submittedForReviewAt` / `reviewedAt` / `reviewedById` / `rejectionReason` + `NotificationType.JOB_APPROVED`/`JOB_REJECTED` + `ProfileAuditAction.JOB_APPROVED`/`JOB_REJECTED` (migration `add_job_moderation`; **no new `JobStatus` value** — reject bounces to DRAFT + reason). New **`apps/api/src/admin-jobs`** module: `GET /admin/jobs`, `GET /admin/jobs/:id`, `PATCH /admin/jobs/:id/moderate` (AdminGuard, atomic status-guarded flip, audit row in-transaction, quota refund on reject). Extracts **`JobPublishEffectsService`** so approve replays the exact ES+alerts+purge+email sequence. Fixes the **`reopen()` moderation bypass** and the **public `/job/[slug]` leak** (non-live jobs 404 for anon; poster/collaborator/admin still preview). Flag stays **OFF** in this PR. | 🔒 **`packages/db/prisma/schema.prisma` + migrations** (lock taken, held through PR 2). `keys.ts` / `theme.css` / `packages/types` / barrels **not** touched. |
 
 ---
 
@@ -60,7 +60,8 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Feature | Notes |
 |---|---|---|
-| | | |
+| Claude/Prakash | **Job moderation — PR 2 (`feature/job-moderation-queue-ui`)** | The sadmin `/jobs` review queue + detail + approve/reject UI, the recruiter-facing "Under review" surfaces, and the flag flip to **ON** (seed default + `enable_job_moderation_flag` migration for existing DBs — the seed's `update: {}` means a new default alone never reaches them). Holds the schema lock from PR 1. |
+| Claude/Prakash | **Admin console migration — PR 3 (`feature/sadmin-admin-migration`)** | Moves feature-flags · audit-log · kyc-review · support out of `apps/web/app/admin` into `/sadmin` and deletes the old subtree. **Must land after PR 2**: `/admin/feature-flags` is the only surface that can turn moderation OFF, and a raw DB update can't substitute (`invalidateFlag()` is only called from `setFlag()`, so the 30s cache keeps serving the stale value). Also takes the `keys.ts` lock for the moderation-flag criticality change. |
 
 ---
 
