@@ -58,11 +58,11 @@ export class AuthService {
     return this.issueSession(user, deviceInfo, ipAddress);
   }
 
-  async login(
-    input: LoginInput,
-    deviceInfo: string | undefined,
-    ipAddress: string | undefined,
-  ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+  // Timing-safe credential check shared by every password-login entry point
+  // (/auth/login and /auth/admin/login). Extracted rather than duplicated so
+  // the dummy-hash timing defence and the OAuth-only rejection can never drift
+  // apart between the two endpoints.
+  private async verifyCredentials(input: LoginInput): Promise<User> {
     const user = await prisma.user.findUnique({ where: { email: input.email } });
     // OAuth-only users have passwordHash === null — password login must never
     // succeed for them. Still run a dummy verify so timing leaks nothing.
@@ -72,6 +72,40 @@ export class AuthService {
         : await verifyPassword(input.password, await dummyHash()).then(() => false);
 
     if (!user || !ok) throw new UnauthorizedException('Invalid email or password');
+    return user;
+  }
+
+  /**
+   * ADMIN-only password login, used by the internal Super Admin portal
+   * (apps/sadmin). Exists because `login()` performs NO role check — a
+   * CANDIDATE posting to the sadmin sign-in form would otherwise receive a
+   * perfectly valid session on the admin origin, and only be stopped later by
+   * the portal's own page gate. An internal console should not mint a session
+   * at all for someone who can never use it.
+   */
+  async adminLogin(
+    input: LoginInput,
+    deviceInfo: string | undefined,
+    ipAddress: string | undefined,
+  ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+    const user = await this.verifyCredentials(input);
+
+    // Ordering is deliberate and mirrors the recruiter-deactivation check in
+    // login(): the role is inspected only AFTER the password has been verified.
+    // Rejecting non-admins earlier would answer "is this address an admin?" for
+    // anyone who can send a request, and the message is byte-identical to a
+    // wrong password for exactly the same reason.
+    if (user.role !== 'ADMIN') throw new UnauthorizedException('Invalid email or password');
+
+    return this.issueSession(user, deviceInfo, ipAddress);
+  }
+
+  async login(
+    input: LoginInput,
+    deviceInfo: string | undefined,
+    ipAddress: string | undefined,
+  ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+    const user = await this.verifyCredentials(input);
 
     // A recruiter removed from their team (soft-deactivated) is blocked from
     // re-authenticating — their existing sessions were already revoked at
