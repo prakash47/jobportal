@@ -6,6 +6,7 @@ config({ path: resolve(__dirname, '../../../.env') });
 
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/client';
+import { seedSuperAdmin } from './seed/admin';
 import { seedArticles } from './seed/articles';
 import { seedCities } from './seed/cities';
 import { seedFlags } from './seed/flags';
@@ -44,6 +45,12 @@ async function main(): Promise<void> {
 
   console.log('[seed] career-advice articles...');
   await seedArticles(prisma);
+
+  // Super admin for the internal /sadmin portal. Last because it is the only
+  // step that creates a User row — keeping it after the reference data makes
+  // the log read in dependency order even though it has no dependencies.
+  console.log('[seed] super admin (sadmin portal)...');
+  await seedSuperAdmin(prisma);
 
   console.log('[seed] complete.');
 }

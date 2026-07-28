@@ -23,6 +23,9 @@ async function bootstrap(): Promise<void> {
     process.env.WEB_URL ?? 'http://localhost:3000',
     process.env.RECRUITER_URL ?? 'http://localhost:3001',
     process.env.SERVICES_URL ?? 'http://localhost:3002',
+    // apps/sadmin — the internal Super Admin portal. Origin only: the app is
+    // served under basePath '/sadmin', but a CORS origin never carries a path.
+    process.env.SADMIN_URL ?? 'http://localhost:3003',
   ];
   app.enableCors({
     origin: allowedOrigins,

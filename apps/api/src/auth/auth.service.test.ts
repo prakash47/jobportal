@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@jobportal/db', () => ({
@@ -187,5 +192,170 @@ describe('AuthService.login (deactivated-recruiter block)', () => {
     );
     expect(out.accessToken).toBe('access');
     expect(mocked.session.create).toHaveBeenCalled();
+  });
+});
+
+// The Super Admin portal's sign-in (apps/sadmin). The property that matters is
+// that a correct password for a NON-admin mints nothing at all: /auth/login is
+// deliberately role-agnostic, so without this endpoint a candidate posting to
+// the admin form would walk away with a valid session on the admin origin.
+describe('AuthService.adminLogin (ADMIN-only sign-in)', () => {
+  let service: AuthService;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockedIssue.mockReturnValue({
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      refreshJti: 'jti',
+      refreshExpiresAt: new Date('2099-01-01T00:00:00Z'),
+    });
+    mockedHash.mockResolvedValue('dummy-hash');
+    mockedVerify.mockResolvedValue(true);
+    mocked.session.create.mockResolvedValue({ id: 1 });
+    service = new AuthService();
+  });
+
+  it('signs in an ADMIN and persists a session', async () => {
+    mocked.user.findUnique.mockResolvedValue({
+      id: 1,
+      email: 'admin@careerqueue.in',
+      passwordHash: 'hash',
+      role: 'ADMIN',
+      emailVerified: true,
+    });
+
+    const out = await service.adminLogin(
+      { email: 'admin@careerqueue.in', password: 'Admin@123' },
+      undefined,
+      undefined,
+    );
+
+    expect(out.accessToken).toBe('access');
+    expect(mocked.session.create).toHaveBeenCalled();
+  });
+
+  // The core guarantee. A valid CANDIDATE credential must not yield a session.
+  it('rejects a CANDIDATE with a CORRECT password and mints no session', async () => {
+    mocked.user.findUnique.mockResolvedValue({
+      id: 7,
+      email: 'seeker@example.com',
+      passwordHash: 'hash',
+      role: 'CANDIDATE',
+      emailVerified: true,
+    });
+
+    await expect(
+      service.adminLogin({ email: 'seeker@example.com', password: 'correct' }, undefined, undefined),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(mocked.session.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a RECRUITER with a CORRECT password and mints no session', async () => {
+    mocked.user.findUnique.mockResolvedValue({
+      id: 9,
+      email: 'priya@nimbus.example',
+      passwordHash: 'hash',
+      role: 'RECRUITER',
+      emailVerified: true,
+    });
+
+    await expect(
+      service.adminLogin({ email: 'priya@nimbus.example', password: 'correct' }, undefined, undefined),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(mocked.session.create).not.toHaveBeenCalled();
+  });
+
+  // Ordering guard. The role must be inspected only AFTER the password has been
+  // checked — inspecting it first would answer "is this address an admin?" for
+  // anyone who can send a request, without knowing any credential.
+  it('verifies the password BEFORE inspecting the role (no enumeration oracle)', async () => {
+    mocked.user.findUnique.mockResolvedValue({
+      id: 7,
+      email: 'seeker@example.com',
+      passwordHash: 'hash',
+      role: 'CANDIDATE',
+      emailVerified: true,
+    });
+
+    await expect(
+      service.adminLogin({ email: 'seeker@example.com', password: 'correct' }, undefined, undefined),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(mockedVerify).toHaveBeenCalled();
+  });
+
+  // ...and the message must be indistinguishable from a wrong password, or the
+  // response body becomes the oracle instead of the timing.
+  it('uses the same generic message for a non-admin as for a bad password', async () => {
+    mocked.user.findUnique.mockResolvedValue({
+      id: 7,
+      email: 'seeker@example.com',
+      passwordHash: 'hash',
+      role: 'CANDIDATE',
+      emailVerified: true,
+    });
+    const nonAdmin = await service
+      .adminLogin({ email: 'seeker@example.com', password: 'correct' }, undefined, undefined)
+      .catch((e: Error) => e.message);
+
+    vi.clearAllMocks();
+    mockedVerify.mockResolvedValue(false);
+    mocked.user.findUnique.mockResolvedValue({
+      id: 1,
+      email: 'admin@careerqueue.in',
+      passwordHash: 'hash',
+      role: 'ADMIN',
+      emailVerified: true,
+    });
+    const badPassword = await service
+      .adminLogin({ email: 'admin@careerqueue.in', password: 'wrong' }, undefined, undefined)
+      .catch((e: Error) => e.message);
+
+    expect(nonAdmin).toBe(badPassword);
+  });
+
+  it('rejects a real ADMIN with the wrong password', async () => {
+    mockedVerify.mockResolvedValue(false);
+    mocked.user.findUnique.mockResolvedValue({
+      id: 1,
+      email: 'admin@careerqueue.in',
+      passwordHash: 'hash',
+      role: 'ADMIN',
+      emailVerified: true,
+    });
+
+    await expect(
+      service.adminLogin({ email: 'admin@careerqueue.in', password: 'wrong' }, undefined, undefined),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(mocked.session.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown email (still runs the dummy-hash timing path)', async () => {
+    mocked.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.adminLogin({ email: 'nobody@example.com', password: 'x' }, undefined, undefined),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    // The dummy hash is produced via hashPassword so the no-such-user branch
+    // costs the same as a real verify.
+    expect(mockedHash).toHaveBeenCalled();
+    expect(mocked.session.create).not.toHaveBeenCalled();
+  });
+
+  // An OAuth-only admin has passwordHash === null; password login must never
+  // succeed for them even with the "right" password.
+  it('rejects an OAuth-only ADMIN (passwordHash null)', async () => {
+    mocked.user.findUnique.mockResolvedValue({
+      id: 2,
+      email: 'oauth-admin@careerqueue.in',
+      passwordHash: null,
+      role: 'ADMIN',
+      emailVerified: true,
+    });
+
+    await expect(
+      service.adminLogin({ email: 'oauth-admin@careerqueue.in', password: 'x' }, undefined, undefined),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(mocked.session.create).not.toHaveBeenCalled();
   });
 });

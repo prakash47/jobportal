@@ -57,6 +57,7 @@ cp .env.example .env
 # Per-app copies (the same file, copied to each)
 cp .env apps/web/.env
 cp .env apps/recruiter/.env
+cp .env apps/sadmin/.env
 cp .env apps/api/.env
 ```
 
@@ -200,7 +201,7 @@ npm install --global windows-build-tools  # or install "Desktop development with
 
 ### If `db:seed:demo:full` fails with `SASL: client password must be a string`
 
-Means `.env` isn't being picked up. Make sure `.env` exists at the repo root AND inside each app folder (`apps/web/.env`, `apps/recruiter/.env`, `apps/api/.env`).
+Means `.env` isn't being picked up. Make sure `.env` exists at the repo root AND inside each app folder (`apps/web/.env`, `apps/recruiter/.env`, `apps/sadmin/.env`, `apps/api/.env`).
 
 ### Re-seeding the demo
 
