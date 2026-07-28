@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { prisma } from '@jobportal/db';
+import { prisma, type JobStatus } from '@jobportal/db';
 import { readUserFromCookie } from '../../../../../lib/auth/server-session';
 import { loadJobFormCatalogues } from '../../../../../lib/jobs/catalogues';
 import { jobToWizardInitialValues } from '../../../../../lib/jobs/wizard-values';
@@ -56,7 +56,7 @@ export default async function EditJobPage({ params }: PageProps) {
         </div>
         <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
           <span className="font-medium text-[var(--color-fg)]">{job.title}</span>
-          {' · '}Job ID {job.id}. Changes to a live job go public immediately.
+          {' · '}Job ID {job.id}. {editHint(job.status)}
         </p>
       </header>
 
@@ -75,4 +75,25 @@ export default async function EditJobPage({ params }: PageProps) {
       />
     </div>
   );
+}
+
+// The old copy said "Changes to a live job go public immediately" for EVERY
+// status, which is wrong in two directions: a draft is not public at all, and a
+// job awaiting moderation is not visible to candidates either — it sat directly
+// beneath an "Under review" badge saying the opposite. update() also skips the
+// search re-sync for anything that is not ACTIVE, so the claim was untrue of the
+// system as well as of the UI.
+function editHint(status: JobStatus): string {
+  switch (status) {
+    case 'ACTIVE':
+      return 'Changes to a live job go public immediately.';
+    case 'PENDING_MODERATION':
+      return 'This job is waiting on review, so your changes are not public yet.';
+    case 'DRAFT':
+      return 'Drafts stay private until you publish them.';
+    default:
+      // EXPIRED / CLOSED — editable, but not visible to candidates until the
+      // job is reopened.
+      return 'This job is not visible to candidates right now.';
+  }
 }

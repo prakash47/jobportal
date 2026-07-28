@@ -277,6 +277,8 @@ export default async function JobsPage({ searchParams }: PageProps) {
         </Button>
       </header>
 
+      <SubmittedNotice outcome={typeof sp['submitted'] === 'string' ? sp['submitted'] : undefined} />
+
       <JobsFilterBar locations={locations} posters={posters} />
 
       {rows.length === 0 ? (
@@ -323,6 +325,49 @@ export default async function JobsPage({ searchParams }: PageProps) {
       {/* Per-page select + Previous / numbered pages / Next. Self-hides when
           there is nothing to paginate or resize (≤ the smallest page size). */}
       <JobsPagination page={page} totalPages={totalPages} total={total} perPage={perPage} />
+    </div>
+  );
+}
+
+// Confirmation for a job that was just created from the Post-a-Job wizard.
+// Posting used to redirect here silently, which was survivable when a published
+// job went live instantly — the recruiter could see it at the top of the list.
+// Under moderation the job lands in "Under review" instead, so without this the
+// redirect looks like the submission failed.
+//
+// Driven by ?submitted=, which the wizard sets from the API's returned status
+// rather than from what it asked for, so it always describes what actually
+// happened. An unknown value renders nothing.
+function SubmittedNotice({ outcome }: { outcome: string | undefined }) {
+  const copy =
+    outcome === 'review'
+      ? {
+          title: 'Your job has been submitted for review.',
+          body: "Our team checks new postings before they go live. You'll be notified once it's approved — usually within a day. It appears below as “Under review” until then.",
+        }
+      : outcome === 'live'
+        ? {
+            title: 'Your job is live.',
+            body: 'Candidates can find it in search now.',
+          }
+        : outcome === 'draft'
+          ? {
+              title: 'Draft saved.',
+              body: 'It stays private until you publish it.',
+            }
+          : null;
+
+  if (!copy) return null;
+
+  return (
+    // role=status so the outcome is announced after the client-side navigation
+    // that brought the recruiter here — there is no page load to do it for us.
+    <div
+      role="status"
+      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-4 py-3"
+    >
+      <p className="text-sm font-medium text-[var(--color-fg)]">{copy.title}</p>
+      <p className="mt-0.5 text-sm text-[var(--color-fg-muted)]">{copy.body}</p>
     </div>
   );
 }

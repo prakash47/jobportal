@@ -4,13 +4,13 @@ import type { ComponentType, SVGProps } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@jobportal/ui';
-import { LayoutDashboard } from '@jobportal/ui/icons';
+import { ClipboardList, LayoutDashboard } from '@jobportal/ui/icons';
 
 type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
-// The Super Admin portal's navigation. Only "Dashboard" exists today; the
-// upcoming surfaces (job-post review/approval, KYC & business verification,
-// support tickets) each add one entry here. The structure is already the
+// The Super Admin portal's navigation. The remaining surfaces (KYC & business
+// verification, support tickets) still live in the older /admin console inside
+// apps/web and each add one entry here when they move. The structure is the
 // recruiter rail's, so adding an item is a one-line change and adding a
 // collapsible group follows that portal's existing disclosure pattern.
 //
@@ -18,6 +18,7 @@ type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
 // '/sadmin/dashboard' here would resolve to /sadmin/sadmin/dashboard.
 const NAV_ITEMS: readonly { href: string; label: string; icon: NavIcon }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard as NavIcon },
+  { href: '/jobs', label: 'Job review', icon: ClipboardList as NavIcon },
 ];
 
 function isActive(pathname: string, href: string): boolean {

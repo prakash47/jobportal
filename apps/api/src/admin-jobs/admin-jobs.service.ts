@@ -23,20 +23,19 @@ export class AdminJobsService {
     private readonly notifications: NotificationsProducerService,
   ) {}
 
-  // The review queue. Defaults to the jobs actually waiting on a decision;
-  // ACTIVE/DRAFT are available so the console can show what was recently
-  // approved or sent back.
+  // The review console's two views — see JOB_REVIEW_VIEWS for why this is not a
+  // raw status filter.
   //
-  // Ordering: the pending queue is FIFO — the job that has waited longest is the
-  // one to work next — and it sorts on submittedForReviewAt, NOT postedAt.
-  // reopen() puts a previously-live job back into review without touching
-  // postedAt, so a job reopened today can carry a postedAt from months ago and
-  // would jump the whole queue if it were ordered on that. Backed by
+  // Ordering. `pending` is FIFO — the job that has waited longest is the one to
+  // work next — and it sorts on submittedForReviewAt, NOT postedAt. reopen()
+  // returns a previously-live job to review without touching postedAt, so a job
+  // reopened today can carry a postedAt from months ago and would jump the whole
+  // queue if it were ordered on that. Backed by
   // @@index([status, submittedForReviewAt]).
   //
-  // The ACTIVE/DRAFT views are browsing rather than working, and their rows may
-  // have no submittedForReviewAt at all (never reviewed), so they read
-  // newest-first on postedAt via @@index([status, postedAt]).
+  // `decided` is newest-decision-first, which is what "what just happened"
+  // wants. It has no covering index and does not need one: it is bounded by the
+  // number of jobs a human has ever ruled on, and is not on any hot path.
   async listJobs(query: ListAdminJobsQueryInput): Promise<{
     hits: unknown[];
     total: number;
@@ -44,9 +43,10 @@ export class AdminJobsService {
     pageSize: number;
   }> {
     const page = query.page ?? 1;
-    const status: JobStatus = query.status ?? 'PENDING_MODERATION';
-    const where: Prisma.JobWhereInput = { status };
-    const pending = status === 'PENDING_MODERATION';
+    const pending = (query.view ?? 'pending') === 'pending';
+    const where: Prisma.JobWhereInput = pending
+      ? { status: 'PENDING_MODERATION' }
+      : { reviewedAt: { not: null } };
 
     const [hits, total] = await Promise.all([
       prisma.job.findMany({
@@ -56,7 +56,7 @@ export class AdminJobsService {
         // (a bulk seed or a scripted post does exactly that).
         orderBy: pending
           ? [{ submittedForReviewAt: 'asc' }, { id: 'asc' }]
-          : [{ postedAt: 'desc' }, { id: 'desc' }],
+          : [{ reviewedAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
         select: {
@@ -67,6 +67,7 @@ export class AdminJobsService {
           postedAt: true,
           submittedForReviewAt: true,
           reviewedAt: true,
+          reviewedById: true,
           rejectionReason: true,
           company: { select: { id: true, name: true, slug: true } },
           postedBy: { select: { id: true, name: true, email: true } },
@@ -76,7 +77,28 @@ export class AdminJobsService {
       prisma.job.count({ where }),
     ]);
 
-    return { hits, total, page, pageSize: PAGE_SIZE };
+    // Who decided. reviewedById is a loose id with no FK (matching
+    // CompanyKyc.reviewedById), so it cannot be `include`d and is hydrated
+    // separately — null-tolerantly, because the admin account may since have
+    // been deleted. Same shape listAuditLog uses for changedById.
+    const reviewerIds = [...new Set(hits.map((h) => h.reviewedById).filter((id) => id != null))];
+    const reviewers = reviewerIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: reviewerIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+    const byId = new Map(reviewers.map((r) => [r.id, r]));
+
+    return {
+      hits: hits.map((h) => ({
+        ...h,
+        reviewedBy: h.reviewedById == null ? null : (byId.get(h.reviewedById) ?? null),
+      })),
+      total,
+      page,
+      pageSize: PAGE_SIZE,
+    };
   }
 
   // Everything a reviewer needs to judge a posting on one screen. The array

@@ -327,7 +327,22 @@ export function PostJobWizard({
         const errBody = (await res.json().catch(() => ({}))) as { message?: string };
         throw new Error(errBody.message ?? `Failed to ${publishMode.toLowerCase()} (${res.status})`);
       }
-      router.push('/jobs');
+      // Carry the OUTCOME to the Jobs list so it can confirm what happened.
+      // Publishing used to redirect silently, which was survivable when a
+      // published job was instantly live — the recruiter could see it at the top
+      // of the list. With moderation ON the job lands in "Under review" instead,
+      // and a silent redirect reads as though the submission failed.
+      //
+      // The status is read from the response rather than inferred from
+      // publishMode: whether a publish goes live or into review is decided
+      // server-side by the moderation flag, so this cannot drift from what
+      // actually happened.
+      const created = (await res.json().catch(() => null)) as { status?: string } | null;
+      const outcome =
+        created?.status === 'PENDING_MODERATION' ? 'review'
+        : created?.status === 'ACTIVE' ? 'live'
+        : 'draft';
+      router.push(`/jobs?submitted=${outcome}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit');

@@ -62,8 +62,20 @@ const flags: FlagSeed[] = [
   // whole surface again without a redeploy.
   { key: 'recruiter.plans_visible', type: 'BOOLEAN', category: 'recruiter', uiLabel: 'Show recruiter Plans & Billing pages', enabled: true },
 
-  // Moderation
-  { key: 'moderation.jobs.enabled', type: 'BOOLEAN', category: 'moderation', uiLabel: 'Route new jobs through admin moderation' },
+  // Moderation. Seeded ON: every newly published job enters PENDING_MODERATION
+  // and a staff reviewer approves it (or sends it back with a reason) from
+  // /sadmin/jobs before candidates can see it.
+  //
+  // This was OFF until the review queue existed, because the status had no exit
+  // — turning it on stranded every posting permanently. Flipping the DEFAULT
+  // here only affects databases seeded from scratch: seedFlags upserts with
+  // `update: {}` so an existing row is never overwritten, which is why the
+  // companion migration enable_job_moderation_flag exists to move databases
+  // that already have the row.
+  //
+  // Turning it back OFF is safe and instant — jobs already in the queue stay
+  // reviewable, because the admin endpoints deliberately do not check this flag.
+  { key: 'moderation.jobs.enabled', type: 'BOOLEAN', category: 'moderation', uiLabel: 'Route new jobs through admin moderation', enabled: true },
 
   // Experiments
   { key: 'experiment.new_homepage', type: 'COHORT_TARGETED', category: 'experiments', uiLabel: 'New homepage A/B test' },

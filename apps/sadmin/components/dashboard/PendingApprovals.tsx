@@ -1,10 +1,11 @@
+import Link from 'next/link';
 import { AlertCircle, ExternalLink, ShieldCheck } from '@jobportal/ui/icons';
 import type { PendingApprovals as PendingApprovalsData } from '../../lib/dashboard/queries';
 
-// The seeker app hosts the existing admin KYC queue. Linking there is a real,
-// working destination today — a count you can act on beats one you cannot — and
-// it moves to an internal /sadmin route in the follow-up PR that also builds the
-// job moderation queue.
+// The seeker app still hosts the admin KYC queue, so that row links out to a
+// different origin. Job review now lives in this portal and links internally.
+// The KYC console moves here in the /admin migration PR, at which point that
+// row becomes an in-app link too.
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
 export function PendingApprovals({ data }: { data: PendingApprovalsData }) {
@@ -71,7 +72,9 @@ export function PendingApprovals({ data }: { data: PendingApprovalsData }) {
           </dd>
         </div>
 
-        {/* Job postings — real count, but the queue behind it does not exist yet. */}
+        {/* Job postings — the queue now lives in this portal, so this is an
+            in-app link rather than a cross-origin one: no target="_blank", and
+            no "opens in a new tab" hint to go with it. */}
         <div className="flex items-center justify-between gap-4 py-3">
           <dt className="flex min-w-0 items-center gap-2 text-sm text-[var(--color-fg)]">
             <AlertCircle
@@ -80,7 +83,7 @@ export function PendingApprovals({ data }: { data: PendingApprovalsData }) {
             />
             Job postings
           </dt>
-          <dd className="shrink-0">
+          <dd className="flex shrink-0 items-center gap-3">
             <span
               className={`text-lg font-semibold tabular-nums ${
                 jobPostings === 0
@@ -90,6 +93,14 @@ export function PendingApprovals({ data }: { data: PendingApprovalsData }) {
             >
               {jobPostings.toLocaleString('en-IN')}
             </span>
+            {jobPostings > 0 && (
+              <Link
+                href="/jobs"
+                className="rounded-md text-sm font-medium text-[var(--color-primary-700)] hover:underline"
+              >
+                Review
+              </Link>
+            )}
           </dd>
         </div>
       </dl>

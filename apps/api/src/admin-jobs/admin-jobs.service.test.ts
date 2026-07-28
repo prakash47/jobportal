@@ -11,6 +11,7 @@ vi.mock('@jobportal/db', () => ({
       updateMany: vi.fn(),
     },
     skill: { findMany: vi.fn() },
+    user: { findMany: vi.fn() },
     city: { findMany: vi.fn() },
     companyKyc: { findUnique: vi.fn() },
     profileAuditLog: { create: vi.fn() },
@@ -31,6 +32,7 @@ const m = prisma as unknown as {
     updateMany: ReturnType<typeof vi.fn>;
   };
   skill: { findMany: ReturnType<typeof vi.fn> };
+  user: { findMany: ReturnType<typeof vi.fn> };
   city: { findMany: ReturnType<typeof vi.fn> };
   companyKyc: { findUnique: ReturnType<typeof vi.fn> };
   profileAuditLog: { create: ReturnType<typeof vi.fn> };
@@ -88,6 +90,7 @@ describe('AdminJobsService', () => {
     // getJobDetail, called for the return value.
     m.job.findUnique.mockResolvedValue(pendingJob());
     m.skill.findMany.mockResolvedValue([]);
+    m.user.findMany.mockResolvedValue([]);
     m.city.findMany.mockResolvedValue([]);
     m.companyKyc.findUnique.mockResolvedValue(null);
 
@@ -111,6 +114,39 @@ describe('AdminJobsService', () => {
       });
     });
 
+    // Filtering the "decided" view on JobStatus would be a lie: ACTIVE is every
+    // live job on the platform, almost none of which was ever moderated. Only a
+    // non-null reviewedAt means a human actually ruled on it.
+    it('scopes the decided view to jobs a human actually ruled on', async () => {
+      await service.listJobs({ view: 'decided' });
+      expect(m.job.findMany.mock.calls[0]?.[0].where).toEqual({ reviewedAt: { not: null } });
+      expect(m.job.count.mock.calls[0]?.[0].where).toEqual({ reviewedAt: { not: null } });
+    });
+
+    it('hydrates the reviewer, tolerating a deleted admin account', async () => {
+      m.job.findMany.mockResolvedValue([
+        { id: 1, reviewedById: 900 },
+        { id: 2, reviewedById: 901 },
+        { id: 3, reviewedById: null },
+      ]);
+      // 901 no longer exists — reviewedById has no FK, so this is reachable.
+      m.user.findMany.mockResolvedValue([{ id: 900, name: 'Admin', email: 'a@x.in' }]);
+
+      const out = (await service.listJobs({ view: 'decided' })) as {
+        hits: { id: number; reviewedBy: { name: string } | null }[];
+      };
+
+      expect(out.hits[0]?.reviewedBy).toMatchObject({ name: 'Admin' });
+      expect(out.hits[1]?.reviewedBy).toBeNull();
+      expect(out.hits[2]?.reviewedBy).toBeNull();
+    });
+
+    it('does not query for reviewers when no row has one', async () => {
+      m.job.findMany.mockResolvedValue([{ id: 1, reviewedById: null }]);
+      await service.listJobs({});
+      expect(m.user.findMany).not.toHaveBeenCalled();
+    });
+
     // A review queue is FIFO: the job that has waited longest is worked next.
     // It must sort on submittedForReviewAt, NOT postedAt — reopen() returns a
     // previously-live job to the queue without touching postedAt, so a job
@@ -123,12 +159,12 @@ describe('AdminJobsService', () => {
       ]);
     });
 
-    // Those rows may have no submittedForReviewAt at all (never reviewed), so
-    // browsing views sort on postedAt instead.
-    it('orders the browsing views newest-first on postedAt', async () => {
-      await service.listJobs({ status: 'ACTIVE' });
+    // "What just happened" wants the most recent decision first — not the most
+    // recently posted job, which is unrelated to when anyone ruled on it.
+    it('orders the decided view by most recent decision', async () => {
+      await service.listJobs({ view: 'decided' });
       expect(m.job.findMany.mock.calls[0]?.[0].orderBy).toEqual([
-        { postedAt: 'desc' },
+        { reviewedAt: 'desc' },
         { id: 'desc' },
       ]);
     });
