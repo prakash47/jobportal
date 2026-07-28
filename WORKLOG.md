@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
-| | | | |
+| rat145 | `feature/sadmin-dashboard-insights` | **sadmin Dashboard — pending approvals · new signups · activity trends** (`apps/sadmin` only). Adds: a **Pending approvals** card (`CompanyKyc` PENDING + `Job` PENDING_MODERATION, with the moderation-off state stated rather than shown as a bare 0), **New signups** (today/7d/30d, candidate vs recruiter, + 30-day daily bars), and **Activity trends** (jobs posted + applications over 30 days) as **hand-rolled SVG — no chart library** (owner-confirmed, matches the recruiter dashboard's token bars). New `lib/dashboard/chart.ts` (pure scale/path math, unit-tested) + `components/dashboard/{PendingApprovals,SignupStats,TrendChart,ActivityTrends}`; extends `lib/dashboard/queries.ts`. Day buckets pinned to **Asia/Kolkata** via `Prisma.sql` (UTC bucketing would misfile every Indian evening event into the next day). **NO schema change, NO migration, NO new flag key.** | **No lock needed** — `packages/*` all **untouched** (all 10 icons already exist in the barrel; re-verified). `apps/web`/`apps/recruiter`/`apps/services`/`apps/api` untouched too. Gate stays typecheck 12/12 · build 5/5; sadmin tests 17 → ~35. |
 
 ---
 
