@@ -10,9 +10,15 @@ ALTER TABLE "JobAlert" ALTER COLUMN "unsubscribeToken" SET DEFAULT gen_random_uu
 -- deployed environment already carries this row at `enabled = false`, and this
 -- is what moves them.
 --
--- Guarded on `enabled = false` so it is a no-op on a freshly seeded database
--- (where the seed already wrote true) and, more importantly, so it can never
--- resurrect a flag an admin has deliberately turned back off.
+-- Guarded on `enabled = false` so it is a no-op on a freshly seeded database,
+-- where the seed has already written true.
+--
+-- That guard is NOT what stops an admin's later toggle being clobbered — Prisma
+-- records each migration in _prisma_migrations and `migrate deploy` skips
+-- applied ones, so this statement runs at most once per database and can never
+-- see a value set after it ran. (The one path that re-runs it, `migrate reset`,
+-- drops the row first.) Worth stating plainly, because copying this predicate
+-- into a genuinely re-runnable script would provide none of that protection.
 UPDATE "FeatureFlag"
 SET "enabled" = true, "updatedAt" = NOW()
 WHERE "key" = 'moderation.jobs.enabled' AND "enabled" = false;

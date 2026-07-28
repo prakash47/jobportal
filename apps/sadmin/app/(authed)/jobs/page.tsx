@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { adminApiGet } from '../../../lib/admin-api';
 import { formatDateIst, formatWaiting, waitingDays } from '../../../lib/jobs/format';
@@ -34,6 +35,17 @@ export default async function JobReviewPage({ searchParams }: PageProps) {
     adminApiGet<JobReviewList>(`/admin/jobs?view=${view}&page=${page}`),
     isFlagEnabled('moderation.jobs.enabled'),
   ]);
+
+  // An over-range page must not render the empty state: `total` is non-zero, so
+  // "No jobs are waiting for review" would be a lie, and the count, table and
+  // pagination all live in the non-empty branch — leaving an admin on a dead end
+  // with no control to get back. Redirect to the real last page instead, the
+  // same fix the recruiter Jobs list already applies. Guarded on page > 1 so a
+  // genuinely empty view still reaches its empty state rather than looping.
+  if (result.ok && page > 1 && result.data.hits.length === 0 && result.data.total > 0) {
+    const lastPage = Math.max(1, Math.ceil(result.data.total / result.data.pageSize));
+    if (page > lastPage) redirect(pageHref(view, lastPage));
+  }
 
   // One shared anchor for every "waiting N days" on the page, so two rows
   // rendered either side of a millisecond boundary cannot disagree.
@@ -95,6 +107,8 @@ export default async function JobReviewPage({ searchParams }: PageProps) {
             : 'No jobs have been reviewed yet.'}
         </p>
       ) : (
+        // Note: an over-range ?page is redirected to the last real page above,
+        // so reaching the empty branch genuinely means the view is empty.
         <>
           <p className="text-sm text-[var(--color-fg-muted)]">
             {result.data.total.toLocaleString('en-IN')}{' '}
@@ -205,11 +219,7 @@ function Pagination({
 }) {
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
   if (lastPage === 1) return null;
-
-  const href = (p: number): string =>
-    view === 'pending' && p === 1
-      ? '/jobs'
-      : `/jobs?${new URLSearchParams({ ...(view === 'decided' ? { view } : {}), ...(p > 1 ? { page: String(p) } : {}) }).toString()}`;
+  const href = (p: number): string => pageHref(view, p);
 
   return (
     <nav aria-label="Pagination" className="flex items-center justify-between gap-4">
@@ -236,6 +246,18 @@ function Pagination({
       </span>
     </nav>
   );
+}
+
+// Shared by the pagination links and the over-range redirect, so the two can
+// never build different URLs for the same page. Omits defaults (view=pending,
+// page=1) to keep the canonical URL clean. basePath-relative: Next adds
+// '/sadmin' itself.
+function pageHref(view: string, p: number): string {
+  const params = new URLSearchParams();
+  if (view === 'decided') params.set('view', view);
+  if (p > 1) params.set('page', String(p));
+  const qs = params.toString();
+  return qs ? `/jobs?${qs}` : '/jobs';
 }
 
 function clampPage(raw: string | undefined): number {

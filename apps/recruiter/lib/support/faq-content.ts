@@ -58,7 +58,7 @@ export const FAQ_ENTRIES: ReadonlyArray<FaqEntry> = [
     category: 'jobs',
     question: 'How do I post a job?',
     answer:
-      'Open Jobs in the sidebar and choose to post a new job. The form takes the job title, description, location, skills, employment type and work mode, plus optional salary range and experience requirements. You can publish straight away or save the post as a draft and finish it later.\n\nPublishing puts the listing live on the Career Queue job-seeker site and in search. Posting jobs is currently free.',
+      'Open Jobs in the sidebar and choose to post a new job. The form takes the job title, description, location, skills, employment type and work mode, plus optional salary range and experience requirements. You can publish straight away or save the post as a draft and finish it later.\n\nPublishing submits the job for review by our team — it shows as “Under review” in your Jobs list until then, and goes live on the Career Queue job-seeker site and in search once approved. Posting jobs is currently free.',
   },
   {
     id: 'job-posting-limits',
@@ -72,14 +72,14 @@ export const FAQ_ENTRIES: ReadonlyArray<FaqEntry> = [
     category: 'jobs',
     question: 'Can I edit or close a job after publishing it?',
     answer:
-      'Yes. Open the job from your Jobs list to edit its details — changes to a live job are reflected on the public listing and in search shortly after you save.\n\nWhen a role is filled, use Close on the job row: the listing immediately stops appearing to job seekers. A closed or expired job can be reopened from the same list, which makes it live again.',
+      'Yes. Open the job from your Jobs list to edit its details — changes to a live job are reflected on the public listing and in search shortly after you save.\n\nWhen a role is filled, use Close on the job row: the listing immediately stops appearing to job seekers. A closed or expired job can be reopened from the same list; reopening resubmits it for review, and it returns to search once approved.',
   },
   {
     id: 'job-statuses-explained',
     category: 'jobs',
-    question: 'What do the job statuses Draft, Active, Closed and Expired mean?',
+    question: 'What do the job statuses Draft, Under review, Open, Closed and Expired mean?',
     answer:
-      'Draft means the job is saved but not published — job seekers cannot see it. Active means it is live on the site and in search. Closed means you closed it yourself, and Expired means it passed the expiry date you set when posting; both are hidden from job seekers.\n\nClosed and expired jobs keep their applicant list, and you can reopen either at any time from your Jobs list.',
+      'Draft means the job is saved but not published — job seekers cannot see it. Under review means you have published it and our team is checking it before it goes live; job seekers cannot see it yet, and you are notified once it is approved. Open means it is live on the site and in search. Closed means you closed it yourself, and Expired means it passed the expiry date you set when posting; both are hidden from job seekers.\n\nIf a job needs changes we send it back to your drafts with a reason, so you can fix it and publish again. Closed and expired jobs keep their applicant list, and you can reopen either at any time from your Jobs list.',
   },
 
   // --- Applicants ------------------------------------------------------

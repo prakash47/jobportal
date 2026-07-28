@@ -3,6 +3,8 @@
 // one shared anchor instant and the tests are deterministic. Same discipline as
 // lib/dashboard/chart.ts and the trend queries.
 
+import type { EmploymentType, WorkMode } from '@jobportal/db';
+
 const IST = 'Asia/Kolkata';
 
 /**
@@ -53,8 +55,13 @@ export function formatSalaryLpa(minPaise: number | null, maxPaise: number | null
       ? `₹${toLpa(minPaise)} LPA`
       : `₹${toLpa(minPaise)} – ₹${toLpa(maxPaise)} LPA`;
   }
-  const single = minPaise ?? maxPaise;
-  return single == null ? null : `₹${toLpa(single)}+ LPA`;
+  // The two one-sided cases mean OPPOSITE things and must not share a suffix.
+  // A floor is "₹8+ LPA"; a ceiling is "Up to ₹12 LPA". Collapsing them into
+  // `₹${single}+ LPA` printed a max-only band as a minimum — telling a reviewer
+  // a job paid *at least* the figure it actually caps out at. Both other apps
+  // get this right (apps/web/lib/job/format.ts, apps/recruiter job-list-format).
+  if (minPaise != null) return `₹${toLpa(minPaise)}+ LPA`;
+  return `Up to ₹${toLpa(maxPaise as number)} LPA`;
 }
 
 export function formatExperience(minYears: number | null, maxYears: number | null): string | null {
@@ -110,24 +117,33 @@ export function formatKycStatus(status: string): string {
   return KYC_LABEL[status] ?? 'Not verified';
 }
 
-const EMPLOYMENT_LABEL: Record<string, string> = {
+// Keyed by the Prisma enums themselves, so the COMPILER rejects both a missing
+// member and an invented one. An earlier version typed these `Record<string,
+// string>` and drifted immediately: it invented CONTRACT and TEMPORARY (neither
+// exists) while omitting the real CONTRACTOR, which then fell through to the
+// raw-enum fallback and rendered "CONTRACTOR" to the reviewer. A test would have
+// to remember to check; this cannot compile wrong. Labels match apps/recruiter
+// and apps/web so all three surfaces describe a job identically.
+const EMPLOYMENT_LABEL: Record<EmploymentType, string> = {
   FULL_TIME: 'Full-time',
   PART_TIME: 'Part-time',
-  CONTRACT: 'Contract',
+  CONTRACTOR: 'Contract',
   INTERN: 'Internship',
-  TEMPORARY: 'Temporary',
 };
 
-const WORK_MODE_LABEL: Record<string, string> = {
+const WORK_MODE_LABEL: Record<WorkMode, string> = {
   ONSITE: 'On-site',
   REMOTE: 'Remote',
   HYBRID: 'Hybrid',
 };
 
+// The API hands these over as plain strings, so the lookup is still widened —
+// but the TABLES above are exhaustive by construction, so the fallback is only
+// ever reached if the API sends something outside the enum.
 export function formatEmploymentType(value: string): string {
-  return EMPLOYMENT_LABEL[value] ?? value;
+  return EMPLOYMENT_LABEL[value as EmploymentType] ?? value;
 }
 
 export function formatWorkMode(value: string): string {
-  return WORK_MODE_LABEL[value] ?? value;
+  return WORK_MODE_LABEL[value as WorkMode] ?? value;
 }

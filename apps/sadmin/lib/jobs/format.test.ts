@@ -63,9 +63,19 @@ describe('formatSalaryLpa', () => {
     expect(formatSalaryLpa(80_000_000, 80_000_000)).toBe('₹8 LPA');
   });
 
-  it('handles a one-sided band', () => {
+  // A floor and a ceiling mean opposite things. This test previously asserted
+  // "₹12+ LPA" for a max-only band — baking the bug in, so the suite endorsed a
+  // console that told reviewers a job paid AT LEAST what it actually caps at.
+  it('distinguishes a floor from a ceiling', () => {
     expect(formatSalaryLpa(80_000_000, null)).toBe('₹8+ LPA');
-    expect(formatSalaryLpa(null, 120_000_000)).toBe('₹12+ LPA');
+    expect(formatSalaryLpa(null, 120_000_000)).toBe('Up to ₹12 LPA');
+  });
+
+  // Cross-checks the sadmin console against what the candidate sees for the same
+  // row: apps/web renders a max-only band as "Up to ₹12 LPA".
+  it('agrees with the seeker-facing formatter on the direction of a one-sided band', () => {
+    expect(formatSalaryLpa(null, 120_000_000)?.startsWith('Up to')).toBe(true);
+    expect(formatSalaryLpa(120_000_000, null)?.endsWith('+ LPA')).toBe(true);
   });
 
   // The Job model has no "confidential" flag, so both-null means undisclosed and
