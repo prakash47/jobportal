@@ -42,14 +42,19 @@ async function reindexJobs(): Promise<{ total: number; indexName: string }> {
   let total = 0;
   while (true) {
     const batch = await prisma.job.findMany({
-      // Only jobs that have actually reached the public market. Without this
-      // filter a full reindex writes DRAFT and PENDING_MODERATION documents
-      // into the live alias — invisible today only because searchJobs() happens
-      // to default its status filter to ACTIVE, which makes the privacy of an
-      // unapproved job depend on a default in an unrelated module. The
-      // incremental path (syncJob on publish) never had this problem because
-      // its callers only index ACTIVE rows.
-      where: { id: { gt: cursor }, status: { in: ['ACTIVE', 'EXPIRED', 'CLOSED'] } },
+      // ACTIVE only — the same invariant the incremental path maintains, so a
+      // full rebuild converges on exactly the index syncJob() would have built.
+      //
+      // Without a filter this wrote DRAFT and PENDING_MODERATION documents into
+      // the live alias, invisible only because searchJobs() happens to default
+      // its status filter to ACTIVE — which made the privacy of a job awaiting
+      // approval depend on a default in an unrelated module. EXPIRED and CLOSED
+      // are excluded for the matching reason: close() and the nightly expiry
+      // sweep both call syncJob(remove), so indexing them here would make a
+      // reindex silently resurrect documents the incremental path had deleted.
+      // No caller passes an explicit status to searchJobs(), so nothing reads
+      // them anyway.
+      where: { id: { gt: cursor }, status: 'ACTIVE' },
       orderBy: { id: 'asc' },
       take: BATCH,
     });
