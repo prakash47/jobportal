@@ -11,6 +11,7 @@
 //      canonicalises against). Same shape as the existing
 //      /jobs-in-{city} route's filter.
 
+import { cache } from 'react';
 import { prisma, Prisma } from '@jobportal/db';
 
 export interface PopularItem {
@@ -131,7 +132,7 @@ function roleCountsQuery(): Prisma.Sql {
   return Prisma.join(parts, ' UNION ALL ');
 }
 
-export async function loadHomePageData(): Promise<HomePageData> {
+export const loadHomePageData = cache(async (): Promise<HomePageData> => {
   const [
     activeJobs,
     companies,
@@ -322,4 +323,4 @@ export async function loadHomePageData(): Promise<HomePageData> {
     recentArticles,
     latestJobs,
   };
-}
+});

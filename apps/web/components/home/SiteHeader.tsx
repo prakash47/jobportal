@@ -4,6 +4,10 @@ import { getHeaderUser } from '../../lib/auth/header-user';
 import { Logo } from '../brand/Logo';
 import { ScrollHeaderChrome } from './ScrollHeaderChrome';
 import { HeaderAuthActions } from './HeaderAuthActions';
+import { PrimaryNav } from '../nav';
+import { JobsMegaPanel } from '../nav/JobsMegaPanel';
+import { CompaniesMegaPanel } from '../nav/CompaniesMegaPanel';
+import { loadNavMenuData } from '../../lib/nav/menu-data';
 
 // Site header. Desktop (lg+): logo + "Career Queue" wordmark + LEFT-aligned nav
 // (Jobs / Companies / Career advice), then Sign in / Register / Hire (or the
@@ -20,13 +24,6 @@ const NAV_LINKS: ReadonlyArray<{ label: string; href: string }> = [
   { label: 'Career advice', href: '/career-advice' },
 ];
 
-// Animated cyan underline on hover — an accent MARK (1px hairline), never
-// colored text, so it stays inside the cyan budget and the mandate.
-const navLinkClass =
-  'relative text-[15px] font-semibold text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)] ' +
-  "after:absolute after:-bottom-1 after:left-0 after:h-px after:w-0 after:bg-[var(--color-accent-500)] after:content-[''] " +
-  'after:transition-[width] after:duration-[var(--duration-base)] after:ease-[var(--ease-out)] hover:after:w-full';
-
 const RECRUITER_URL = process.env.NEXT_PUBLIC_RECRUITER_URL ?? 'http://localhost:3001';
 
 export async function SiteHeader() {
@@ -35,7 +32,11 @@ export async function SiteHeader() {
   // no "Sign in / Register" flash for a signed-in seeker on /jobs, /job/[slug],
   // etc. Signed-in seekers' brand link also points straight at their dashboard,
   // so the logo skips the "/" → redirect → /profile hop.
-  const [googleEnabled, headerUser] = await Promise.all([getGoogleEnabled(), getHeaderUser()]);
+  const [googleEnabled, headerUser, navData] = await Promise.all([
+    getGoogleEnabled(),
+    getHeaderUser(),
+    loadNavMenuData(),
+  ]);
   const isSeeker = headerUser?.role === 'CANDIDATE';
   const brandHref = isSeeker ? '/profile' : '/';
 
@@ -63,13 +64,11 @@ export async function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-6 lg:ml-6 lg:flex" aria-label="Primary">
-          {NAV_LINKS.map((l) => (
-            <Link key={l.href} href={l.href} className={navLinkClass}>
-              {l.label}
-            </Link>
-          ))}
-        </nav>
+        <PrimaryNav
+          links={NAV_LINKS}
+          jobsPanel={<JobsMegaPanel data={navData} />}
+          companiesPanel={<CompaniesMegaPanel data={navData} />}
+        />
 
         <HeaderAuthActions
           links={NAV_LINKS}
