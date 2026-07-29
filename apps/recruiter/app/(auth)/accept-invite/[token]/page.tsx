@@ -4,6 +4,8 @@ import { Button } from '@jobportal/ui';
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { ROLE_LABELS } from '../../../../lib/users/permissions';
 import { AcceptInviteForm } from '../../../../components/users/AcceptInviteForm';
+import { AuthSplit } from '../../../../components/auth/AuthSplit';
+import { ASIDE_CONTENT } from '../../../../lib/auth/aside-content';
 
 // SRS §4.9 — public invite-acceptance page (the token is the capability). Server
 // component: validates the token API-side, then renders the setup form or an
@@ -43,33 +45,37 @@ export default async function AcceptInvitePage({ params }: PageProps) {
 
   if (!result.valid) {
     return (
-      <div className="space-y-4 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-          Invitation not valid
-        </h1>
-        <p className="text-sm text-[var(--color-fg-muted)]">
-          This invitation may have expired, been revoked, or already been used. Ask your team admin
-          to send a new one.
-        </p>
-        <Button asChild variant="secondary">
-          <Link href="/login">Go to sign in</Link>
-        </Button>
-      </div>
+      <AuthSplit content={ASIDE_CONTENT.brand}>
+        <div className="space-y-4 text-center">
+          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
+            Invitation not valid
+          </h1>
+          <p className="text-sm text-[var(--color-fg-muted)]">
+            This invitation may have expired, been revoked, or already been used. Ask your team
+            admin to send a new one.
+          </p>
+          <Button asChild variant="secondary">
+            <Link href="/login">Go to sign in</Link>
+          </Button>
+        </div>
+      </AuthSplit>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <header className="space-y-1 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-          Join {result.companyName}
-        </h1>
-        <p className="text-sm text-[var(--color-fg-muted)]">
-          You&rsquo;ve been invited to join {result.companyName} on Career Queue as{' '}
-          {ROLE_LABELS[result.companyRole]}. Set up your account to continue.
-        </p>
-      </header>
-      <AcceptInviteForm token={token} email={result.email} />
-    </div>
+    <AuthSplit content={ASIDE_CONTENT.brand}>
+      <div className="space-y-6">
+        <header className="space-y-1 text-center">
+          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
+            Join {result.companyName}
+          </h1>
+          <p className="text-sm text-[var(--color-fg-muted)]">
+            You&rsquo;ve been invited to join {result.companyName} on Career Queue as{' '}
+            {ROLE_LABELS[result.companyRole]}. Set up your account to continue.
+          </p>
+        </header>
+        <AcceptInviteForm token={token} email={result.email} />
+      </div>
+    </AuthSplit>
   );
 }
