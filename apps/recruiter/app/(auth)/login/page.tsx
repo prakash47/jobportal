@@ -1,9 +1,11 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useId, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input, Label } from '@jobportal/ui';
+import { FormError } from '../../../components/auth/FormError';
+import { PasswordInput } from '../../../components/auth/PasswordInput';
 import { safeNext } from '../../../lib/auth/safe-next';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -12,6 +14,9 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = safeNext(searchParams.get('next'));
+  // useId() rather than hand-picked ids, per COLLABORATION.md §4.3.
+  const emailId = useId();
+  const passwordId = useId();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -49,9 +54,9 @@ function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="mt-8 space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor={emailId}>Email</Label>
         <Input
-          id="email"
+          id={emailId}
           type="email"
           autoComplete="email"
           required
@@ -60,10 +65,9 @@ function LoginForm() {
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="password">Password</Label>
-        <Input
-          id="password"
-          type="password"
+        <Label htmlFor={passwordId}>Password</Label>
+        <PasswordInput
+          id={passwordId}
           autoComplete="current-password"
           required
           value={password}
@@ -71,13 +75,9 @@ function LoginForm() {
         />
       </div>
 
-      {error && (
-        <p role="alert" className="text-sm text-[var(--color-danger)]">
-          {error}
-        </p>
-      )}
+      {error && <FormError>{error}</FormError>}
 
-      <Button type="submit" loading={loading} className="w-full">
+      <Button type="submit" loading={loading} size="lg" className="w-full">
         Sign in
       </Button>
     </form>
@@ -87,8 +87,10 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Sign in</h1>
-      <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
+      <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)] sm:text-3xl">
+        Sign in
+      </h1>
+      <p className="mt-2 text-sm text-[var(--color-fg-muted)]">
         Welcome back to the recruiter portal.
       </p>
 
@@ -96,9 +98,12 @@ export default function LoginPage() {
         <LoginForm />
       </Suspense>
 
-      <p className="mt-6 text-center text-sm text-[var(--color-fg-muted)]">
+      <p className="mt-8 border-t border-[var(--color-border)] pt-6 text-sm text-[var(--color-fg-muted)]">
         Don&rsquo;t have an account?{' '}
-        <Link href="/register" className="font-medium text-[var(--color-fg)] hover:underline">
+        <Link
+          href="/register"
+          className="font-medium text-[var(--color-primary-700)] underline-offset-4 hover:underline"
+        >
           Create one
         </Link>
       </p>

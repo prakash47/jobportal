@@ -1,27 +1,22 @@
-import Link from 'next/link';
-import { Logo } from '../../components/brand/Logo';
+import { headers } from 'next/headers';
+import { AuthSplit } from '../../components/auth/AuthSplit';
+import { resolveAsideContent } from '../../lib/auth/aside-content';
 
-// Public layout for /login, /register, /verify-email/[token] — no sidebar.
-// Single-column form-style, generous whitespace per CLAUDE.md §2.
+// Public layout for /login, /register, /verify-email/[token] and
+// /accept-invite/[token] — no sidebar. Two panes: the brand panel (navy, with
+// a flat brand illustration) and the form, per CLAUDE.md §2.
+//
+// The panel's copy is route-specific, resolved from the `x-canonical-pathname`
+// header the middleware already sets for every request in this app. That keeps
+// the whole shell server-rendered — no usePathname, no client boundary — at the
+// cost of marking these four routes dynamic. They already were: /login and
+// /register read searchParams client-side, /verify-email fetches with
+// no-store, and /accept-invite is force-dynamic. If the header is ever absent
+// the resolver falls back to brand-level copy, so the panel still paints.
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen bg-[var(--color-bg)]">
-      <header className="border-b border-[var(--color-border)]">
-        <div className="mx-auto flex max-w-5xl items-center px-6 py-4">
-          <Link
-            href="/"
-            aria-label="Career Queue Recruiter — home"
-            className="flex items-center gap-2"
-          >
-            <Logo variant="mark" priority className="h-7 w-auto" />
-            <span className="text-sm font-medium text-[var(--color-fg-muted)]">Recruiter</span>
-          </Link>
-        </div>
-      </header>
-      <main className="mx-auto flex min-h-[calc(100vh-57px)] max-w-md items-center justify-center px-6 py-12">
-        <div className="w-full">{children}</div>
-      </main>
-    </div>
-  );
+export default async function AuthLayout({ children }: { children: React.ReactNode }) {
+  const requestHeaders = await headers();
+  const content = resolveAsideContent(requestHeaders.get('x-canonical-pathname'));
+
+  return <AuthSplit content={content}>{children}</AuthSplit>;
 }
