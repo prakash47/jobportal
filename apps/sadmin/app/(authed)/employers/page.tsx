@@ -188,12 +188,22 @@ function EmployerRow({ row }: { row: EmployerListRow }) {
   );
 }
 
+// Raw --color-danger is #e62b34 — 4.41:1 on the elevated card and 4.02:1 once
+// the row switches to bg-muted on hover, both under the 4.5:1 AA floor for 14px
+// text. That would have made the one label an admin most needs to read the least
+// legible thing on the page. Mixing in 30% of --color-fg darkens it on light and
+// lightens it on dark, so it stays theme-aware without touching the shared
+// theme.css: measured 7.03:1 and 6.45:1 on the two light surfaces. Same
+// expression apps/recruiter's JobValidityCard uses for the same reason.
+const DANGER_TEXT = 'text-[color-mix(in_oklch,var(--color-danger),var(--color-fg)_30%)]';
+
 // Only the exceptional states are coloured. Colouring "Active" too would tint
 // almost every row and drown out the handful that actually need an admin's
-// attention, which is the whole job of this column.
+// attention, which is the whole job of this column. Colour is never the only
+// signal — the label itself always says which state it is.
 const STATE_TONE: Record<AccountState, string> = {
   ACTIVE: 'text-[var(--color-fg)]',
-  DEACTIVATED: 'text-[var(--color-danger)]',
+  DEACTIVATED: DANGER_TEXT,
   NO_ACCOUNT: 'text-[var(--color-fg-muted)]',
 };
 

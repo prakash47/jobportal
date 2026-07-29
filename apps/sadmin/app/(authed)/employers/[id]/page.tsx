@@ -23,21 +23,41 @@ export const dynamic = 'force-dynamic';
 
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
+// Raw --color-danger is #e62b34 — 4.41:1 on the elevated card and 4.02:1 on the
+// bg-muted row hover, both under the 4.5:1 AA floor for 14px text. Mixing in 30%
+// of --color-fg darkens it on light and lightens it on dark, so it is
+// theme-aware without touching the shared theme.css: measured 7.03:1 and 6.45:1
+// on the two light surfaces. Same expression apps/recruiter's JobValidityCard
+// uses for the same reason.
+const DANGER_TEXT = 'text-[color-mix(in_oklch,var(--color-danger),var(--color-fg)_30%)]';
+
 interface PageProps {
   params: Promise<{ id: string }>;
 }
 
 export default async function EmployerProfilePage({ params }: PageProps) {
   const { id } = await params;
-  // The route is [id], so anything can arrive here. Reject non-numeric ids
-  // before spending a query on them.
+  // The route is [id], so anything can arrive here.
   //
-  // ⚠ Both notFound() calls in this file depend on there being NO loading.tsx in
-  // this segment or its parent: a Suspense boundary flushes the shell first, the
-  // response commits 200, and the 404 silently becomes a soft 404. Measured —
-  // see the note on the redirect in ../page.tsx.
+  // The digits-only test is doing real work beyond Number.isInteger: Number()
+  // also accepts hex and exponent notation, so without it '0x1a' and '1e1' would
+  // resolve to real companies under non-canonical URLs.
+  //
+  // The upper bound matters even more. Company.id is a Postgres int4, so an id
+  // above 2147483647 does NOT come back as null — it throws out of Prisma
+  // ("value is out of range for type integer"). This page reads Prisma directly
+  // rather than through adminApiGet, and there is no try/catch and no segment
+  // error.tsx, so that throw escapes to global-error and answers 500 where an
+  // unknown id deserves 404. apps/recruiter's job pages carry this exact bound
+  // with the same reasoning; this route needs it for the same reason.
+  //
+  // ⚠ Both notFound() calls in this file also depend on there being NO
+  // loading.tsx in this segment or its parent: a Suspense boundary flushes the
+  // shell first, the response commits 200, and the 404 silently becomes a soft
+  // 404. Measured — see the note on the redirect in ../page.tsx.
   const companyId = Number(id);
-  if (!Number.isInteger(companyId) || companyId < 1) notFound();
+  if (!/^\d+$/.test(id) || !Number.isInteger(companyId) || companyId < 1) notFound();
+  if (companyId > 2_147_483_647) notFound();
 
   // One anchor instant for the whole render, so the pending-invite window and
   // any date shown below cannot straddle a boundary and disagree.
@@ -224,7 +244,20 @@ function TeamTable({ team }: { team: EmployerDetail['team'] }) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    // Unlike the master list, every cell in this table is plain text — there is
+    // nothing tabbable inside it. A bare overflow-x-auto would therefore be
+    // unreachable by keyboard once it scrolls (below lg, or at high zoom), and
+    // the hidden columns are exactly "Joined" and "Status" — the ones that
+    // explain a Deactivated employer. Making the region focusable and naming it
+    // gives it a tab stop and an announcement. (The list page's container needs
+    // no tabindex: its Actions link already pulls focus rightwards, and adding
+    // one there would only create a redundant tab stop.)
+    <div
+      role="region"
+      aria-label="Recruiter team"
+      tabIndex={0}
+      className="overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-ring)]"
+    >
       <table className="w-full min-w-[620px] text-left text-sm">
         <thead className="border-b border-[var(--color-border)] text-xs uppercase tracking-wide text-[var(--color-fg-muted)]">
           <tr>
@@ -274,7 +307,7 @@ function TeamRow({ member }: { member: EmployerTeamMember }) {
       <td className="py-3">
         {removed ? (
           <span className="block">
-            <span className="font-medium text-[var(--color-danger)]">Removed</span>
+            <span className={`font-medium ${DANGER_TEXT}`}>Removed</span>
             <span className="mt-0.5 block text-xs text-[var(--color-fg-muted)]">
               {formatDateIst(member.deactivatedAt)}
             </span>

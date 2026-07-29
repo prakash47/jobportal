@@ -18,7 +18,12 @@ import type { KycStatus } from '@jobportal/db';
 
 // Ordered oldest-first so a company's team reads as the order people joined, and
 // so resolveContact's join-date tiebreak sees a stable sequence. `id` breaks
-// exact-timestamp ties (a scripted seed creates several within one millisecond).
+// exact-timestamp ties. Nothing in the schema prevents two Recruiter rows
+// sharing a createdAt to the millisecond — bulk provisioning or an invite
+// accepted in the same tick would do it — and without the tiebreak the contact
+// shown for such a company could differ between two renders of the same data.
+// (This is defensive, not observed: measured on the dev database, all 10
+// recruiters currently have distinct createdAt values.)
 const TEAM_ORDER = [{ createdAt: 'asc' as const }, { id: 'asc' as const }];
 
 const TEAM_FIELDS = {
@@ -68,9 +73,13 @@ export interface EmployerListPage {
 export async function listEmployers(page: number): Promise<EmployerListPage> {
   const [companies, total] = await Promise.all([
     prisma.company.findMany({
-      // `id` breaks ties deterministically: the demo seed creates every company
-      // inside one transaction, so a dozen of them share a createdAt to the
-      // millisecond and a page seam could otherwise drop or duplicate a row.
+      // `id` breaks ties deterministically. Offset pagination is only sound if
+      // the sort is a total order: two companies sharing a createdAt could
+      // otherwise be ordered differently between the page-1 and page-2 queries,
+      // which drops one row and duplicates another across the seam. createdAt
+      // alone is not unique (nothing in the schema makes it so), `id` is.
+      // (Defensive, not observed: measured on the dev database, all 14 companies
+      // currently have distinct createdAt values.)
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip: (page - 1) * EMPLOYERS_PAGE_SIZE,
       take: EMPLOYERS_PAGE_SIZE,
