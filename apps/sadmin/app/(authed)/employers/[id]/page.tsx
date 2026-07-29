@@ -31,6 +31,11 @@ export default async function EmployerProfilePage({ params }: PageProps) {
   const { id } = await params;
   // The route is [id], so anything can arrive here. Reject non-numeric ids
   // before spending a query on them.
+  //
+  // ⚠ Both notFound() calls in this file depend on there being NO loading.tsx in
+  // this segment or its parent: a Suspense boundary flushes the shell first, the
+  // response commits 200, and the 404 silently becomes a soft 404. Measured —
+  // see the note on the redirect in ../page.tsx.
   const companyId = Number(id);
   if (!Number.isInteger(companyId) || companyId < 1) notFound();
 

@@ -40,6 +40,16 @@ export default async function EmployersPage({ searchParams }: PageProps) {
   // its href builder with the pagination links so the two cannot disagree.
   // Guarded on page > 1 so a genuinely empty list still reaches its empty state
   // rather than looping.
+  //
+  // ⚠ DO NOT ADD A loading.tsx TO THIS SEGMENT. It was written, measured and
+  // removed. A loading.tsx opens a Suspense boundary that flushes the shell
+  // before this redirect throws, so the response has already committed 200 and
+  // Next degrades the server redirect to a client-side one. Measured on this
+  // route: ?page=99 returned "307 → /sadmin/employers" without it and a bare 200
+  // with it. Because a loading.tsx also wraps NESTED segments, the same file
+  // turned [id]'s notFound() into a soft 404 (200) — verified both directions by
+  // adding and removing the file. This is also why the sibling /jobs queue has
+  // none; that is a constraint, not an oversight.
   if (page > 1 && result.rows.length === 0 && result.total > 0) {
     const lastPage = lastPageFor(result.total, result.pageSize);
     if (page > lastPage) redirect(employersHref(lastPage));
