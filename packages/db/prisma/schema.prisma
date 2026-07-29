@@ -509,10 +509,23 @@ model OtpChallenge {
   attempts    Int        @default(0)
   // How many times a fresh code was generated for this row.
   resendCount Int        @default(0)
-  // Single-use marker, and what drives the "verified" tick. Mirrors
-  // PasswordResetToken.usedAt. Status is DERIVED from these timestamps rather
-  // than stored as an enum — the RecruiterInvite convention.
-  consumedAt  DateTime?
+  // When the correct code was entered. This is what drives the green tick on
+  // the signup form, and it is a PRE-registration fact: at this moment no User
+  // row exists yet.
+  //
+  // There is deliberately no separate `consumedAt`. Spending a verified pair is
+  // modelled as DELETING both rows inside the register transaction — see
+  // RecruiterRegistrationService — which gives three things a nullable
+  // timestamp would not: the spend is an atomic compare-and-swap (a second
+  // concurrent register deletes 0 rows and is rejected), the plaintext code is
+  // destroyed the instant it stops being needed rather than lingering until the
+  // purge, and a verified challenge can never be replayed against a second
+  // registration. Status is otherwise DERIVED from these timestamps rather than
+  // stored as an enum — the RecruiterInvite convention.
+  //
+  // Net effect: this table only ever holds IN-FLIGHT signups, which is also
+  // what keeps /sadmin/otp-sessions showing staff exactly what they can act on.
+  verifiedAt  DateTime?
   // The sadmin "Last generated" column. A SEPARATE column from updatedAt on
   // purpose: updatedAt also moves when `attempts` increments on a wrong guess,
   // so it would read "generated 3s ago" when nothing was generated.
