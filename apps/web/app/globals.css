@@ -98,6 +98,21 @@
   font-feature-settings: "liga" 1, "kern" 1;
 }
 
+/* Detail-pane swap in the navbar mega-menu (FacetTabs). Deliberately NOT the
+   .rise entrance keyframe: this fires on every rail hover, so a translateY
+   would shift the pane while the eye is already tracking the rail indicator,
+   and starting from opacity 0 makes a sweep down the rail blank two or three
+   times. Opacity-only, and starting part-way up, so a pass-through reads as a
+   shimmer rather than a flash. Kept OUTSIDE @layer utilities so it is ALWAYS
+   emitted (Tailwind 4 tree-shakes custom classes inside the utilities layer). */
+@keyframes pane-swap {
+  from { opacity: 0.35; }
+  to   { opacity: 1; }
+}
+.pane-swap {
+  animation: pane-swap var(--duration-fast) var(--ease-out) both;
+}
+
 /* Thin, subtle scrollbar for scrollable overlays (the auth modal on short
    viewports). Kept OUTSIDE @layer utilities so it is ALWAYS emitted — Tailwind 4
    tree-shakes custom classes inside the utilities layer. Replaces the chunky

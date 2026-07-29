@@ -131,7 +131,6 @@ export function CollectionList({
 
 export interface EmployerItem {
   id: number;
-  slug: string;
   name: string;
   logoUrl: string | null;
   averageRating: number | null;

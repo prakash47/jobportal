@@ -4,14 +4,14 @@ import { useCallback, useId, useRef, useState, type KeyboardEvent, type ReactNod
 import { cn } from '@jobportal/ui';
 
 // "The Console" mega-panel shell: a master facet rail + a detail pane, stitched
-// by ONE cyan indicator that glides to the active facet while the pane
-// cross-fades — the "one thing moving" discipline, instead of N hover states
-// blinking. The detail holds a fixed min-height so switching facets never
-// resizes the floating popover (the #1 tell of a cheap mega-menu).
+// by ONE cyan indicator that glides to the active facet while the pane swaps —
+// the "one thing moving" discipline, instead of N hover states blinking. The
+// detail holds a fixed min-height so switching facets never resizes the
+// floating popover (the #1 tell of a cheap mega-menu).
 //
 // This is the only client code in the panel. The rail icons, every detail pane
 // and the footer arrive as SERVER-rendered ReactNode props (slot pattern one
-// level deeper), so the presentational subtree — tiles, CompanyLogo, the url
+// level deeper), so the presentational subtree — rows, CompanyLogo, the url
 // builders — never enters the client bundle and stays crawlable in the HTML.
 //
 // Interaction is the canonical ARIA tablist: hover === focus === select
@@ -33,9 +33,10 @@ export interface FacetTab {
   panel: ReactNode;
 }
 
-// Rail row pitch: h-9 (36px) + gap-0.5 (2px). The 20px indicator is centred in
-// the 36px row by the container's top-2 offset.
-const ROW_PITCH = 38;
+// Rail row pitch expressed in the SAME unit as the rows themselves — h-9
+// (2.25rem) + gap-0.5 (0.125rem). A px constant would silently drift onto the
+// wrong row for anyone whose browser font size is not 16px.
+const ROW_PITCH_REM = 2.375;
 
 export function FacetTabs({
   eyebrow,
@@ -51,8 +52,12 @@ export function FacetTabs({
   const [active, setActive] = useState(0);
   const uid = useId();
   const btnRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const paneWrapRef = useRef<HTMLDivElement>(null);
 
-  const select = useCallback((i: number) => setActive(i), []);
+  // The tab set is data-derived (a facet is dropped below 2 items), so it can
+  // shrink under a mounted island. Clamp at read time or the rail would fall
+  // out of the tab order entirely and the pane would render empty.
+  const activeIndex = tabs.length === 0 ? 0 : Math.min(active, tabs.length - 1);
 
   const moveTo = useCallback(
     (i: number) => {
@@ -71,12 +76,12 @@ export function FacetTabs({
         case 'ArrowDown':
         case 'ArrowRight':
           e.preventDefault();
-          moveTo(active + 1);
+          moveTo(activeIndex + 1);
           break;
         case 'ArrowUp':
         case 'ArrowLeft':
           e.preventDefault();
-          moveTo(active - 1);
+          moveTo(activeIndex - 1);
           break;
         case 'Home':
           e.preventDefault();
@@ -90,7 +95,7 @@ export function FacetTabs({
           break;
       }
     },
-    [active, moveTo, tabs.length],
+    [activeIndex, moveTo, tabs.length],
   );
 
   return (
@@ -113,11 +118,11 @@ export function FacetTabs({
           >
             <span
               aria-hidden="true"
-              style={{ transform: `translateY(${active * ROW_PITCH}px)` }}
+              style={{ transform: `translateY(calc(${activeIndex} * ${ROW_PITCH_REM}rem))` }}
               className="absolute left-0 top-2 h-5 w-[3px] rounded-full bg-[var(--color-accent-500)] transition-transform duration-[var(--duration-base)] ease-[var(--ease-out)]"
             />
             {tabs.map((t, i) => {
-              const selected = active === i;
+              const selected = activeIndex === i;
               return (
                 <button
                   key={t.id}
@@ -130,9 +135,22 @@ export function FacetTabs({
                   aria-selected={selected}
                   aria-controls={`${uid}-panel-${t.id}`}
                   tabIndex={selected ? 0 : -1}
-                  onPointerEnter={() => select(i)}
-                  onFocus={() => select(i)}
-                  onClick={() => select(i)}
+                  // Never let a CLICK move DOM focus into the panel: PrimaryNav
+                  // keeps the popover open while focus sits inside the group (so
+                  // a keyboard user isn't dropped mid-browse), which would leave
+                  // a clicked-open panel pinned to the sticky header after the
+                  // pointer leaves. Keyboard selection still focuses explicitly
+                  // via moveTo().
+                  onMouseDown={(e) => e.preventDefault()}
+                  onPointerEnter={() => {
+                    // A stray pointer must not pull the pane out from under a
+                    // keyboard user: hiding the focused link resets focus to
+                    // <body>, which closes the whole popover.
+                    if (paneWrapRef.current?.contains(document.activeElement)) return;
+                    setActive(i);
+                  }}
+                  onFocus={() => setActive(i)}
+                  onClick={() => setActive(i)}
                   className={cn(
                     'flex h-9 items-center gap-2.5 rounded-[var(--radius-md)] px-2.5 text-left text-[13.5px] transition-colors duration-[var(--duration-fast)] ease-[var(--ease-out)]',
                     selected
@@ -149,15 +167,15 @@ export function FacetTabs({
         </div>
 
         {/* detail pane — fixed min-height so the popover never resizes on swap */}
-        <div className="min-h-[15rem] p-5">
+        <div ref={paneWrapRef} className="min-h-[15rem] p-5">
           {tabs.map((t, i) => (
             <div
               key={t.id}
               role="tabpanel"
               id={`${uid}-panel-${t.id}`}
               aria-labelledby={`${uid}-tab-${t.id}`}
-              hidden={active !== i}
-              className="rise"
+              hidden={activeIndex !== i}
+              className="pane-swap"
             >
               <div className="mb-3">
                 <p className="text-sm font-semibold text-[var(--color-fg)]">{t.title}</p>

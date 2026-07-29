@@ -88,20 +88,18 @@ export function JobsMegaPanel({ data }: { data: NavMenuData }) {
   );
 
   // No facet cleared the >=2 bar (an empty or barely-seeded database). Collapse
-  // to the footer alone rather than rendering an empty rail — still intentional,
-  // and every honest destination stays reachable.
+  // to a reduced strip rather than rendering an empty rail: just the live count
+  // and the CTA. The quick-views are dropped on purpose — with too little data
+  // to fill a single facet, "newest"/"highest paying" have nothing behind them.
   if (tabs.length === 0) {
     return (
-      <div className="flex w-[26rem] max-w-[calc(100vw-1.5rem)] items-center gap-3 px-5 py-3">{footer}</div>
+      <div className="flex w-[22rem] items-center gap-3 px-5 py-3">
+        <FooterCount value={data.counts.activeJobs} label="open roles now" />
+        <span className="flex-1" />
+        <FooterCta href="/jobs" label="Browse all jobs" />
+      </div>
     );
   }
 
-  return (
-    <FacetTabs
-      eyebrow="Browse jobs"
-      widthClass="w-[52rem] max-w-[calc(100vw-1.5rem)]"
-      tabs={tabs}
-      footer={footer}
-    />
-  );
+  return <FacetTabs eyebrow="Browse jobs" widthClass="w-[52rem]" tabs={tabs} footer={footer} />;
 }

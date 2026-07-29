@@ -47,10 +47,12 @@ export function CompaniesMegaPanel({ data }: { data: NavMenuData }) {
               icon: MessageCircle,
             },
             {
-              key: 'all',
+              // Distinct from "Top rated": the directory's DEFAULT sort is
+              // rating, so a bare /companies here would be the same URL twice.
+              key: 'a-z',
               label: 'All companies',
-              hint: 'The full directory',
-              href: '/companies',
+              hint: 'The full directory, A–Z',
+              href: companiesHref({ sort: 'name' }),
               icon: Building2,
             },
           ]}
@@ -89,7 +91,6 @@ export function CompaniesMegaPanel({ data }: { data: NavMenuData }) {
         <EmployerList
           items={data.featuredCompanies.map((c) => ({
             id: c.id,
-            slug: c.slug,
             name: c.name,
             logoUrl: c.logoUrl,
             averageRating: c.averageRating,
@@ -104,7 +105,7 @@ export function CompaniesMegaPanel({ data }: { data: NavMenuData }) {
   return (
     <FacetTabs
       eyebrow="Browse companies"
-      widthClass="w-[47rem] max-w-[calc(100vw-1.5rem)]"
+      widthClass="w-[47rem]"
       tabs={tabs}
       footer={
         <>
