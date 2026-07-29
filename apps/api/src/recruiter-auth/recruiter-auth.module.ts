@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { RecruiterAuthController } from './recruiter-auth.controller';
+import { RecruiterOtpService } from './recruiter-otp.service';
 import { RecruiterPasswordService } from './recruiter-password.service';
 import { RecruiterRegistrationService } from './recruiter-registration.service';
 import { RecruiterWorkEmailService } from './recruiter-work-email.service';
@@ -14,6 +15,7 @@ import { RecruiterWorkEmailService } from './recruiter-work-email.service';
   controllers: [RecruiterAuthController],
   providers: [
     RecruiterRegistrationService,
+    RecruiterOtpService,
     RecruiterWorkEmailService,
     RecruiterPasswordService,
   ],

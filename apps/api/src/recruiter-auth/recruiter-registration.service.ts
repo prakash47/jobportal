@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { prisma, type User } from '@jobportal/db';
 import {
   type AccessClaims,
@@ -12,7 +7,7 @@ import {
   isStrongPassword,
   issueTokenPair,
 } from '@jobportal/auth';
-import { RecruiterWorkEmailService } from './recruiter-work-email.service';
+import { RecruiterOtpService } from './recruiter-otp.service';
 import type { RegisterRecruiterInput } from './dto';
 
 // SRS §4.9.1 — apps/api has no shared slugify yet; this is the same shape as
@@ -31,25 +26,35 @@ function slugify(s: string): string {
 export interface RegisterRecruiterResult {
   user: User;
   recruiterId: number;
-  workEmailVerified: false;
+  // Always true now: the signup OTP proved control of this exact address before
+  // the account existed, so there is no unverified state to land in.
+  workEmailVerified: true;
   accessToken: string;
   refreshToken: string;
 }
 
 @Injectable()
 export class RecruiterRegistrationService {
-  private readonly logger = new Logger(RecruiterRegistrationService.name);
-
-  constructor(private readonly workEmail: RecruiterWorkEmailService) {}
+  constructor(private readonly otp: RecruiterOtpService) {}
 
   async register(
     input: RegisterRecruiterInput,
     deviceInfo: string | undefined,
     ipAddress: string | undefined,
   ): Promise<RegisterRecruiterResult> {
+    // L3 killswitch. First, so an emergency stop on signups is not something a
+    // caller can get past by sending a bad password and reading the error.
+    await this.otp.assertNewRegistrationsOpen();
+
     if (!isStrongPassword(input.password)) {
       throw new BadRequestException('Password too weak');
     }
+
+    // Before the duplicate-email lookup on purpose. The 409 below is an
+    // enumeration oracle by design (a registrant has to be told the address is
+    // taken), so requiring proof of control over both the address and the
+    // number first is what stops it being farmed by someone who owns neither.
+    await this.otp.assertVerifiedPair(input.signupId, input.email, input.phone);
 
     const existing = await prisma.user.findUnique({ where: { email: input.email } });
     if (existing) throw new ConflictException('Email already registered');
@@ -75,12 +80,37 @@ export class RecruiterRegistrationService {
         );
       }
 
+      // Spend the verified pair. This is the compare-and-swap that makes a
+      // verified pair single-use: assertVerifiedPair() above only READ the
+      // rows, so two register calls racing on one signupId both pass it —
+      // only the one whose deleteMany actually removes both rows proceeds, and
+      // the loser rolls back with nothing created. Deleting (rather than
+      // stamping a consumedAt) also destroys the plaintext codes the instant
+      // they stop being needed. See the OtpChallenge.verifiedAt comment.
+      const spent = await tx.otpChallenge.deleteMany({
+        where: { signupId: input.signupId, verifiedAt: { not: null } },
+      });
+      if (spent.count !== 2) {
+        throw new ConflictException(
+          'That verification has already been used. Please start again.',
+        );
+      }
+
       const user = await tx.user.create({
         data: {
           email: input.email,
           passwordHash,
           name: input.name,
           role: 'RECRUITER',
+          phone: input.phone,
+          // Set together with `phone`, which is what the "any path that writes
+          // User.phone must reset phoneVerified" invariant in schema.prisma is
+          // protecting: this is the one path where the number arriving and the
+          // proof of control over it are the same event.
+          phoneVerified: true,
+          // The EMAIL challenge proved control of exactly this address, so the
+          // account starts verified — there is no link left to click.
+          emailVerified: true,
         },
       });
 
@@ -93,7 +123,9 @@ export class RecruiterRegistrationService {
           userId: user.id,
           companyId: company.id,
           companyRole: 'OWNER',
-          workEmailVerified: false,
+          // The single Email ID is the work email, and the OTP just proved
+          // control of it — nothing further to verify before a first job post.
+          workEmailVerified: true,
         },
       });
 
@@ -120,25 +152,15 @@ export class RecruiterRegistrationService {
       },
     });
 
-    // Fire-and-log: do NOT block the response on the email backend. The
-    // verification link goes to the single Email ID (the login address). If
-    // send fails the recruiter can hit a /resend endpoint (lands with Task 16).
-    // .catch() rather than `void` so a Resend failure logs cleanly instead
-    // of triggering Node's unhandledRejection warning.
-    this.workEmail
-      .issueAndSend(created.recruiterId, input.email)
-      .catch((err: unknown) => {
-        this.logger.warn(
-          `recruiter ${created.recruiterId} work-email send failed: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      });
-
+    // No work-email verification link is sent here any more. The signup OTP
+    // already proved control of this exact address — the same mailbox the link
+    // would have gone to — so a link would ask the recruiter to prove the same
+    // thing twice. RecruiterWorkEmailService and its /verify-work-email
+    // endpoint stay in place for the flows that still issue one.
     return {
       user: created.user,
       recruiterId: created.recruiterId,
-      workEmailVerified: false,
+      workEmailVerified: true,
       accessToken: pair.accessToken,
       refreshToken: pair.refreshToken,
     };
