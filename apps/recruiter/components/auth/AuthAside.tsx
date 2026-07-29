@@ -42,7 +42,12 @@ export function AuthAside({ content }: { content: AsideContent }) {
   const Illustration = ILLUSTRATIONS[content.illustration];
 
   return (
-    <aside className="relative hidden flex-col justify-between overflow-hidden bg-[var(--color-primary-600)] p-10 lg:flex xl:p-12">
+    // Vertical rhythm is clamped against viewport HEIGHT, not fixed. A 1366x768
+    // laptop has a ~650px viewport once browser chrome is subtracted, and at a
+    // fixed p-10/py-8 rhythm this panel — which is decorative — was what pushed
+    // the sign-in page into vertical scroll (measured: 24px over at 650px).
+    // Horizontal padding stays width-driven; only the vertical axis scales.
+    <aside className="relative hidden flex-col justify-between overflow-hidden bg-[var(--color-primary-600)] px-10 py-[clamp(1.5rem,5vh,3rem)] lg:flex xl:px-12">
       <Link
         href="/"
         aria-label="Career Queue Recruiter — home"
@@ -52,7 +57,7 @@ export function AuthAside({ content }: { content: AsideContent }) {
         <span className="text-[15px] font-semibold text-white">Recruiter</span>
       </Link>
 
-      <div className="py-8">
+      <div className="py-[clamp(1rem,3vh,2rem)]">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-accent-500)]">
           {content.eyebrow}
         </p>
@@ -62,12 +67,11 @@ export function AuthAside({ content }: { content: AsideContent }) {
         <p className="mt-4 max-w-[42ch] text-[15px] leading-relaxed text-white/70">{content.body}</p>
 
         {/* Width is capped against the VIEWPORT HEIGHT as well as an absolute
-            max: the panel is a single non-scrolling column, and on a 720px-tall
-            laptop a fixed 26rem illustration is exactly what tips the whole
-            page into vertical scroll. Driving the cap from width (not max-h)
-            keeps the aspect ratio intact — a max-height clamp would letterbox
-            the drawing inside a too-wide box. */}
-        <Illustration className="mt-8 h-auto w-full max-w-[min(26rem,46vh)]" />
+            max, for the same reason as the padding above. Driving the cap from
+            WIDTH keeps the aspect ratio intact — a max-height clamp would
+            letterbox the drawing inside a too-wide box and pull it off the
+            text's left rail. */}
+        <Illustration className="mt-[clamp(1rem,3vh,2rem)] h-auto w-full max-w-[min(26rem,44vh)]" />
       </div>
 
       <ul className="space-y-3.5">

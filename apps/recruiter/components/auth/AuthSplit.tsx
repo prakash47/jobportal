@@ -35,9 +35,10 @@ export function AuthSplit({ content, children }: { content: AsideContent; childr
       <AuthAside content={content} />
 
       {/* items-center means this padding only bites when the form is TALLER
-          than the pane — i.e. the 4-field register form on a short laptop — so
-          it is kept modest rather than generous. */}
-      <main className="flex flex-1 items-center justify-center px-6 py-12 sm:px-10">
+          than the pane — the 4-field register form on a short laptop — so it
+          scales with viewport height like the aside's, and is generous only
+          when there is room for it. */}
+      <main className="flex flex-1 items-center justify-center px-6 py-[clamp(1.5rem,5vh,3rem)] sm:px-10">
         <div className="w-full max-w-[25rem]">{children}</div>
       </main>
     </div>

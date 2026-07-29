@@ -1,92 +1,20 @@
-'use client';
-
-import { Suspense, useId, useState } from 'react';
+import { Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Input, Label } from '@jobportal/ui';
-import { FormError } from '../../../components/auth/FormError';
-import { PasswordInput } from '../../../components/auth/PasswordInput';
-import { safeNext } from '../../../lib/auth/safe-next';
+import { AuthSplit } from '../../../components/auth/AuthSplit';
+import { LoginForm } from '../../../components/auth/LoginForm';
+import { ASIDE_CONTENT } from '../../../lib/auth/aside-content';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-
-function LoginForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const next = safeNext(searchParams.get('next'));
-  // useId() rather than hand-picked ids, per COLLABORATION.md §4.3.
-  const emailId = useId();
-  const passwordId = useId();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(body.message ?? 'Login failed');
-      }
-      // Same /auth/login endpoint as candidates — but require-recruiter
-      // on the next page will reject non-RECRUITER roles, redirecting them
-      // to the candidate site. UX-wise: recruiters who type /login expect
-      // to land on /dashboard; candidates who arrived here by accident
-      // get bounced back to where they belong.
-      router.push(next);
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <form onSubmit={onSubmit} className="mt-8 space-y-4">
-      <div className="space-y-1.5">
-        <Label htmlFor={emailId}>Email</Label>
-        <Input
-          id={emailId}
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor={passwordId}>Password</Label>
-        <PasswordInput
-          id={passwordId}
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </div>
-
-      {error && <FormError>{error}</FormError>}
-
-      <Button type="submit" loading={loading} size="lg" className="w-full">
-        Sign in
-      </Button>
-    </form>
-  );
-}
-
+// Server component. The page owns the whole two-pane shell — including its own
+// brand panel — rather than inheriting it from the (auth) layout: the App
+// Router does not re-render a shared layout when navigating between two of its
+// children, and the "Create one" link below is exactly that navigation, so a
+// layout-owned panel kept showing the sign-in copy on /register.
+//
+// The form is a client island reading ?next=, so it needs a Suspense boundary
+// (useSearchParams opts the subtree into client rendering).
 export default function LoginPage() {
   return (
-    <>
+    <AuthSplit content={ASIDE_CONTENT.login}>
       <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)] sm:text-3xl">
         Sign in
       </h1>
@@ -107,6 +35,6 @@ export default function LoginPage() {
           Create one
         </Link>
       </p>
-    </>
+    </AuthSplit>
   );
 }

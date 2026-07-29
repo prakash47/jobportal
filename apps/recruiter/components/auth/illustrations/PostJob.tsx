@@ -58,17 +58,11 @@ export function PostJob({ className }: { className?: string }) {
       <rect x={36} y={182} width={96} height={24} rx={8} fill={CYAN} />
       <rect x={140} y={182} width={64} height={24} rx={8} fill="white" fillOpacity={0.08} />
 
-      {/* Reach: the post travelling out to candidates */}
-      <path
-        d="M 136 194 C 190 200 226 196 254 174"
-        fill="none"
-        stroke={CYAN}
-        strokeOpacity={0.55}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeDasharray="1 7"
-      />
-      <circle cx={256} cy={172} r={3.5} fill={CYAN} />
+      {/* No connector between the two cards. A dashed "reach" arc was drawn here
+          and removed: the cards are only 12 units apart, so the curve had to
+          start inside the compose card, where it ran straight through the
+          Save-as-draft pill and read as a strike-through. Adjacency plus the
+          cyan-ringed first candidate carries the same idea without the line. */}
 
       {/* Candidate list */}
       <rect

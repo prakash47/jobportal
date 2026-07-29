@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { Button } from '@jobportal/ui';
+import { AuthSplit } from '../../../../components/auth/AuthSplit';
+import { ASIDE_CONTENT } from '../../../../lib/auth/aside-content';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -38,31 +40,35 @@ export default async function VerifyEmailPage({ params }: PageProps) {
 
   if (!result.ok) {
     return (
-      <div className="space-y-4 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-          Link not recognised
-        </h1>
-        <p className="text-sm text-[var(--color-fg-muted)]">
-          {result.message ?? 'This verification link may have expired.'}
-        </p>
-        <Button asChild variant="secondary">
-          <Link href="/dashboard">Go to dashboard</Link>
-        </Button>
-      </div>
+      <AuthSplit content={ASIDE_CONTENT.brand}>
+        <div className="space-y-4 text-center">
+          <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
+            Link not recognised
+          </h1>
+          <p className="text-sm text-[var(--color-fg-muted)]">
+            {result.message ?? 'This verification link may have expired.'}
+          </p>
+          <Button asChild variant="secondary">
+            <Link href="/dashboard">Go to dashboard</Link>
+          </Button>
+        </div>
+      </AuthSplit>
     );
   }
 
   return (
-    <div className="space-y-4 text-center">
-      <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
-        Work email verified
-      </h1>
-      <p className="text-sm text-[var(--color-fg-muted)]">
-        Thanks — we&rsquo;ve confirmed access to your work address.
-      </p>
-      <Button asChild>
-        <Link href="/dashboard">Continue to dashboard</Link>
-      </Button>
-    </div>
+    <AuthSplit content={ASIDE_CONTENT.brand}>
+      <div className="space-y-4 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">
+          Work email verified
+        </h1>
+        <p className="text-sm text-[var(--color-fg-muted)]">
+          Thanks — we&rsquo;ve confirmed access to your work address.
+        </p>
+        <Button asChild>
+          <Link href="/dashboard">Continue to dashboard</Link>
+        </Button>
+      </div>
+    </AuthSplit>
   );
 }

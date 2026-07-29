@@ -1,11 +1,14 @@
 // Copy for the brand aside on the public (auth) pages — the navy panel beside
 // the sign-in / sign-up form (see components/auth/AuthSplit.tsx).
 //
-// Route-keyed and PURE on purpose: apps/recruiter's vitest only collects
-// `lib/**` (vitest.config.ts), so keeping the lookup here is the only way this
-// surface gets test coverage at all. No React, no request access — the layout
-// reads the pathname from the `x-canonical-pathname` header the middleware
-// already sets and hands the raw string to resolveAsideContent().
+// Each page picks its own entry by key and passes it to <AuthSplit>. That is
+// deliberate: the panel used to live in the (auth) layout and resolve itself
+// from the request pathname, which LOOKED tidier and was broken — the App
+// Router does not re-render a shared layout when you navigate between two of
+// its own children, and the /login <-> /register links are exactly that
+// navigation, so the panel kept the previous route's copy and illustration
+// until a hard reload. Owning the panel at the page level also keeps both
+// routes statically prerenderable, since nothing reads a dynamic request API.
 //
 // Every claim below has to be true of the shipped product: a jobs list, an
 // applicants list with stages, dashboard insights, and company KYC all exist.
@@ -30,76 +33,48 @@ export interface AsideContent {
   illustration: AsideIllustration;
 }
 
-// Shown on /verify-email/[token] and /accept-invite/[token], which share this
-// route group's layout, and as the fallback whenever the pathname header is
-// missing (a direct render with no middleware pass). Deliberately brand-level:
-// it has to read sensibly beside an invite-acceptance form as well as a
-// verification confirmation.
-const DEFAULT_CONTENT: AsideContent = {
-  eyebrow: 'Recruiter portal',
-  headline: 'Hiring, without the clutter.',
-  body: 'One place to post jobs, track every applicant, and manage your company profile.',
-  points: [
-    { icon: 'briefcase', label: 'Every posting in one list' },
-    { icon: 'users', label: 'Applicants tracked by stage' },
-    { icon: 'shield', label: 'Verified company profiles' },
-  ],
-  illustration: 'pipeline',
+export type AsideKey = 'login' | 'register' | 'brand';
+
+export const ASIDE_CONTENT: Readonly<Record<AsideKey, AsideContent>> = {
+  login: {
+    eyebrow: 'Recruiter portal',
+    headline: 'Welcome back to your hiring desk.',
+    body: 'Your jobs, applicants and company profile are exactly where you left them.',
+    points: [
+      { icon: 'briefcase', label: 'Every posting in one list' },
+      { icon: 'users', label: 'Applicants tracked by stage' },
+      { icon: 'trend', label: 'Dashboard insights at a glance' },
+    ],
+    illustration: 'pipeline',
+  },
+
+  register: {
+    eyebrow: 'Create your account',
+    headline: 'Start hiring on Career Queue.',
+    body: 'Post a job, reach candidates across India, and manage every application from one place.',
+    points: [
+      { icon: 'briefcase', label: 'Post a job in minutes' },
+      { icon: 'users', label: 'Shortlist and respond in one place' },
+      { icon: 'shield', label: 'Verify your company to build trust' },
+    ],
+    illustration: 'post-job',
+  },
+
+  // Used by /verify-email/[token] and /accept-invite/[token]. Deliberately
+  // brand-level: it has to read sensibly beside an invite-acceptance form as
+  // well as a verification confirmation, neither of which is a sign-up.
+  brand: {
+    eyebrow: 'Recruiter portal',
+    headline: 'Hiring, without the clutter.',
+    body: 'One place to post jobs, track every applicant, and manage your company profile.',
+    points: [
+      { icon: 'briefcase', label: 'Every posting in one list' },
+      { icon: 'users', label: 'Applicants tracked by stage' },
+      { icon: 'shield', label: 'Verified company profiles' },
+    ],
+    illustration: 'pipeline',
+  },
 };
 
-const LOGIN_CONTENT: AsideContent = {
-  eyebrow: 'Recruiter portal',
-  headline: 'Welcome back to your hiring desk.',
-  body: 'Your jobs, applicants and company profile are exactly where you left them.',
-  points: [
-    { icon: 'briefcase', label: 'Every posting in one list' },
-    { icon: 'users', label: 'Applicants tracked by stage' },
-    { icon: 'trend', label: 'Dashboard insights at a glance' },
-  ],
-  illustration: 'pipeline',
-};
-
-const REGISTER_CONTENT: AsideContent = {
-  eyebrow: 'Create your account',
-  headline: 'Start hiring on Career Queue.',
-  body: 'Post a job, reach candidates across India, and manage every application from one place.',
-  points: [
-    { icon: 'briefcase', label: 'Post a job in minutes' },
-    { icon: 'users', label: 'Shortlist and respond in one place' },
-    { icon: 'shield', label: 'Verify your company to build trust' },
-  ],
-  illustration: 'post-job',
-};
-
-const BY_PATH: Readonly<Record<string, AsideContent>> = {
-  '/login': LOGIN_CONTENT,
-  '/register': REGISTER_CONTENT,
-};
-
-/**
- * Reduce a raw pathname to the exact key BY_PATH is written against.
- *
- * The header carries `nextUrl.pathname`, so in practice this only has to strip
- * a trailing slash — but it also drops a query/hash and lowercases, so a
- * hand-passed or future value can't silently fall through to the default panel.
- * Matching stays EXACT after normalising: '/loginX' must not resolve to /login.
- */
-export function normalizeAsidePath(raw: string | null | undefined): string {
-  if (typeof raw !== 'string') return '';
-  const withoutQuery = raw.split(/[?#]/)[0] ?? '';
-  const lower = withoutQuery.trim().toLowerCase();
-  if (lower === '' || lower === '/') return lower;
-  return lower.replace(/\/+$/, '');
-}
-
-/** Panel content for a pathname; the brand default for anything unrecognised. */
-export function resolveAsideContent(raw: string | null | undefined): AsideContent {
-  return BY_PATH[normalizeAsidePath(raw)] ?? DEFAULT_CONTENT;
-}
-
-/** Exported for the invariant test — not used at render time. */
-export const ASIDE_CONTENTS: readonly AsideContent[] = [
-  DEFAULT_CONTENT,
-  LOGIN_CONTENT,
-  REGISTER_CONTENT,
-];
+/** Every panel, for the invariant tests. Not used at render time. */
+export const ASIDE_KEYS: readonly AsideKey[] = ['login', 'register', 'brand'];

@@ -1,125 +1,70 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ASIDE_CONTENTS,
-  normalizeAsidePath,
-  resolveAsideContent,
+  ASIDE_CONTENT,
+  ASIDE_KEYS,
   type AsideIcon,
   type AsideIllustration,
+  type AsideKey,
 } from './aside-content';
 
 const VALID_ICONS: readonly AsideIcon[] = ['briefcase', 'users', 'shield', 'trend'];
 const VALID_ILLUSTRATIONS: readonly AsideIllustration[] = ['pipeline', 'post-job'];
 
-describe('normalizeAsidePath', () => {
-  it('passes a plain pathname through', () => {
-    expect(normalizeAsidePath('/login')).toBe('/login');
+const panels = ASIDE_KEYS.map((key: AsideKey) => [key, ASIDE_CONTENT[key]] as const);
+
+describe('aside panels', () => {
+  it('exposes exactly the three panels the pages import', () => {
+    expect(ASIDE_KEYS).toEqual(['login', 'register', 'brand']);
+    for (const key of ASIDE_KEYS) expect(ASIDE_CONTENT[key]).toBeDefined();
   });
 
-  it('strips a trailing slash', () => {
-    expect(normalizeAsidePath('/login/')).toBe('/login');
-    expect(normalizeAsidePath('/login///')).toBe('/login');
+  it('sign-in and sign-up read differently — the whole point of per-page panels', () => {
+    expect(ASIDE_CONTENT.login.headline).not.toBe(ASIDE_CONTENT.register.headline);
+    expect(ASIDE_CONTENT.login.body).not.toBe(ASIDE_CONTENT.register.body);
+    expect(ASIDE_CONTENT.login.illustration).not.toBe(ASIDE_CONTENT.register.illustration);
   });
 
-  it('keeps the root path as-is rather than emptying it', () => {
-    expect(normalizeAsidePath('/')).toBe('/');
-  });
-
-  it('lowercases', () => {
-    expect(normalizeAsidePath('/Register')).toBe('/register');
-  });
-
-  it('drops a query string or hash', () => {
-    expect(normalizeAsidePath('/login?next=%2Fdashboard')).toBe('/login');
-    expect(normalizeAsidePath('/login#top')).toBe('/login');
-  });
-
-  it('returns empty for non-string input', () => {
-    expect(normalizeAsidePath(null)).toBe('');
-    expect(normalizeAsidePath(undefined)).toBe('');
-  });
-});
-
-describe('resolveAsideContent', () => {
-  it('gives the sign-in panel on /login', () => {
-    const content = resolveAsideContent('/login');
-    expect(content.eyebrow).toBe('Recruiter portal');
-    expect(content.illustration).toBe('pipeline');
-  });
-
-  it('gives the sign-up panel on /register', () => {
-    const content = resolveAsideContent('/register');
-    expect(content.eyebrow).toBe('Create your account');
-    expect(content.illustration).toBe('post-job');
-  });
-
-  it('sign-in and sign-up panels are distinct', () => {
-    expect(resolveAsideContent('/login').headline).not.toBe(
-      resolveAsideContent('/register').headline,
-    );
-  });
-
-  it('falls back to the brand panel for the other routes in this group', () => {
-    const fallback = resolveAsideContent('/verify-email/abc123');
-    expect(fallback.headline).toBe('Hiring, without the clutter.');
-    expect(resolveAsideContent('/accept-invite/tok')).toEqual(fallback);
-  });
-
-  it('falls back when the pathname header is absent', () => {
-    // The layout renders with whatever headers() returns; a missing
-    // x-canonical-pathname must still paint a complete panel.
-    expect(resolveAsideContent(null).headline).toBe('Hiring, without the clutter.');
-    expect(resolveAsideContent(undefined).headline).toBe('Hiring, without the clutter.');
-    expect(resolveAsideContent('').headline).toBe('Hiring, without the clutter.');
-  });
-
-  it('matches exactly — a longer path that merely starts with a key falls back', () => {
-    expect(resolveAsideContent('/loginx').headline).toBe('Hiring, without the clutter.');
-    expect(resolveAsideContent('/login/extra').headline).toBe('Hiring, without the clutter.');
-  });
-
-  it('still resolves a trailing-slash or mixed-case pathname', () => {
-    expect(resolveAsideContent('/login/').illustration).toBe('pipeline');
-    expect(resolveAsideContent('/Register').illustration).toBe('post-job');
-  });
-
-  it('never returns undefined for arbitrary input', () => {
-    for (const path of ['', '/', '//', '/x/y/z', '/LOGIN?a=b']) {
-      expect(resolveAsideContent(path)).toBeDefined();
-    }
+  it('the fallback panel is not the sign-up pitch', () => {
+    // /accept-invite and /verify-email are not sign-ups; showing "Start hiring
+    // on Career Queue" to someone joining an existing company would be wrong.
+    expect(ASIDE_CONTENT.brand.headline).not.toBe(ASIDE_CONTENT.register.headline);
   });
 });
 
 describe('panel content invariants', () => {
-  it('every panel has copy in all three slots', () => {
-    for (const content of ASIDE_CONTENTS) {
-      expect(content.eyebrow.trim().length).toBeGreaterThan(0);
-      expect(content.headline.trim().length).toBeGreaterThan(0);
-      expect(content.body.trim().length).toBeGreaterThan(0);
+  it.each(panels)('%s has copy in all three slots', (_key, content) => {
+    expect(content.eyebrow.trim().length).toBeGreaterThan(0);
+    expect(content.headline.trim().length).toBeGreaterThan(0);
+    expect(content.body.trim().length).toBeGreaterThan(0);
+  });
+
+  it.each(panels)('%s has exactly three points, so the panel height stays stable', (_key, content) => {
+    expect(content.points).toHaveLength(3);
+    for (const point of content.points) {
+      expect(point.label.trim().length).toBeGreaterThan(0);
     }
   });
 
-  it('every panel has exactly three points, so the panel height stays stable', () => {
-    for (const content of ASIDE_CONTENTS) {
-      expect(content.points).toHaveLength(3);
-      for (const point of content.points) {
-        expect(point.label.trim().length).toBeGreaterThan(0);
-      }
-    }
-  });
-
-  it('every icon key maps to one AuthAside can render', () => {
+  it.each(panels)('%s uses only icon keys AuthAside can render', (_key, content) => {
     // A typo here would render nothing at all — the icon lookup is a record
     // access, not a component reference the compiler can check.
-    for (const content of ASIDE_CONTENTS) {
-      for (const point of content.points) {
-        expect(VALID_ICONS).toContain(point.icon);
-      }
+    for (const point of content.points) {
+      expect(VALID_ICONS).toContain(point.icon);
     }
   });
 
-  it('every illustration key maps to one that exists', () => {
-    for (const content of ASIDE_CONTENTS) {
-      expect(VALID_ILLUSTRATIONS).toContain(content.illustration);
-    }
+  it.each(panels)('%s uses an illustration that exists', (_key, content) => {
+    expect(VALID_ILLUSTRATIONS).toContain(content.illustration);
+  });
+
+  it.each(panels)('%s has no duplicate point labels', (_key, content) => {
+    const labels = content.points.map((p) => p.label);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it.each(panels)('%s keeps the headline short enough for the 15ch column', (_key, content) => {
+    // The panel sets max-w-[15ch] at 30-36px; much beyond this and the headline
+    // pushes the illustration far enough down to force page scroll.
+    expect(content.headline.length).toBeLessThanOrEqual(40);
   });
 });
