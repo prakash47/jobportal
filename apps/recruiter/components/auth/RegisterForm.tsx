@@ -24,6 +24,7 @@ export function RegisterForm() {
   // ids are what let the helper text be announced with its field rather than
   // read as loose prose after it.
   const nameId = useId();
+  const nameErrorId = useId();
   const passwordId = useId();
   const passwordHintId = useId();
   const companyId = useId();
@@ -32,6 +33,11 @@ export function RegisterForm() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  // Raised when a Verify button is pressed with the name still empty. It lives
+  // here, not in the field that was pressed: the Name input is the control at
+  // fault, so it is the one that has to carry the message and the aria-invalid
+  // (WCAG 3.3.1), and only this component renders it.
+  const [nameError, setNameError] = useState<string | null>(null);
   const [emailVerified, setEmailVerified] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +71,17 @@ export function RegisterForm() {
     refocusSubmit.current = false;
     submitButtonRef.current?.focus();
   });
+
+  // Both VerifiableFields call this when Verify is pressed with no name. The
+  // name is stored on the challenge row and leads the sadmin OTP Sessions table
+  // — it is how the staff member relaying the code knows whose signup it is —
+  // so there is nothing useful to request without it.
+  function requireName() {
+    setNameError(
+      'Add your name before verifying — our team needs it to match the code to your signup.',
+    );
+    nameInputRef.current?.focus();
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -126,14 +143,22 @@ export function RegisterForm() {
           required
           maxLength={120}
           autoComplete="name"
+          // Only named while the message is on screen — an aria-describedby
+          // pointing at a node that is not there is read as nothing.
+          aria-describedby={nameError !== null ? nameErrorId : undefined}
+          invalid={nameError !== null}
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (nameError !== null) setNameError(null);
+          }}
         />
+        {nameError !== null && <FormError id={nameErrorId}>{nameError}</FormError>}
       </div>
 
-      {/* Email and mobile come before the password on purpose: both need a
-          round-trip to an inbox or a handset, so they are the fields worth
-          starting early. */}
+      {/* Email and mobile come before the password on purpose: each needs a code
+          that a Career Queue team member has to relay to the recruiter by phone
+          or WhatsApp, so they are the fields worth starting early. */}
       <VerifiableField
         channel="EMAIL"
         label="Email ID"
@@ -144,7 +169,7 @@ export function RegisterForm() {
         verified={emailVerified}
         onVerifiedChange={setEmailVerified}
         inputRef={emailInputRef}
-        onNameRequired={() => nameInputRef.current?.focus()}
+        onNameRequired={requireName}
         onVerifiedFocusNext={() => phoneInputRef.current?.focus()}
         formSubmitting={loading}
       />
@@ -159,7 +184,7 @@ export function RegisterForm() {
         verified={phoneVerified}
         onVerifiedChange={setPhoneVerified}
         inputRef={phoneInputRef}
-        onNameRequired={() => nameInputRef.current?.focus()}
+        onNameRequired={requireName}
         onVerifiedFocusNext={() => passwordInputRef.current?.focus()}
         formSubmitting={loading}
       />
@@ -199,10 +224,18 @@ export function RegisterForm() {
           on the page is the classic version of this control: it gives a
           keyboard or screen-reader user nothing to act on and no way to find
           out what is wrong. Pressing it with a channel unverified produces the
-          message above, which is announced because FormError is a live region. */}
-      <p className="text-xs text-[var(--color-fg-muted)]">
-        Verify your email address and mobile number to enable account creation.
-      </p>
+          message above, which is announced because FormError is a live region.
+
+          Withdrawn once BOTH channels are verified: the sentence is phrased as
+          an outstanding requirement, so leaving it up beside two "Verified"
+          ticks tells the user there is still something to do when there is not.
+          It is plain muted copy rather than a live region — each channel already
+          announces its own "Verified" — so removing it announces nothing. */}
+      {!(emailVerified && phoneVerified) && (
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          Verify your email address and mobile number to enable account creation.
+        </p>
+      )}
 
       <Button ref={submitButtonRef} type="submit" loading={loading} size="lg" className="w-full">
         Create account

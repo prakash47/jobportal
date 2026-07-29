@@ -35,14 +35,14 @@ export const FAQ_ENTRIES: ReadonlyArray<FaqEntry> = [
     category: 'getting-started',
     question: 'How do I create a recruiter account?',
     answer:
-      'Open the Career Queue recruiter portal and choose Register. You will be asked for your name, an Email ID, an Indian mobile number, a password, and your company name. We send a 6-digit code to the email address and a second one to the mobile number, and both have to be entered before the account is created. Registering always creates a new company on Career Queue, with you as its Owner.\n\nIf your company is already registered here, do not register again — joining an existing company is invite-only. Ask an Owner or Admin on that team to send you an invite from their Users panel.',
+      'Open the Career Queue recruiter portal and choose Register. You will be asked for your name, an Email ID, an Indian mobile number, a password, and your company name. Verifying each of those two contacts creates a 6-digit code, and both codes have to be entered before the account is created. Registering always creates a new company on Career Queue, with you as its Owner.\n\nThe codes are not emailed or texted to you. A Career Queue team member reads each one out to you on a phone call or sends it on WhatsApp, using the mobile number you entered — so use a number you can answer, and keep the form open while you wait. A code stops working 15 minutes after it is created; you can request a fresh one from the same form.\n\nIf your company is already registered here, do not register again — joining an existing company is invite-only. Ask an Owner or Admin on that team to send you an invite from their Users panel.',
   },
   {
     id: 'verify-email-before-posting',
     category: 'getting-started',
     question: 'Why can I not post a job right after registering?',
     answer:
-      'Job posting is enabled only once your Email ID is verified. Accounts created through the current sign-up verify it during registration — you enter a 6-digit code sent to that inbox before the account exists — so posting is available straight away.\n\nIf you registered before that change and posting is still blocked, a verification link was emailed to you at sign-up and clicking it unlocks posting. Until then you can sign in, set up your company profile, and invite teammates, but the portal will not accept a job post. If the email has not arrived, check your spam or junk folder first, then raise a ticket via Help & Support, then Raise a ticket, and the team will send you a fresh link.',
+      'Job posting is enabled only once your Email ID is verified. Accounts created through the current sign-up verify it during registration — you enter a 6-digit code for that address, relayed to you by a Career Queue team member, before the account exists — so posting is available straight away.\n\nIf you registered before that change and posting is still blocked, a verification link was emailed to you at sign-up and clicking it unlocks posting. Until then you can sign in, set up your company profile, and invite teammates, but the portal will not accept a job post. If the email has not arrived, check your spam or junk folder first, then raise a ticket via Help & Support, then Raise a ticket, and the team will send you a fresh link.',
   },
   {
     id: 'join-existing-company',

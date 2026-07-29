@@ -65,8 +65,11 @@ export class RecruiterAuthController {
 
   // SRS §4.9.1 — check a typed code. Unauthenticated for the same reason.
   // 10/min/IP rather than 5: a registrant types two codes and mistypes some of
-  // them, and the real brute-force bound is the 5-attempt cap on the challenge
-  // row, which no amount of per-IP budget can get around.
+  // them. A per-IP budget is not the brute-force bound in any case — an
+  // attacker adds IPs. The bound is in RecruiterOtpService: the 5-attempt cap
+  // makes one issued code expensive, and OTP_MAX_LIVE_PER_DESTINATION caps how
+  // many codes one address can have in flight, which is the part a caller
+  // cannot reset by minting a fresh signupId.
   @Post('otp/verify')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)

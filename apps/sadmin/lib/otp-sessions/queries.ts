@@ -95,6 +95,10 @@ export async function listOtpSessions(page: number): Promise<OtpSessionListPage>
                  "destination",
                  "name",
                  "expiresAt",
+                 -- Selected so a code whose five attempts are spent renders as
+                 -- dead rather than as one more Reveal control. Without it the
+                 -- console cannot see the difference; see deriveChallengeState.
+                 "attempts",
                  "verifiedAt",
                  "lastSentAt"
           FROM "OtpChallenge"

@@ -16,6 +16,19 @@ import type { OtpChannel } from '@jobportal/db';
 /** Signup attempts per page. Matches the job review queue and the employer list. */
 export const OTP_SESSIONS_PAGE_SIZE = 20;
 
+/**
+ * Wrong guesses allowed against one issued code before it stops working.
+ *
+ * The API owns this number: `OTP_MAX_ATTEMPTS` in
+ * `apps/api/src/recruiter-auth/recruiter-otp.service.ts`, whose verify() refuses
+ * even the CORRECT code once the count reaches it. This is a deliberate
+ * hardcoded copy — apps/sadmin and apps/api are separate builds with no shared
+ * package holding the constant, so there is nothing to import. If the API ever
+ * changes its cap, this has to change with it, or this console will keep
+ * offering a Reveal on codes the API has already stopped accepting.
+ */
+export const OTP_MAX_ATTEMPTS = 5;
+
 // Page clamping and last-page arithmetic are not employer-specific — they are
 // the offset-pagination rules every table in this portal obeys, and they are
 // already unit-tested in ../employers/format.test.ts. Re-exported rather than
@@ -44,6 +57,12 @@ export interface OtpSessionChallenge {
   /** The registrant's typed name, captured before any User row exists. */
   name: string;
   expiresAt: Date;
+  /**
+   * Wrong guesses against the CURRENT code, back to 0 on every resend. Selected
+   * because a spent attempt budget is the one way a code dies that leaves no
+   * trace in this row's timestamps — see deriveChallengeState.
+   */
+  attempts: number;
   /** When the correct code was entered. Null means still unproven. */
   verifiedAt: Date | null;
   /** When a code was last GENERATED for this row — not when it was last touched. */
@@ -73,27 +92,46 @@ export interface OtpSessionRow {
  * ABSENT is a real state, not a missing value: a registrant who has asked for an
  * email code but not yet a mobile one has exactly one row, and the empty cell
  * means "never requested", not "we lost it".
+ *
+ * BURNT is the least obvious way a code dies: five wrong entries spend the
+ * attempt budget, after which the API refuses even the correct digits until a
+ * fresh code is requested. Such a row is still unverified and still inside its
+ * fifteen minutes, so nothing else about it distinguishes it from a usable one —
+ * which is exactly why it needs a state of its own here. Without it staff read
+ * a dead code down the phone and the registrant is told it is wrong.
  */
-export type OtpCodeState = 'ABSENT' | 'LIVE' | 'VERIFIED' | 'EXPIRED';
+export type OtpCodeState = 'ABSENT' | 'LIVE' | 'VERIFIED' | 'EXPIRED' | 'BURNT';
 
 /**
- * VERIFIED wins over EXPIRED deliberately. Once the registrant has entered the
- * correct code there is nothing left for staff to relay on that channel, so
- * "Verified" is the answer to the question this column asks — whether the
- * signup as a whole can still complete is a separate fact the register endpoint
- * decides, and this page does not claim to answer it.
+ * The order of the checks mirrors `RecruiterOtpService.verify()`, so the state
+ * this column shows is the reason the API would actually give:
+ *
+ * - VERIFIED first, because verify() returns `{ verified: true }` for an
+ *   already-verified row before it looks at anything else. Once the registrant
+ *   has entered the correct code there is nothing left for staff to relay on
+ *   that channel — whether the signup as a whole can still complete is a
+ *   separate fact the register endpoint decides, and this page does not claim
+ *   to answer it.
+ * - EXPIRED before BURNT, because verify() tests expiry before attempts: a code
+ *   that is both out of time and out of guesses is refused as expired.
+ * - BURNT last, for a code that is otherwise live. It cannot be folded into
+ *   EXPIRED: "Expired" on a code generated ninety seconds ago sends staff
+ *   looking for a clock problem, when what the registrant needs is to request
+ *   a new code.
  */
 export function deriveChallengeState(
-  challenge: Pick<OtpSessionChallenge, 'expiresAt' | 'verifiedAt'> | null,
+  challenge: Pick<OtpSessionChallenge, 'expiresAt' | 'verifiedAt' | 'attempts'> | null,
   now: Date,
 ): OtpCodeState {
   if (challenge === null) return 'ABSENT';
   if (challenge.verifiedAt !== null) return 'VERIFIED';
-  // The boundary itself counts as expired: a code with zero milliseconds left is
-  // not worth reading down a phone line. (The API's verify is marginally more
-  // generous, rejecting only once the expiry has actually passed, so this errs
-  // in the one direction that cannot strand a caller with a dead code.)
-  return challenge.expiresAt.getTime() <= now.getTime() ? 'EXPIRED' : 'LIVE';
+  // The boundary instant itself counts as expired: a code with zero
+  // milliseconds left is not worth reading down a phone line. This is the same
+  // comparison the API makes — verify() and assertVerifiedPair both reject on
+  // `expiresAt <= now` — so the two sides agree exactly at the boundary rather
+  // than one of them being the more forgiving.
+  if (challenge.expiresAt.getTime() <= now.getTime()) return 'EXPIRED';
+  return challenge.attempts >= OTP_MAX_ATTEMPTS ? 'BURNT' : 'LIVE';
 }
 
 /**

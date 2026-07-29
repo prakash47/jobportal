@@ -7,6 +7,7 @@ import { FormError } from './FormError';
 import { requestOtp, verifyOtp, type OtpChannel } from '../../lib/auth/otp-client';
 import {
   INDIAN_MOBILE_DIGITS,
+  INDIAN_MOBILE_INPUT_MAX_LENGTH,
   INDIA_CALLING_CODE,
   formatIndianMobile,
   isIndianMobile,
@@ -20,16 +21,24 @@ import {
 // is left holding only the value and the verified flag that its submit gate
 // actually needs.
 //
+// HOW A CODE ACTUALLY REACHES THE REGISTRANT — every string in this file has to
+// stay true to this. There is NO email or SMS provider wired to signup. The API
+// only writes the challenge row; a Career Queue staff member reads the code off
+// /sadmin/otp-sessions and relays it by phone call or WhatsApp. So nothing here
+// may say "sent", "we'll email you" or "we'll text you": a registrant told to
+// watch their inbox waits for something that is never going to arrive.
+//
 // App-local rather than a @jobportal/ui component, for the reason
 // PasswordInput.tsx already documents: promoting it would take the atoms-barrel
 // lock for something exactly one app uses. It composes the shared atoms instead.
 //
 // STATE MACHINE — `phase`, and what each state renders:
-//   idle           Field + hint + a "Verify …" button. Nothing has been sent.
+//   idle           Field + hint + a "Verify …" button. No code exists yet.
 //                  Entered on mount, and again on every edit of the value.
-//   requesting     A first send or a resend is in flight. The pressed button
-//                  shows its spinner and is disabled; the value stays editable.
-//                  On a RESEND the code panel stays open — see `codePanelOpen`.
+//   requesting     A first request or a repeat request is in flight. The pressed
+//                  button shows its spinner and is disabled; the value stays
+//                  editable. On a REPEAT the code panel stays open — see
+//                  `codePanelOpen`.
 //   awaiting-code  The code panel is open — code input (focused on arrival),
 //                  "Verify code", and a resend button that is disabled until the
 //                  server's 30-second cooldown elapses.
@@ -39,7 +48,7 @@ import {
 //   expired        The 15-minute window closed. The code input is disabled,
 //                  "Verify code" is removed entirely (there is nothing left to
 //                  verify, and a disabled button explains nothing), and the only
-//                  offered action is "Send a new code".
+//                  offered action is "Request a new code".
 //   verified       The panel is gone; a tick and the word "Verified" sit beside
 //                  the label. Owned by the PARENT — see `phase` below.
 //
@@ -75,8 +84,9 @@ export interface VerifiableFieldProps {
   onValueChange: (value: string) => void;
   /**
    * The registrant's name. The API stores it on the challenge row and the
-   * sadmin OTP Sessions table leads with it, so a code cannot be sent without
-   * one — see the guard at the top of `sendCode`.
+   * sadmin OTP Sessions table leads with it — it is how the staff member
+   * relaying a code knows whose signup they are looking at — so a code cannot
+   * be requested without one. See the guard at the top of `sendCode`.
    */
   name: string;
   signupIdStore: SignupIdStore;
@@ -87,7 +97,12 @@ export interface VerifiableFieldProps {
    * used here to focus the input when the typed value fails its shape check.
    */
   inputRef: RefObject<HTMLInputElement | null>;
-  /** Move focus to the name field — pressing Verify with no name is a dead end. */
+  /**
+   * Report that Verify was pressed with the name field empty. The parent owns
+   * the Name input, so it is the only place that can put the message and the
+   * `aria-invalid` on the control that is actually at fault (WCAG 3.3.1) and
+   * move focus there. This field deliberately does not flag itself for it.
+   */
   onNameRequired: () => void;
   /**
    * Move focus to the control after this field. Called once, from an effect,
@@ -128,6 +143,25 @@ function epochMs(iso: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/**
+ * Focus the first candidate that can actually take it, skipping disabled ones.
+ *
+ * `.focus()` on a disabled element is silently ignored and leaves focus on
+ * <body> — the very state the queued focus moves exist to prevent. Both request
+ * buttons spend real time disabled: while their own call is loading, and while
+ * the server's 30-second cooldown is counting down on their face. So each
+ * queued move names a fallback that is still reachable.
+ */
+function focusFirstEnabled(
+  ...candidates: ReadonlyArray<HTMLButtonElement | HTMLInputElement | null>
+): void {
+  for (const candidate of candidates) {
+    if (candidate === null || candidate.disabled) continue;
+    candidate.focus();
+    return;
+  }
+}
+
 export function VerifiableField({
   channel,
   label,
@@ -154,6 +188,7 @@ export function VerifiableField({
   const codeId = useId();
   const codeHintId = useId();
   const codeErrorId = useId();
+  const noticeId = useId();
 
   const [step, setStep] = useState<UnverifiedPhase>('idle');
   const [code, setCode] = useState('');
@@ -166,6 +201,9 @@ export function VerifiableField({
   const codeInputRef = useRef<HTMLInputElement>(null);
   const requestButtonRef = useRef<HTMLButtonElement>(null);
   const resendButtonRef = useRef<HTMLButtonElement>(null);
+  // Only needed so `expire()` can tell whether this button holds focus at the
+  // moment the transition to `expired` removes it from the DOM.
+  const verifyCodeButtonRef = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<FocusTarget | null>(null);
   const stepBeforeRequest = useRef<UnverifiedPhase>('idle');
   // Bumped on every real edit of the value. Both async handlers capture it
@@ -202,13 +240,21 @@ export function VerifiableField({
     return isPhone ? toE164IndianMobile(value) : value.trim().toLowerCase();
   }
 
+  // `source: 'resend'` mirrors the API's own vocabulary for a repeat request on
+  // an existing challenge row (`resendAvailableAt`, the resend cooldown, the
+  // resend cap) — it names the endpoint's behaviour, not a delivery. Nothing is
+  // dispatched to the recruiter either way; see the note at the top of the file.
   async function sendCode(source: 'first' | 'resend') {
     if (name.trim().length === 0) {
       // The API requires a name on the challenge row and the sadmin OTP Sessions
-      // table leads with it, so firing without one would create a row support
-      // cannot match to anybody. Say so and put the recruiter in the right field
-      // rather than sending a useless request.
-      setFieldError('Add your name first — we send it with the code so our team can identify your signup.');
+      // table leads with it, so firing without one would create a row the staff
+      // member relaying the code cannot match to anybody.
+      //
+      // The failing control is the NAME field, not this one, so nothing is
+      // flagged here: marking this input aria-invalid for a valid address, and
+      // describing it with a message about a different control, is the exact
+      // mis-association WCAG 3.3.1 is about. The parent renders the message at
+      // the Name field and moves focus there.
       onNameRequired();
       return;
     }
@@ -227,6 +273,12 @@ export function VerifiableField({
 
     setFieldError(null);
     setCodeError(null);
+    // Captured HERE, before any suspension point, and next to the `destination`
+    // it belongs with. `value` lives in this closure, so `destination` can only
+    // ever describe the field as it read when this handler started; a generation
+    // captured after an await would compare a post-edit value against itself and
+    // wave through a request for the address the recruiter has already corrected.
+    const generation = valueGeneration.current;
     // A double-fire cannot happen (the buttons disable while loading), but if it
     // ever did, returning to 'requesting' on failure would strand the field.
     stepBeforeRequest.current = step === 'requesting' ? 'idle' : step;
@@ -241,9 +293,13 @@ export function VerifiableField({
     const inFlightMint = signupIdStore.minting.current;
     if (signupIdStore.id.current === null && inFlightMint !== null) {
       await inFlightMint;
+      // This gate can hold the handler for a full round-trip, which is plenty of
+      // time to spot a typo and fix it. handleValueChange has already torn the
+      // field back down to idle, and the only destination this closure can still
+      // reach is the old one — so the request must not go out at all.
+      if (valueGeneration.current !== generation) return;
     }
 
-    const generation = valueGeneration.current;
     const mintsId = signupIdStore.id.current === null;
     const inFlight = requestOtp({
       signupId: signupIdStore.id.current,
@@ -283,11 +339,18 @@ export function VerifiableField({
     setExpiresAt(epochMs(res.data.expiresAt));
     setCooldown(secondsUntil(res.data.resendAvailableAt));
     setCode('');
+    const shown = isPhone ? formatIndianMobile(value) : destination;
     setNotice(
-      `${source === 'resend' ? 'New code' : 'Code'} sent to ${
-        isPhone ? formatIndianMobile(value) : destination
-      }.`,
+      source === 'resend'
+        ? `New code created for ${shown}. Our team will pass the new one on; the previous code no longer works.`
+        : `Code created for ${shown}. A Career Queue team member will pass it on by phone or WhatsApp — nothing is sent to you automatically.`,
     );
+    // Every accepted request writes `verifiedAt = null` on the challenge row, so
+    // a tick this field may have been granted while this call was in flight (a
+    // slow verify landing first) is now false on the server. Leaving it would
+    // show a green tick, hide the panel, and produce a 400 at submit with no
+    // control left on screen to recover. Already-false is a no-op.
+    onVerifiedChange(false);
     setStep('awaiting-code');
     pendingFocus.current = 'code';
   }
@@ -296,11 +359,11 @@ export function VerifiableField({
     const signupId = signupIdStore.id.current;
     if (signupId === null) {
       // Unreachable — the panel only opens after a request that minted one.
-      setCodeError('Something went wrong. Send a new code and try again.');
+      setCodeError('Something went wrong. Request a new code and try again.');
       return;
     }
     if (code.length !== CODE_LENGTH) {
-      setCodeError(`Enter the ${CODE_LENGTH}-digit code we sent you.`);
+      setCodeError(`Enter all ${CODE_LENGTH} digits of the code you were given.`);
       pendingFocus.current = 'code';
       return;
     }
@@ -400,15 +463,19 @@ export function VerifiableField({
     if (expiresAt === null || !watching) return;
 
     const expire = () => {
-      // Disabling the element that currently holds focus drops focus to <body>
-      // in every browser, so hand it to the control that is now the only useful
-      // one before the code input goes disabled.
-      if (document.activeElement === codeInputRef.current) pendingFocus.current = 'resend';
+      // Moving to `expired` disables the code input AND removes the "Verify
+      // code" button outright. Either one, if it holds focus when it goes,
+      // drops focus to <body> — so both are checked, not just the input, and
+      // focus is handed to the control that is about to be the only useful one.
+      const active = document.activeElement;
+      if (active === codeInputRef.current || active === verifyCodeButtonRef.current) {
+        pendingFocus.current = 'resend';
+      }
       setNotice(null);
       setCodeError(
         verified
-          ? `Your ${channelNoun} verification expired. Send a new code to verify it again.`
-          : 'That code has expired. Send a new code to continue.',
+          ? `Your ${channelNoun} verification expired. Request a new code to verify it again.`
+          : 'That code has expired. Request a new one to continue.',
       );
       if (verified) onVerifiedChange(false);
       setStep('expired');
@@ -447,10 +514,10 @@ export function VerifiableField({
         codeInputRef.current?.select();
         break;
       case 'request':
-        requestButtonRef.current?.focus();
+        focusFirstEnabled(requestButtonRef.current, inputRef.current);
         break;
       case 'resend':
-        resendButtonRef.current?.focus();
+        focusFirstEnabled(resendButtonRef.current, codeInputRef.current, inputRef.current);
         break;
       case 'next':
         onVerifiedFocusNext();
@@ -464,7 +531,17 @@ export function VerifiableField({
   const describedBy = [hintId, fieldError !== null ? fieldErrorId : null]
     .filter((id): id is string => id !== null)
     .join(' ');
-  const codeDescribedBy = [codeHintId, codeError !== null ? codeErrorId : null]
+  // The notice is described BY the code input rather than announced by a live
+  // region of its own: it mounts inside the code panel, in the same commit as
+  // the panel, and a role="status" created together with its text is not
+  // reliably read out (the rule apps/sadmin's RevealCodeButton states and obeys
+  // for the same reason). Focus lands on this input in that same commit, so
+  // naming the notice here announces it exactly once, in full, and in order.
+  const codeDescribedBy = [
+    notice !== null ? noticeId : null,
+    codeHintId,
+    codeError !== null ? codeErrorId : null,
+  ]
     .filter((id): id is string => id !== null)
     .join(' ');
 
@@ -480,24 +557,30 @@ export function VerifiableField({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
         <Label htmlFor={inputId}>{label}</Label>
-        {verified && (
-          // role="status" so the change is announced, and the word "Verified"
-          // beside the tick because an icon alone is invisible to AT. The colour
-          // is --color-success darkened toward the foreground for the same
-          // reason FormError darkens --color-danger: the raw token is far under
-          // 4.5:1 as body text on a light surface.
-          <span
-            role="status"
-            className={cn(
-              'inline-flex items-center gap-1 text-xs font-medium',
-              'text-[color-mix(in_oklch,var(--color-success),var(--color-fg)_30%)]',
-              enterMotion,
-            )}
-          >
-            <Check className="size-3.5" aria-hidden="true" />
-            Verified
-          </span>
-        )}
+        {/* The live region is mounted from the FIRST render and stays empty
+            until there is something to say. A role="status" element created in
+            the same commit as its content is not reliably announced — the rule
+            apps/sadmin's RevealCodeButton states and obeys — and this tick is
+            the only confirmation the whole flow produces, so losing it means a
+            screen-reader user hears nothing but the code panel disappearing. */}
+        <span role="status">
+          {verified && (
+            // The word "Verified" beside the tick because an icon alone is
+            // invisible to AT. The colour is --color-success darkened toward the
+            // foreground for the same reason FormError darkens --color-danger:
+            // the raw token is far under 4.5:1 as body text on a light surface.
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 text-xs font-medium',
+                'text-[color-mix(in_oklch,var(--color-success),var(--color-fg)_30%)]',
+                enterMotion,
+              )}
+            >
+              <Check className="size-3.5" aria-hidden="true" />
+              Verified
+            </span>
+          )}
+        </span>
       </div>
 
       <div className="relative">
@@ -526,7 +609,12 @@ export function VerifiableField({
           inputMode={isPhone ? 'numeric' : 'email'}
           autoComplete={isPhone ? 'tel-national' : 'email'}
           required
-          maxLength={isPhone ? INDIAN_MOBILE_DIGITS : 254}
+          // The mobile cap counts RAW characters, so it has to leave room for
+          // the separators and the country code a recruiter actually pastes —
+          // see INDIAN_MOBILE_INPUT_MAX_LENGTH. Capping at INDIAN_MOBILE_DIGITS
+          // made the browser clip "+91 98765 43210" to "+91 98765 " before
+          // onChange ever ran. 254 is the RFC 5321 limit on an email address.
+          maxLength={isPhone ? INDIAN_MOBILE_INPUT_MAX_LENGTH : 254}
           aria-describedby={describedBy}
           invalid={fieldError !== null}
           disabled={formSubmitting}
@@ -538,8 +626,8 @@ export function VerifiableField({
 
       <p id={hintId} className="text-xs text-[var(--color-fg-muted)]">
         {isPhone
-          ? `Indian mobile numbers only — country code ${INDIA_CALLING_CODE}. We’ll text you a ${CODE_LENGTH}-digit code.`
-          : `We’ll email you a ${CODE_LENGTH}-digit code to confirm this address.`}
+          ? `Indian mobile numbers only — country code ${INDIA_CALLING_CODE}. Our team calls or messages this number to pass on your codes, so use one you can answer.`
+          : `Verifying creates a ${CODE_LENGTH}-digit code for this address. Nothing is emailed to you — a Career Queue team member passes the code on by phone or WhatsApp.`}
       </p>
 
       {!verified && !codePanelOpen && (
@@ -549,10 +637,21 @@ export function VerifiableField({
           variant="secondary"
           size="sm"
           loading={phase === 'requesting'}
-          disabled={formSubmitting}
+          // Gated on the cooldown for the same reason the button below is. The
+          // cooldown deliberately outlives an edit of the value
+          // (handleValueChange says why), so this button can be the only control
+          // on screen while the server's window is still running — and pressing
+          // it then earns a 429 and spends one of the five requests a minute the
+          // API allows. The countdown on its face is what keeps a disabled
+          // control from being an unexplained dead end.
+          disabled={formSubmitting || cooldown > 0}
           onClick={() => void sendCode('first')}
         >
-          {isPhone ? 'Verify mobile number' : 'Verify email'}
+          {cooldown > 0
+            ? `Try again in ${cooldown}s`
+            : isPhone
+              ? 'Verify mobile number'
+              : 'Verify email'}
         </Button>
       )}
 
@@ -581,6 +680,7 @@ export function VerifiableField({
             />
             {phase !== 'expired' && (
               <Button
+                ref={verifyCodeButtonRef}
                 type="button"
                 variant="secondary"
                 size="sm"
@@ -593,21 +693,27 @@ export function VerifiableField({
             )}
           </div>
 
-          <p id={codeHintId} className="text-xs text-[var(--color-fg-muted)]">
-            Codes expire {CODE_TTL_MINUTES} minutes after they are sent.
-          </p>
-
           {notice !== null && (
-            <p role="status" className="text-xs text-[var(--color-fg-muted)]">
+            // No role="status" here: this paragraph mounts with the panel around
+            // it, and the code input names it in aria-describedby instead. See
+            // `codeDescribedBy` above for why that is the reliable one. It sits
+            // above the hint so the reading order matches the DOM order.
+            <p id={noticeId} className="text-xs text-[var(--color-fg-muted)]">
               {notice}
             </p>
           )}
 
-          {/* This button IS disabled during the cooldown, which is fine because
-              its own label says why and counts down. The form's Create account
-              button is the opposite case — its blocker lives in two other
-              fields, so nothing on the button could explain it, and it stays
-              enabled with standing copy instead. */}
+          <p id={codeHintId} className="text-xs text-[var(--color-fg-muted)]">
+            A code expires {CODE_TTL_MINUTES} minutes after it is created —
+            request a new one if you have not been given it by then.
+          </p>
+
+          {/* Both this button and the first-request button above are disabled
+              during the cooldown, which is fine because each one's own label
+              says why and counts down. The form's Create account button is the
+              opposite case — its blocker lives in two other fields, so nothing
+              on the button could explain it, and it stays enabled with standing
+              copy instead. */}
           <Button
             ref={resendButtonRef}
             type="button"
@@ -620,12 +726,14 @@ export function VerifiableField({
           >
             {/* The countdown label takes priority over every other wording, so
                 the one state in which this button is disabled always explains
-                itself on the button's own face. */}
+                itself on the button's own face. "Request", never "resend":
+                pressing this creates a fresh code for a staff member to relay,
+                it does not dispatch anything to the recruiter. */}
             {cooldown > 0
-              ? `Resend in ${cooldown}s`
+              ? `New code in ${cooldown}s`
               : phase === 'expired'
-                ? 'Send a new code'
-                : 'Resend code'}
+                ? 'Request a new code'
+                : 'Request another code'}
           </Button>
 
           {codeError !== null && <FormError id={codeErrorId}>{codeError}</FormError>}

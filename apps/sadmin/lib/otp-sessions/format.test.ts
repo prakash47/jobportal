@@ -5,6 +5,7 @@ import {
   formatIndianMobile,
   formatTimeIst,
   lastPageFor,
+  OTP_MAX_ATTEMPTS,
   otpSessionsHref,
   pivotSignupRows,
   resolveSignupName,
@@ -23,6 +24,7 @@ function challenge(over: Partial<OtpSessionChallenge> = {}): OtpSessionChallenge
     destination: 'priya@example.in',
     name: 'Priya Sharma',
     expiresAt: new Date('2026-07-29T10:10:00Z'),
+    attempts: 0,
     verifiedAt: null,
     lastSentAt: new Date('2026-07-29T09:55:00Z'),
     ...over,
@@ -54,6 +56,48 @@ describe('deriveChallengeState', () => {
 
   it('reports VERIFIED once the correct code has been entered', () => {
     expect(deriveChallengeState(challenge({ verifiedAt: NOW }), NOW)).toBe('VERIFIED');
+  });
+
+  // The failure this whole page exists to prevent: the API refuses even the
+  // correct code once the attempt budget is spent, so a burnt row must never
+  // render as one more code to read down the phone.
+  it('reports BURNT for an in-date code whose attempts are spent', () => {
+    expect(deriveChallengeState(challenge({ attempts: OTP_MAX_ATTEMPTS }), NOW)).toBe('BURNT');
+  });
+
+  it('stays LIVE on the last remaining attempt', () => {
+    expect(deriveChallengeState(challenge({ attempts: OTP_MAX_ATTEMPTS - 1 }), NOW)).toBe('LIVE');
+  });
+
+  // Defensive: a row that somehow overshot the cap is still dead, not live.
+  it('reports BURNT when attempts have overshot the cap', () => {
+    expect(deriveChallengeState(challenge({ attempts: OTP_MAX_ATTEMPTS + 3 }), NOW)).toBe('BURNT');
+  });
+
+  // verify() tests expiry before attempts, so a code that is out of both is
+  // refused as expired — the console names the same reason the API would.
+  it('keeps EXPIRED ahead of BURNT, matching the API check order', () => {
+    expect(
+      deriveChallengeState(
+        challenge({ attempts: OTP_MAX_ATTEMPTS, expiresAt: new Date(NOW.getTime() - 1) }),
+        NOW,
+      ),
+    ).toBe('EXPIRED');
+  });
+
+  // verify() short-circuits on verifiedAt before it reads attempts, so a
+  // channel that was proven before the guesses ran out stays Verified.
+  it('keeps VERIFIED ahead of BURNT', () => {
+    expect(
+      deriveChallengeState(challenge({ attempts: OTP_MAX_ATTEMPTS, verifiedAt: NOW }), NOW),
+    ).toBe('VERIFIED');
+  });
+
+  // A hardcoded copy of the API's OTP_MAX_ATTEMPTS. Pinned so that changing it
+  // here is a deliberate act with a failing test behind it, rather than a
+  // silent drift from the value the API actually enforces.
+  it('uses the API cap of five wrong guesses', () => {
+    expect(OTP_MAX_ATTEMPTS).toBe(5);
   });
 
   // Verification is a fact that already happened, so it outranks the code's own

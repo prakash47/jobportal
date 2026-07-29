@@ -15,15 +15,43 @@ export const INDIA_CALLING_CODE = '+91';
 /** Digits in the national (subscriber) part of an Indian mobile number. */
 export const INDIAN_MOBILE_DIGITS = 10;
 
+/**
+ * Cap for the mobile field's `maxlength` — a bound on the RAW characters a
+ * recruiter may type or paste, not on the number inside them. It mirrors the
+ * upper bound of the phone regex the API shares with the profile DTO,
+ * `/^[+0-9 \-()]{6,20}$/`.
+ *
+ * Deliberately NOT `INDIAN_MOBILE_DIGITS`: the browser applies `maxlength`
+ * before any `input` event fires, so a cap of 10 clips `+91 98765 43210` to
+ * `+91 98765 ` and `normalizeIndianMobile` never sees the country code it
+ * exists to strip.
+ */
+export const INDIAN_MOBILE_INPUT_MAX_LENGTH = 20;
+
 // TRAI's national numbering plan: mobiles are 10 digits and start with 6-9.
-// Landlines and the 1xxx service ranges are deliberately rejected — an SMS has
-// to arrive at this number for signup to complete.
+// Landlines and the 1xxx service ranges are rejected because signup codes are
+// relayed by hand: a Career Queue team member reads the code out over a call or
+// sends it on WhatsApp, and the WhatsApp half only works on a mobile. Nothing is
+// auto-dialled or texted, so this is a product rule about how we can reach a
+// registrant, not a delivery constraint.
+//
+// The API is deliberately looser — it only checks the shape above — so this
+// narrowing exists here and nowhere else. Relaxing it is a product decision, not
+// a matter of matching the server.
 const INDIAN_MOBILE_RE = /^[6-9]\d{9}$/;
 
 /**
  * Reduce anything a recruiter might type or paste to the bare 10-digit national
  * number: `+91 98765 43210`, `098765 43210`, `0091-9876543210` and
  * `9876543210` all collapse to `9876543210`.
+ *
+ * Digits past the tenth are KEPT rather than trimmed. The mobile field is
+ * controlled and feeds this function's own output back in on the next
+ * keystroke, so trimming makes every longer form unreachable by typing:
+ * `+919876543210` would stall at `9198765432` — ten digits that satisfy
+ * `isIndianMobile` and belong to somebody else. An over-long value is not a
+ * number we can guess at either; leaving it over-long is precisely what makes
+ * `isIndianMobile` reject it instead of silently accepting a prefix.
  *
  * Deliberately does NOT re-group the digits for display (`98765 43210`). The
  * form runs this on every keystroke, and re-inserting separators mid-string
@@ -40,7 +68,7 @@ export function normalizeIndianMobile(raw: string): string {
   if (digits.length === INDIAN_MOBILE_DIGITS + 2 && digits.startsWith('91')) {
     digits = digits.slice(2);
   }
-  return digits.slice(0, INDIAN_MOBILE_DIGITS);
+  return digits;
 }
 
 /** True when `value` normalises to a complete, plausible Indian mobile number. */
@@ -63,8 +91,9 @@ export function toE164IndianMobile(value: string): string {
 /**
  * Readable form for confirmation copy: `+91 98765 43210`. Display only — the
  * spaces would break the API's exact `destination` comparison, so never send
- * this. An incomplete value is rendered as far as it goes rather than padded,
- * so the "we sent a code to…" line can never show digits nobody typed.
+ * this. A value that is not exactly ten digits is rendered as far as it goes
+ * rather than padded, so the "code created for…" line can never show digits
+ * nobody typed.
  */
 export function formatIndianMobile(value: string): string {
   const digits = normalizeIndianMobile(value);

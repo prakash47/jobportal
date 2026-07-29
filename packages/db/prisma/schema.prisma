@@ -472,12 +472,19 @@ model PasswordResetToken {
 // wired for signup codes yet, so a Career Queue staff member reads the code off
 // /sadmin/otp-sessions and relays it. A hash would make the feature impossible.
 //
-// The consequences are accepted, recorded in docs/adr/0002, and mitigated:
-// a short TTL, an hourly purge on the job-lifecycle queue, an ADMIN-only
-// reveal path that writes a ProfileAuditAction.OTP_CODE_REVEALED row, and a
-// hard rule that `code` is never logged, never sent to Sentry, and never
-// copied into an audit diff. Revisit the moment a real provider lands — at
-// that point this becomes a hash and the sadmin page loses its code columns.
+// The consequences are accepted and mitigated: a short TTL, an hourly purge on
+// the job-lifecycle queue, deletion of the whole row the moment a signup
+// succeeds, an ADMIN-only reveal path that writes a
+// ProfileAuditAction.OTP_CODE_REVEALED row, and a hard rule that `code` is
+// never logged, never sent to Sentry, and never copied into an audit diff.
+// Revisit the moment a real provider lands — at that point this becomes a hash
+// and the sadmin page loses its code columns.
+//
+// The full decision record is in PROGRESS.md under this branch's entry, NOT in
+// docs/adr/: `/docs/` is gitignored (see .gitignore), so an ADR written there
+// would never reach the other developers — which is precisely what a decision
+// this size must not do. A local copy also exists at
+// docs/adr/0002-plaintext-signup-otp.md on the authoring machine.
 //
 // ── NO FK TO USER ────────────────────────────────────────────────────────
 // The challenge is issued BEFORE the account exists, so there is nothing to
@@ -543,7 +550,20 @@ model OtpChallenge {
   // Unlike RecruiterInvite's partial constraint this one is total, so it can
   // be a real database guarantee rather than a service convention.
   @@unique([signupId, channel])
-  // The sadmin list: ORDER BY lastSentAt DESC.
+  // Ordering support for the sadmin list. Be precise about what this does and
+  // does not buy, because the obvious reading is wrong: the list is not a flat
+  // "ORDER BY lastSentAt DESC" — it is
+  //   GROUP BY "signupId" ORDER BY MAX("lastSentAt") DESC, "signupId" DESC
+  // (one row per signup attempt, pivoting the two channel rows), and Postgres
+  // has no loose index scan, so it will hash-aggregate and sort rather than
+  // walk this index. The index therefore earns its keep only on the plain
+  // recency reads (and keeps the sort cheap if the shape is ever flattened),
+  // NOT on the list's aggregate.
+  //
+  // Retained rather than dropped because the write cost is negligible here:
+  // this table only ever holds IN-FLIGHT challenges — rows are deleted when a
+  // signup succeeds and purged hourly once expired — so it stays small by
+  // construction. Worth revisiting if that ever stops being true.
   @@index([lastSentAt(sort: Desc)])
   // The hourly purge sweep: WHERE expiresAt < ?. Mirrors Session.
   @@index([expiresAt])

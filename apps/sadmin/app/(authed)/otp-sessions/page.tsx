@@ -76,13 +76,17 @@ export default async function OtpSessionsPage({ searchParams }: PageProps) {
 
       <div className="space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-muted)] px-4 py-3 text-sm text-[var(--color-fg-muted)]">
         {/* The wording names the states the table actually shows — Reveal,
-            Verified, Expired — rather than the internal "live". */}
+            Verified, Expired, Too many attempts — rather than the internal
+            "live". */}
         <p>
-          Each code is single-use and expires fifteen minutes after it is generated. Only a code you
-          can still <strong className="font-medium">Reveal</strong> is worth relaying: a channel
-          marked Verified or Expired has nothing left to give, and asking the registrant to request
-          a fresh code is faster than re-reading a dead one. Every reveal is recorded against your
-          account.
+          A code expires fifteen minutes after it is generated, and requesting another one replaces
+          it — the previous digits stop working. Only a code you can still{' '}
+          <strong className="font-medium">Reveal</strong> is worth relaying. Verified means the
+          registrant already entered that one correctly and needs nothing from you. Expired means
+          the fifteen minutes ran out; Too many attempts means five wrong entries killed the code
+          while it was still in date. Both of those are dead — only a new code will work, and only
+          the registrant can request one, from the signup form. Every reveal is recorded against
+          your account.
         </p>
         {/* The read-at line is not decoration. This page is server-rendered and
             never refreshes itself, so a tab left open keeps showing codes as
@@ -209,15 +213,24 @@ function OtpCodeCell({
     );
   }
 
-  if (state === 'EXPIRED') {
-    // Deliberately no digits. A staff member mid-call reads whatever is legible
-    // regardless of how it is coloured, so the only reliable way to stop a dead
-    // code being relayed is not to print it. The hairline-ring pill is this
-    // portal's treatment for a label that has to sit on either the elevated card
-    // or the row's hover surface — see the (authed) layout's "Internal" pill.
+  if (state === 'EXPIRED' || state === 'BURNT') {
+    // Deliberately no digits, and no Reveal control, in either state. A staff
+    // member mid-call reads whatever is legible regardless of how it is
+    // coloured, so the only reliable way to stop a dead code being relayed is
+    // not to print it — and a burnt code is dead in the only sense that matters
+    // here: the API refuses it even when it is read out perfectly.
+    //
+    // Two labels rather than one shared "Dead", because the remedy is the same
+    // but the explanation is not. A code generated ninety seconds ago labelled
+    // "Expired" would send staff hunting a clock problem instead of telling the
+    // registrant to request a new code.
+    //
+    // The hairline-ring pill is this portal's treatment for a label that has to
+    // sit on either the elevated card or the row's hover surface — see the
+    // (authed) layout's "Internal" pill.
     return (
       <span className="inline-flex items-center rounded-full bg-[var(--color-bg-elevated)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-fg-muted)] ring-1 ring-[var(--color-border)] ring-inset">
-        Expired
+        {state === 'EXPIRED' ? 'Expired' : 'Too many attempts'}
       </span>
     );
   }

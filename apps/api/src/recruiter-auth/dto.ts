@@ -32,8 +32,9 @@ export function isValidOtpDestination(
 }
 
 // SRS §4.9.1 — recruiter registration. A single "Email ID" doubles as the
-// login identifier and the address the signup code was sent to (there is no
-// separate work-email field anymore). CompanyName is the public display name;
+// login identifier and the address the signup code was issued for (there is no
+// separate work-email field anymore — and nothing is mailed to it: the code is
+// relayed to the registrant by a staff member off /sadmin/otp-sessions). CompanyName is the public display name;
 // we derive the URL slug via slugify() in the service.
 //
 // There is deliberately NO emailVerified / phoneVerified / otpVerified boolean
