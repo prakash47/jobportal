@@ -1,9 +1,14 @@
-// Pure formatting for the job review queue. No JSX, no DOM, no `new Date()` —
+// Pure formatting for the job review queue, plus the two helpers the Employer
+// Management console shares with it (formatDateIst, formatKycStatus) — one
+// definition each, so the two surfaces cannot describe the same date or
+// verification state differently.
+//
+// No JSX, no DOM, no `new Date()` —
 // every function that needs "now" takes it as an argument, so the callers pass
 // one shared anchor instant and the tests are deterministic. Same discipline as
 // lib/dashboard/chart.ts and the trend queries.
 
-import type { EmploymentType, WorkMode } from '@jobportal/db';
+import type { EmploymentType, KycStatus, WorkMode } from '@jobportal/db';
 
 const IST = 'Asia/Kolkata';
 
@@ -105,16 +110,27 @@ export function formatDateTimeIst(value: string | Date | null): string {
   });
 }
 
-const KYC_LABEL: Record<string, string> = {
+// Keyed by the Prisma enum for the reason spelled out at EMPLOYMENT_LABEL below:
+// as a Record<string, string> this table could silently omit or invent a member
+// and fall through to the default, which is exactly how EMPLOYMENT_LABEL came to
+// render "CONTRACTOR" to a reviewer. Shared with the Employer Management console
+// (lib/employers), so both surfaces describe verification identically.
+const KYC_LABEL: Record<KycStatus, string> = {
   VERIFIED: 'Verified',
   PENDING: 'Verification pending',
   REJECTED: 'Verification rejected',
   NOT_SUBMITTED: 'Not verified',
 };
 
-/** Company verification state, in the reviewer's words rather than the enum's. */
+/**
+ * Company verification state, in the reviewer's words rather than the enum's.
+ *
+ * The parameter stays widened because callers hand over a plain string (the job
+ * console reads it off an API response), but the TABLE above is exhaustive by
+ * construction, so the fallback is only reachable for a value outside the enum.
+ */
 export function formatKycStatus(status: string): string {
-  return KYC_LABEL[status] ?? 'Not verified';
+  return KYC_LABEL[status as KycStatus] ?? 'Not verified';
 }
 
 // Keyed by the Prisma enums themselves, so the COMPILER rejects both a missing
