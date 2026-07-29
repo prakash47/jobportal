@@ -44,6 +44,23 @@ describe('nav-hrefs', () => {
   it('companies most-reviewed collection', () => {
     expect(companiesHref({ sort: 'reviews' })).toBe('/companies?sort=reviews');
   });
+  it('companies A-Z uses ?sort=name', () => {
+    expect(companiesHref({ sort: 'name' })).toBe('/companies?sort=name');
+  });
+
+  // Regression guard: "Top rated" and "All companies" sit next to each other in
+  // the Companies mega-menu's Collections list. The directory's DEFAULT sort is
+  // rating, so a bare /companies for BOTH made one row a dead duplicate.
+  it('every Collections destination in the mega-menu is distinct', () => {
+    const destinations = [
+      companiesHref({ hiring: true }),
+      companiesHref({}),
+      companiesHref({ sort: 'reviews' }),
+      companiesHref({ sort: 'name' }),
+    ];
+    expect(new Set(destinations).size).toBe(destinations.length);
+  });
+
   it('company profile href is slug-overview-id', () => {
     expect(companyHref('nimbus-cloud', 12)).toBe('/company/nimbus-cloud-overview-12');
   });
