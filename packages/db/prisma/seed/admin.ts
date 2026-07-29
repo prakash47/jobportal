@@ -101,9 +101,11 @@ export async function seedSuperAdmin(prisma: PrismaClient): Promise<void> {
   // created as something else (e.g. a CANDIDATE with this address) is corrected
   // rather than leaving an account that exists but cannot reach the portal.
   //
-  // No explicit `id`: the demo seed ends by advancing the User sequence with
-  // setval(..., 200020), so a hardcoded high id here could later be handed out
-  // a second time by the sequence. Plain autoincrement has no such hazard.
+  // No explicit `id`: the demo seed ends by advancing the User sequence past
+  // its own 200001-200020 range, and a hardcoded high id here would be a second
+  // constant to keep in step with that one. Plain autoincrement has no such
+  // hazard — and since the advance is monotonic (src/sequence.ts), a row this
+  // seed allocates above the demo range is never handed out twice.
   const admin = await prisma.user.upsert({
     where: { email: SUPER_ADMIN_EMAIL },
     update: {
