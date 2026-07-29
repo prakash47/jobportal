@@ -33,7 +33,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/recruiter-signup-otp-verification` | 2026-07-29 | The #1 conflict source. See COLLABORATION.md §3. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/recruiter-signup-otp-verification` | **Recruiter signup OTP verification + sadmin "OTP Sessions".** DB: new `OtpChallenge` model + `OtpChannel` enum + `User.phoneVerified` (**reuses the existing `User.phone` at schema.prisma:351 — no new phone column**) + an `OTP_CODE_REVEALED` `ProfileAuditAction` member. Migrations: `add_user_phone_verification`, `add_otp_challenge_table`, `add_otp_reveal_audit_action`. API (`apps/api/src/recruiter-auth/`): OTP issue/verify/resend endpoints; `RegisterRecruiterDto` gains `phone` + `signupId`; atomic consume inside the existing register `$transaction`; wires the currently-dead `killswitch.new_registrations` as its L3 gate. Recruiter FE: `components/auth/RegisterForm.tsx` + new `components/auth/VerifiableField.tsx`. sadmin: `NAV_ITEMS` += "OTP Sessions", new `app/(authed)/otp-sessions/` + `lib/otp-sessions/`. Hourly purge on the existing `job-lifecycle` BullMQ queue. | 🔒 **Holding the DB schema lock.** Also appends to `apps/sadmin/components/SidebarNav.tsx` `NAV_ITEMS` (append-only) — ⚠️ the Planned `feature/sadmin-admin-migration` appends to that same array, so expect a one-line conflict there. **Not touching** `theme.css`, `packages/types`, `keys.ts` (reusing an existing flag key), or any `packages/ui` barrel. |
 
 ---
 
