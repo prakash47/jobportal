@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/sadmin-employer-management` | **sadmin "Employer Management"** — a third nav item + **`/employers`** (master list, **one row per `Company`**: company name · contact person = the company's OWNER `Recruiter` · email · phone · registration date · account status) + **`/employers/[id]`** (employer profile: company, verification, the whole recruiter team, jobs, applications). New API module **`apps/api/src/admin-employers`** — `GET /admin/employers`, `GET /admin/employers/:id`, `AdminGuard`'d. **Read-only — no mutations, no schema change, no migration, no new flag key.** | **None held.** `apps/sadmin` + `apps/api` only. `SidebarNav.tsx` gains one **append-only** `NAV_ITEMS` entry, and any new icon is an **append-only** add to the `packages/ui` icon barrel (§15.3 — append-only edits are safe without the lock). Note for PR 3 (`feature/sadmin-admin-migration`, Planned below): this page only **displays** `CompanyKyc.status`; it does not build a KYC review surface, so the two do not collide. |
 
 ---
 
