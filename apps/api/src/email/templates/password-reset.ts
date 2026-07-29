@@ -1,19 +1,31 @@
-import { renderLayout, type Rendered } from './_layout';
+import { esc, renderLayout, type Rendered } from './_layout';
 import type { PasswordResetPayload } from './index';
 
 export function renderPasswordReset(payload: PasswordResetPayload): Rendered {
-  const subject = 'Reset your JobPortal password';
+  const subject = 'Your JobPortal password reset code';
+  // Letter-spaced, tabular, and large enough to read off a phone at a glance.
+  // The value is a 6-digit code we generated, but it is escaped anyway — the
+  // layout treats bodyParagraphs as raw HTML, so escaping here is the rule that
+  // keeps that contract honest rather than a judgement call per template.
+  const codeBlock =
+    `<div style="margin:8px 0 4px 0;padding:16px 20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;` +
+    `font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:30px;font-weight:700;` +
+    `letter-spacing:0.28em;text-align:center;color:#111827;">${esc(payload.code)}</div>`;
+
   return renderLayout(subject, {
-    preheader: `Password reset link inside — valid for ${payload.expiresInMinutes} minutes.`,
-    heading: 'Reset your password',
+    preheader: `Your password reset code — valid for ${payload.expiresInMinutes} minutes.`,
+    heading: 'Your password reset code',
     bodyParagraphs: [
-      `We received a request to reset your password. Click below to set a new one — the link is valid for ${payload.expiresInMinutes} minutes.`,
-      'If you didn’t request this, you can ignore this email and your password will stay the same.',
+      'Enter this code on the password reset screen to continue:',
+      codeBlock,
+      `The code is valid for ${payload.expiresInMinutes} minutes and can only be used once.`,
+      'If you didn’t request this, you can ignore this email — your password will stay the same, and nobody can change it without this code.',
     ],
-    cta: { label: 'Reset password', url: payload.resetUrl },
     text:
-      `Reset your password\n\n` +
-      `We received a request to reset your password. Open this link to set a new one (valid for ${payload.expiresInMinutes} minutes):\n${payload.resetUrl}\n\n` +
-      `If you didn’t request this, you can ignore this email and your password will stay the same.`,
+      `Your password reset code\n\n` +
+      `Enter this code on the password reset screen to continue:\n\n` +
+      `    ${payload.code}\n\n` +
+      `The code is valid for ${payload.expiresInMinutes} minutes and can only be used once.\n\n` +
+      `If you didn’t request this, you can ignore this email — your password will stay the same, and nobody can change it without this code.`,
   });
 }

@@ -448,16 +448,54 @@ model Session {
 
 // One-time password-reset tokens per SRS §4.12.5.
 // tokenHash = sha256(raw) — the raw token only lives in the email body.
+// One in-flight password reset per user (SRS §4.12.5). Reworked from an emailed
+// LINK to a 6-digit OTP: the reset is now three server steps — request a code,
+// verify it, then spend a one-time ticket to set the password.
+//
+// Distinct from OtpChallenge on purpose. That model serves PRE-registration
+// recruiter signup: it has no User to hang off, stores its code in PLAINTEXT
+// because staff read it off /sadmin/otp-sessions and relay it by hand, and is
+// keyed by a client-supplied signupId. This one always belongs to a real User,
+// is delivered by email, and therefore keeps its secret HASHED at rest — the
+// same stance the emailed token had.
 model PasswordResetToken {
-  id        Int       @id @default(autoincrement())
-  userId    Int
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  // SHA-256 of `${userId}:${code}`. Salting with the id keeps two users who are
+  // independently issued the same six digits from colliding, and means a stolen
+  // hash cannot be replayed against another account.
+  codeHash String
+
+  // The one-time ticket minted when the code is verified — this is what the
+  // final set-password call spends, so the code itself is never sent twice and
+  // never has to be held by the browser. NULL until verification, which is why
+  // it is nullable; Postgres permits many NULLs under a UNIQUE index.
+  tokenHash String? @unique
+
+  expiresAt DateTime
+  // Wrong guesses against the CURRENT code, reset to 0 on resend. This is the
+  // load-bearing brute-force control: six digits is a 10^6 space that a script
+  // exhausts trivially, and the per-IP throttler bounds one source, not a proxy
+  // pool. Enforced by a conditional UPDATE so it fails CLOSED under races.
+  attempts    Int       @default(0)
+  // How many times a fresh code was issued for this row (cooldown + hard cap).
+  resendCount Int       @default(0)
+  // Drives the resend cooldown. Separate from updatedAt, which would also move
+  // when `attempts` increments on a wrong guess and so would misreport when a
+  // code was last actually sent.
+  lastSentAt  DateTime  @default(now())
+  verifiedAt  DateTime?
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  // Exactly one live reset per user: a resend REPLACES the code in place rather
+  // than inserting a superseded sibling, so N resends can never leave N
+  // simultaneously-valid codes standing (which would gut the attempt cap).
+  @@unique([userId])
+  // The purge sweep: WHERE expiresAt < now.
+  @@index([expiresAt])
 }
 
 // A one-time code issued during recruiter signup, one row per channel

@@ -63,7 +63,7 @@ const fixtures = {
   registration_confirmation: { name: 'Aisha' },
   email_verification: { verifyUrl: 'https://jobportal.com/verify?token=t' },
   password_reset: {
-    resetUrl: 'https://jobportal.com/reset?token=t',
+    code: '481920',
     expiresInMinutes: 15,
   },
   application_submitted: {
