@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Jayesh | `feature/navbar-mega-menu-console` | **Seeker navbar mega-menu → redesign as "The Console"** (`apps/web` only; the owner rejected the shipped "Native tiles" look). Two-pane master/detail popover: a 216px facet rail (ARIA `tablist`) + a detail pane, stitched by ONE gliding 3px cyan indicator; Jobs rows gain an honest proportion micro-bar (share of that facet's max); fixed detail min-height so the popover never resizes on swap; full-width footer with the live count + quick-links + one filled-navy CTA. New client island `components/nav/FacetTabs.tsx` (slot pattern one level deeper — rail buttons/panes/footer arrive as SERVER-rendered ReactNode). Rewrites `JobsMegaPanel`/`CompaniesMegaPanel`; retires `NavTile.tsx` + `menu-chrome.tsx`. Data loader (`lib/nav/menu-data.ts`), `nav-hrefs.ts` + tests, and `PrimaryNav`'s open/close contract all UNCHANGED. **No schema/migration/flag; `theme.css` untouched.** | `apps/web/components/nav/*` (self-contained) — no shared-surface lock needed |
 
 ---
 
