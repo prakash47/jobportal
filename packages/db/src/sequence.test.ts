@@ -8,7 +8,7 @@ import { resolve } from 'node:path';
 config({ path: resolve(process.cwd(), '../../.env') });
 
 import { Client } from 'pg';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { advanceSequence, type RawQueryClient } from './sequence';
 
 // ============================================================
@@ -122,52 +122,88 @@ describe('advanceSequence — statement shape', () => {
 // against a real server: seed with explicit ids, let real rows accumulate,
 // re-seed, and check that the next insert still succeeds.
 //
-// It runs on a local database only (same guard the demo seed entry points use)
-// and never touches an application table — it creates and drops its own. Uses
-// `pg` directly rather than PrismaClient so the suite does not require
-// `prisma generate` to have been run.
+// It runs on a local database only, and never touches an application table —
+// it creates and drops its own. Uses `pg` directly rather than PrismaClient so
+// the suite does not require `prisma generate` to have been run.
+//
+// Two gates, and they are not the same question. The URL predicate (borrowed
+// from the seed entry points) asks "is this database SAFE to write to"; the
+// connection probe asks "is anything actually LISTENING". Only checking the
+// first is how a suite ends up red on a laptop with Docker stopped, so the
+// probe runs before the block is declared and the whole block skips — with a
+// reason on stderr — rather than failing in beforeAll.
 
 const DATABASE_URL = process.env.DATABASE_URL ?? '';
 const LOOKS_LOCAL =
   /(?:localhost|127\.0\.0\.1|::1|\.local(?::|\/|$)|\.internal(?::|\/|$))/i.test(DATABASE_URL);
-const RUN_DB_TESTS = DATABASE_URL !== '' && LOOKS_LOCAL;
+const SAFE_TARGET =
+  DATABASE_URL !== '' && LOOKS_LOCAL && process.env.NODE_ENV !== 'production';
 
-const TABLE = '_seq_advance_probe';
+// Unique per worker process: vitest forks, and two runs against one database
+// (two worktrees, or a watcher beside `pnpm test`) would otherwise drop each
+// other's fixture mid-test.
+const TABLE = `_seq_advance_probe_${process.pid}`;
 
-describe.skipIf(!RUN_DB_TESTS)('advanceSequence — against Postgres', () => {
-  let pg: Client;
-  let client: RawQueryClient;
+/**
+ * A connection refusal arrives as an `AggregateError` whose own message is
+ * empty (one sub-error per resolved address), so reporting `err.message`
+ * verbatim would print an empty parenthetical in the one place a developer
+ * needs the reason.
+ */
+function describeError(err: unknown): string {
+  if (err instanceof AggregateError) {
+    const inner = err.errors.map(describeError).filter(Boolean);
+    if (inner.length > 0) return [...new Set(inner)].join('; ');
+  }
+  if (err instanceof Error && err.message !== '') return err.message;
+  if (err instanceof Error) return err.name;
+  return String(err);
+}
 
-  beforeAll(async () => {
-    pg = new Client({ connectionString: DATABASE_URL });
-    await pg.connect();
-    // Thin shim: `pg.query` already speaks the $1 placeholder dialect that
-    // `$queryRawUnsafe` uses, so the helper cannot tell the difference.
-    client = {
-      $queryRawUnsafe: async <T>(query: string, ...values: unknown[]) =>
-        (await pg.query(query, values)).rows as T,
-    };
-  });
+async function connectOrExplain(): Promise<Client | null> {
+  if (!SAFE_TARGET) return null;
+  const candidate = new Client({ connectionString: DATABASE_URL, connectionTimeoutMillis: 5_000 });
+  try {
+    await candidate.connect();
+    return candidate;
+  } catch (err) {
+    await candidate.end().catch(() => undefined);
+    console.warn(
+      `[sequence.test] Postgres integration tests SKIPPED — ${DATABASE_URL.replace(/:[^@]*@/, ':***@')} ` +
+        `is not reachable (${describeError(err)}). Run \`pnpm infra:up\` to include them.`,
+    );
+    return null;
+  }
+}
+
+const pg = await connectOrExplain();
+
+describe.skipIf(pg === null)('advanceSequence — against Postgres', () => {
+  const db = pg!;
+  // Thin shim: `pg.query` already speaks the $1 placeholder dialect that
+  // `$queryRawUnsafe` uses, so the helper cannot tell the difference.
+  const client: RawQueryClient = {
+    $queryRawUnsafe: async <T>(query: string, ...values: unknown[]) =>
+      (await db.query(query, values)).rows as T,
+  };
 
   afterAll(async () => {
-    if (pg) {
-      await pg.query(`DROP TABLE IF EXISTS ${TABLE}`);
-      await pg.end();
-    }
+    await db.query(`DROP TABLE IF EXISTS ${TABLE}`);
+    await db.end();
   });
 
   beforeEach(async () => {
-    await pg.query(`DROP TABLE IF EXISTS ${TABLE}`);
-    await pg.query(`CREATE TABLE ${TABLE} (id serial PRIMARY KEY, note text)`);
+    await db.query(`DROP TABLE IF EXISTS ${TABLE}`);
+    await db.query(`CREATE TABLE ${TABLE} (id serial PRIMARY KEY, note text)`);
   });
 
   afterEach(async () => {
-    await pg.query(`DROP TABLE IF EXISTS ${TABLE}`);
+    await db.query(`DROP TABLE IF EXISTS ${TABLE}`);
   });
 
   /** A row inserted the way the app does it — no explicit id. */
   async function signup(note: string): Promise<number> {
-    const { rows } = await pg.query<{ id: number }>(
+    const { rows } = await db.query<{ id: number }>(
       `INSERT INTO ${TABLE} (note) VALUES ($1) RETURNING id`,
       [note],
     );
@@ -176,7 +212,7 @@ describe.skipIf(!RUN_DB_TESTS)('advanceSequence — against Postgres', () => {
 
   /** Rows written the way a demo seed writes them — explicit ids. */
   async function seedExplicitRows(from: number, to: number): Promise<void> {
-    await pg.query(
+    await db.query(
       `INSERT INTO ${TABLE} (id, note) SELECT g, 'demo' FROM generate_series($1::bigint, $2::bigint) g`,
       [from, to],
     );
@@ -201,13 +237,17 @@ describe.skipIf(!RUN_DB_TESTS)('advanceSequence — against Postgres', () => {
     await expect(signup('recruiter-c')).resolves.toBe(200023);
   });
 
-  it('the old unconditional setval really does break it (proves the test bites)', async () => {
+  // Characterises the shape that was removed, so the test above is anchored to
+  // a demonstrated failure rather than to an assumption about Postgres. (The
+  // test that bites on a revert is the one above: restore the unconditional
+  // setval inside advanceSequence and it fails on the last line.)
+  it('the unconditional setval this replaced does rewind under live rows', async () => {
     await seedExplicitRows(200001, 200020);
     await advanceSequence(client, TABLE, 'id', 200020);
     await signup('recruiter-a');
 
     // Exactly what the seeds used to do.
-    await pg.query(`SELECT setval(pg_get_serial_sequence('${TABLE}', 'id'), $1, true)`, [200020]);
+    await db.query(`SELECT setval(pg_get_serial_sequence('${TABLE}', 'id'), $1, true)`, [200020]);
 
     await expect(signup('recruiter-b')).rejects.toThrow(/duplicate key value/);
   });
@@ -229,7 +269,7 @@ describe.skipIf(!RUN_DB_TESTS)('advanceSequence — against Postgres', () => {
 
   it('respects rows above the floor even when the seed never ran', async () => {
     // Sequence untouched at "never called"; a row exists well above the floor.
-    await pg.query(`INSERT INTO ${TABLE} (id, note) VALUES (500, 'imported')`);
+    await db.query(`INSERT INTO ${TABLE} (id, note) VALUES (500, 'imported')`);
 
     const result = await advanceSequence(client, TABLE, 'id', 100);
     expect(result.before).toBe(0);
@@ -239,10 +279,14 @@ describe.skipIf(!RUN_DB_TESTS)('advanceSequence — against Postgres', () => {
 
   it('leaves id 1 available on an empty table with a fresh sequence', async () => {
     const result = await advanceSequence(client, TABLE, 'id', 0);
-    expect(result.before).toBe(0);
-    expect(result.after).toBe(1);
-    // is_called=false, so 1 is handed out rather than skipped.
+    // Nothing is spoken for, so nothing moved — and 1 is handed out rather
+    // than skipped, because the sequence is left is_called=false.
+    expect(result).toMatchObject({ before: 0, after: 0, moved: false });
     expect(await signup('first-ever')).toBe(1);
+
+    // Still honest on a second pass now that a row exists.
+    const second = await advanceSequence(client, TABLE, 'id', 0);
+    expect(second).toMatchObject({ before: 1, after: 1, moved: false });
   });
 
   it('raises the sequence to the floor when the table is empty but ids are reserved', async () => {

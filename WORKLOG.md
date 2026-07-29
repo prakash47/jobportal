@@ -50,7 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
-| Claude/Prakash | `bugfix/seed-sequence-monotonic` | Monotonic `setval` for the demo seeds — new `advanceSequence()` helper + first vitest suite in `packages/db`. Fixes registration failing with P2002 on `User.id` after a demo re-seed. | **None.** `packages/db/prisma/seed/*` + `packages/db/package.json` only — **no** `schema.prisma`, no migration, no theme/types/flag-keys. |
+| Claude/Prakash | `bugfix/seed-sequence-monotonic` | Monotonic `setval` for the demo seeds — new `advanceSequence()` helper + first vitest suite in `packages/db`. Fixes registration failing with P2002 on `User.id` after a demo re-seed. | **No locked surface.** Touches `packages/db` only: new `src/sequence.ts` + `src/sequence.test.ts` + `vitest.config.ts`, edits to `prisma/seed/{demo,demo-applications,admin}.ts` and `package.json` (adds a `test` script + vitest), plus `pnpm-lock.yaml` and a `DEVELOPMENT.md` line. **No** `schema.prisma`, no migration, no theme/types/flag-keys. Heads-up for anyone else adding files under `packages/db/src/`. |
 
 ---
 

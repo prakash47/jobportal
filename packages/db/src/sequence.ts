@@ -40,7 +40,10 @@ export interface AdvanceSequenceResult {
   sequence: string;
   /** Sequence high-water mark before the call. 0 when it had never been used. */
   before: number;
-  /** High-water mark after the call. Never less than `before`. */
+  /**
+   * High-water mark after the call — the greatest id now spoken for, never less
+   * than `before`. 0 means nothing has been handed out yet and the next id is 1.
+   */
   after: number;
   /** True when this call actually moved the sequence forward. */
   moved: boolean;
@@ -94,10 +97,13 @@ export async function advanceSequence(
   // `setval()` and a read of the same sequence in one target list have no
   // guaranteed evaluation order.
   //
-  // `pg_sequence_last_value()` returns NULL for a sequence that has never been
-  // called, which is exactly the "nothing handed out yet" case, so it collapses
-  // to 0 — unlike `last_value`, which reads 1 on a fresh sequence and would
-  // burn id 1.
+  // `pg_sequence_last_value()` returns NULL whenever the sequence's is_called
+  // is false — a sequence that has handed out nothing, or one just reset with
+  // `ALTER SEQUENCE … RESTART WITH n`. Collapsing that to 0 is right for the
+  // first case and harmless for the second: the max(id) operand below still
+  // floors the result, so a RESTART's spare headroom is dropped but the
+  // sequence can never land on a live row. Reading `last_value` instead would
+  // report 1 on a fresh sequence and burn id 1.
   const probe = await client.$queryRawUnsafe<Array<{ sequence: string | null; before: unknown }>>(
     `SELECT pg_get_serial_sequence($1, $2) AS sequence,
             COALESCE(pg_sequence_last_value(pg_get_serial_sequence($1, $2)::regclass), 0) AS before`,
@@ -114,14 +120,22 @@ export async function advanceSequence(
   }
   const before = toSafeNumber(probe[0]?.before, 'current sequence value');
 
-  // One statement, so the read of max(id)/last_value and the write cannot be
-  // interleaved. GREATEST is what makes this monotonic.
+  // One statement, so max(id) and the write cannot drift apart across a
+  // round-trip. GREATEST is what makes this monotonic. Note this takes no lock
+  // on the table: `MAX(id)` sees only this statement's snapshot, so a
+  // concurrent uncommitted insert of an explicit id is invisible to it. That is
+  // acceptable here because seeds are single-writer dev scripts, and re-running
+  // one repairs whatever the last run missed.
   //
   // The `GREATEST(v.target, 1)` / `v.target >= 1` pair handles the empty-table
   // case: a sequence cannot be set below its minvalue of 1, and passing
-  // is_called=false leaves id 1 available instead of skipping it.
-  const advanced = await client.$queryRawUnsafe<Array<{ after: unknown }>>(
-    `SELECT setval($1::regclass, GREATEST(v.target, 1), v.target >= 1) AS after
+  // is_called=false leaves id 1 available instead of skipping it. `after` is
+  // reported as the computed target rather than setval's return value, because
+  // setval echoes the value it wrote (1) even when is_called=false says nothing
+  // has been handed out.
+  const advanced = await client.$queryRawUnsafe<Array<{ after: unknown; applied: unknown }>>(
+    `SELECT v.target AS after,
+            setval($1::regclass, GREATEST(v.target, 1), v.target >= 1) AS applied
        FROM (
          SELECT GREATEST(
                   (SELECT COALESCE(MAX("${column}"), 0) FROM "${table}"),
