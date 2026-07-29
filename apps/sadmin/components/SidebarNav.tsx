@@ -4,7 +4,7 @@ import type { ComponentType, SVGProps } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@jobportal/ui';
-import { Building2, ClipboardList, LayoutDashboard } from '@jobportal/ui/icons';
+import { Building2, ClipboardList, LayoutDashboard, ShieldCheck } from '@jobportal/ui/icons';
 
 type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -20,6 +20,7 @@ const NAV_ITEMS: readonly { href: string; label: string; icon: NavIcon }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard as NavIcon },
   { href: '/jobs', label: 'Job review', icon: ClipboardList as NavIcon },
   { href: '/employers', label: 'Employer management', icon: Building2 as NavIcon },
+  { href: '/otp-sessions', label: 'OTP Sessions', icon: ShieldCheck as NavIcon },
 ];
 
 function isActive(pathname: string, href: string): boolean {

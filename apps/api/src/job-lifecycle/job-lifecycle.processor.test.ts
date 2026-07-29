@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@jobportal/db', () => ({
-  prisma: { job: { findMany: vi.fn(), updateMany: vi.fn() } },
+  prisma: {
+    job: { findMany: vi.fn(), updateMany: vi.fn() },
+    otpChallenge: { deleteMany: vi.fn() },
+  },
 }));
 vi.mock('@jobportal/search', () => ({ syncJob: vi.fn().mockResolvedValue(undefined) }));
 
@@ -12,6 +15,7 @@ import { JobLifecycleProcessor } from './job-lifecycle.processor';
 
 const mocked = prisma as unknown as {
   job: { findMany: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> };
+  otpChallenge: { deleteMany: ReturnType<typeof vi.fn> };
 };
 const mockedSync = syncJob as ReturnType<typeof vi.fn>;
 
@@ -81,5 +85,64 @@ describe('JobLifecycleProcessor.expireStaleJobs', () => {
     });
     const dateFilter = (args.where['expiresAt'] as { lt: Date }).lt;
     expect(dateFilter).toBeInstanceOf(Date);
+  });
+});
+
+describe('JobLifecycleProcessor.purgeExpiredOtps', () => {
+  const NOW = new Date('2026-07-29T10:00:00.000Z');
+  let proc: JobLifecycleProcessor;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    proc = new JobLifecycleProcessor(
+      { purgeJob: vi.fn() } as unknown as CachePurgeService,
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('deletes challenges that expired more than an hour ago', async () => {
+    mocked.otpChallenge.deleteMany.mockResolvedValue({ count: 4 });
+    const out = await proc.purgeExpiredOtps();
+    expect(out.purged).toBe(4);
+    expect(mocked.otpChallenge.deleteMany).toHaveBeenCalledWith({
+      where: { expiresAt: { lt: new Date(NOW.getTime() - 60 * 60 * 1000) } },
+    });
+  });
+
+  // The grace window is what lets verify() keep answering "that code has
+  // expired" instead of the misleading "request a code first".
+  it('leaves a just-expired challenge alone', async () => {
+    mocked.otpChallenge.deleteMany.mockResolvedValue({ count: 0 });
+    await proc.purgeExpiredOtps();
+    const args = mocked.otpChallenge.deleteMany.mock.calls[0]?.[0] as {
+      where: { expiresAt: { lt: Date } };
+    };
+    const justExpired = new Date(NOW.getTime() - 1000);
+    expect(justExpired.getTime()).toBeGreaterThan(args.where.expiresAt.lt.getTime());
+  });
+
+  // A repeatable can be replayed after a failure, so a second run on the same
+  // minute has to be harmless.
+  it('is idempotent — a re-run deletes nothing further', async () => {
+    mocked.otpChallenge.deleteMany.mockResolvedValueOnce({ count: 4 });
+    mocked.otpChallenge.deleteMany.mockResolvedValueOnce({ count: 0 });
+    await proc.purgeExpiredOtps();
+    await expect(proc.purgeExpiredOtps()).resolves.toEqual({ purged: 0 });
+  });
+
+  // A single deleteMany, not a find-then-delete: nothing downstream needs to
+  // know which rows went, and reading them would pull plaintext codes into
+  // memory for no reason.
+  it('deletes in one statement, selecting nothing back', async () => {
+    mocked.otpChallenge.deleteMany.mockResolvedValue({ count: 1 });
+    await proc.purgeExpiredOtps();
+    expect(mocked.otpChallenge.deleteMany).toHaveBeenCalledTimes(1);
+    const args = mocked.otpChallenge.deleteMany.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(Object.keys(args)).toEqual(['where']);
   });
 });

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { AdminJobsModule } from './admin-jobs/admin-jobs.module';
 import { AdminKycModule } from './admin-kyc/admin-kyc.module';
+import { AdminOtpSessionsModule } from './admin-otp-sessions/admin-otp-sessions.module';
 import { AdminSupportModule } from './admin-support/admin-support.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { AppController } from './app.controller';
@@ -62,6 +63,7 @@ import { StorageModule } from './storage/storage.module';
     RecruiterSupportModule,
     AdminJobsModule,
     AdminKycModule,
+    AdminOtpSessionsModule,
     AdminSupportModule,
     JobLifecycleModule,
     NotificationsPreferencesModule,

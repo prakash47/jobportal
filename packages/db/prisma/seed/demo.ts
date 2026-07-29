@@ -165,6 +165,18 @@ interface RecruiterTemplate {
   email: string;
   name: string;
   designation: string;
+  // A verified mobile is now part of what recruiter signup produces (the PHONE
+  // OtpChallenge is required before the account is created). These recruiters
+  // predate that rule, so they carry a phone here and are seeded with
+  // phoneVerified: true — otherwise the demo world would contain accounts the
+  // current signup flow could never have created, and anything that comes to
+  // depend on a verified number would break only against seeded data.
+  //
+  // Distinct, obviously-fake +91 numbers in the 98765 4300x block. Not
+  // registered to anyone; a duplicate would be harmless at the database level
+  // (User.phone is not unique, by design) but would make "one verified phone
+  // per account" untestable against the seed.
+  phone: string;
 }
 
 const RECRUITERS: RecruiterTemplate[] = [
@@ -173,48 +185,56 @@ const RECRUITERS: RecruiterTemplate[] = [
     email: 'priya.sharma+demo@jobportal.dev',
     name: 'Priya Sharma',
     designation: 'Senior Talent Partner',
+    phone: '+91 98765 43001',
   },
   {
     companySlug: 'veridian-analytics',
     email: 'rohan.mehta+demo@jobportal.dev',
     name: 'Rohan Mehta',
     designation: 'Head of Talent',
+    phone: '+91 98765 43002',
   },
   {
     companySlug: 'sahaj-pay',
     email: 'aditi.iyer+demo@jobportal.dev',
     name: 'Aditi Iyer',
     designation: 'Talent Lead',
+    phone: '+91 98765 43003',
   },
   {
     companySlug: 'lumen-health',
     email: 'karthik.reddy+demo@jobportal.dev',
     name: 'Karthik Reddy',
     designation: 'People Operations Manager',
+    phone: '+91 98765 43004',
   },
   {
     companySlug: 'pathshala-learning',
     email: 'aarti.singh+demo@jobportal.dev',
     name: 'Aarti Singh',
     designation: 'Recruiting Manager',
+    phone: '+91 98765 43005',
   },
   {
     companySlug: 'kirana-stack',
     email: 'vivek.patel+demo@jobportal.dev',
     name: 'Vivek Patel',
     designation: 'Talent Acquisition',
+    phone: '+91 98765 43006',
   },
   {
     companySlug: 'rasta-logistics',
     email: 'neha.kapoor+demo@jobportal.dev',
     name: 'Neha Kapoor',
     designation: 'Senior Recruiter',
+    phone: '+91 98765 43007',
   },
   {
     companySlug: 'sutra-labs',
     email: 'sanjay.verma+demo@jobportal.dev',
     name: 'Sanjay Verma',
     designation: 'Founding Recruiter',
+    phone: '+91 98765 43008',
   },
 ];
 
@@ -482,6 +502,13 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
     const companyId = companyBySlug.get(r.companySlug);
     if (!companyId) throw new Error(`Company not found: ${r.companySlug}`);
 
+    // phone + phoneVerified are written together. Elsewhere the invariant is
+    // "any path that writes User.phone must reset phoneVerified to false"
+    // (schema.prisma), and this seed is the deliberate exception rather than a
+    // violation of it: the number and the claim that it is verified are one
+    // fixture, exactly as the real signup path writes them in one statement
+    // after the OTP has already proved control. `passwordHash` stays out of
+    // `update` so the demo login keeps working across re-seeds.
     const user = await prisma.user.upsert({
       where: { email: r.email },
       create: {
@@ -490,8 +517,16 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
         name: r.name,
         role: 'RECRUITER',
         emailVerified: true,
+        phone: r.phone,
+        phoneVerified: true,
       },
-      update: { name: r.name, emailVerified: true, role: 'RECRUITER' },
+      update: {
+        name: r.name,
+        emailVerified: true,
+        role: 'RECRUITER',
+        phone: r.phone,
+        phoneVerified: true,
+      },
       select: { id: true },
     });
 

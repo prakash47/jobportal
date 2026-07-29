@@ -17,7 +17,8 @@ import { cookieEnvFromProcess, setAuthCookies, type AccessClaims } from '@jobpor
 import { CurrentUser, Roles } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
-import { ChangePasswordDto, RegisterRecruiterDto } from './dto';
+import { ChangePasswordDto, RegisterRecruiterDto, RequestOtpDto, VerifyOtpDto } from './dto';
+import { RecruiterOtpService } from './recruiter-otp.service';
 import { RecruiterPasswordService } from './recruiter-password.service';
 import { RecruiterRegistrationService } from './recruiter-registration.service';
 import { RecruiterWorkEmailService } from './recruiter-work-email.service';
@@ -44,7 +45,36 @@ export class RecruiterAuthController {
     private readonly registration: RecruiterRegistrationService,
     private readonly workEmail: RecruiterWorkEmailService,
     private readonly password: RecruiterPasswordService,
+    private readonly otp: RecruiterOtpService,
   ) {}
+
+  // SRS §4.9.1 — request (or resend) a signup one-time code. Unauthenticated:
+  // it runs before any account exists. 5/min/IP — one signup needs two codes,
+  // so this allows a couple of genuine retries per minute and nothing like a
+  // resend flood. 202, not 201: the code is issued here but its DELIVERY is
+  // out-of-band (a staff member relays it off /sadmin/otp-sessions), so the
+  // response acknowledges the request rather than claiming the code arrived.
+  @Post('otp/request')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.ACCEPTED)
+  async requestOtp(@Body() body: unknown, @Req() req: Request) {
+    const parsed = RequestOtpDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return this.otp.request(parsed.data, req.ip);
+  }
+
+  // SRS §4.9.1 — check a typed code. Unauthenticated for the same reason.
+  // 10/min/IP rather than 5: a registrant types two codes and mistypes some of
+  // them, and the real brute-force bound is the 5-attempt cap on the challenge
+  // row, which no amount of per-IP budget can get around.
+  @Post('otp/verify')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  async verifyOtp(@Body() body: unknown) {
+    const parsed = VerifyOtpDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return this.otp.verify(parsed.data);
+  }
 
   // SRS §4.9.1 — register + auto-login. Same throttle policy as the
   // candidate /auth/register (10/min/IP) — registrations are rare and a

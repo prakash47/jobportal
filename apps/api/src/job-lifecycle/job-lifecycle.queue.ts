@@ -12,6 +12,11 @@ import { JOB_NAMES, JobLifecycleProcessor } from './job-lifecycle.processor';
 const QUEUE_NAME = 'job-lifecycle';
 
 const DAILY_CRON_DEFAULT = '0 2 * * *'; // 02:00 every day
+// Signup OTP purge — hourly, deliberately NOT folded into the 02:00 sweep.
+// OtpChallenge.code is stored in plaintext, so a daily cadence would leave a
+// code minted at 02:05 sitting readable for the best part of a day after it
+// stopped being usable. Hourly bounds that to the TTL plus the grace window.
+const OTP_PURGE_CRON_DEFAULT = '0 * * * *'; // top of every hour
 const TZ = process.env.JOB_LIFECYCLE_CRON_TZ ?? 'Asia/Kolkata';
 
 function buildConnection(): ConnectionOptions {
@@ -26,9 +31,10 @@ function buildConnection(): ConnectionOptions {
   };
 }
 
-// SRS §4.9.5 — owns the BullMQ Queue + Worker for the daily expiry sweep.
-// Separate from the alerts queue (job-alerts) to keep concerns clean —
-// neither queue needs the other's job types.
+// SRS §4.9.5 — owns the BullMQ Queue + Worker for the platform's periodic
+// sweeps: the daily job-expiry pass and the hourly signup-OTP purge. Separate
+// from the alerts queue (job-alerts) to keep concerns clean — neither queue
+// needs the other's job types.
 
 @Injectable()
 export class JobLifecycleQueueService implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -51,6 +57,10 @@ export class JobLifecycleQueueService implements OnApplicationBootstrap, OnAppli
       async (job) => {
         if (job.name === JOB_NAMES.EXPIRE_STALE_JOBS) {
           await this.processor.expireStaleJobs();
+          return;
+        }
+        if (job.name === JOB_NAMES.PURGE_EXPIRED_OTPS) {
+          await this.processor.purgeExpiredOtps();
           return;
         }
         this.logger.warn(`unknown job-lifecycle job name: ${job.name}`);
@@ -79,7 +89,19 @@ export class JobLifecycleQueueService implements OnApplicationBootstrap, OnAppli
       { repeat: { pattern: cron, tz: TZ }, jobId: 'expire-stale-jobs-daily' },
     );
 
-    this.logger.log(`job-lifecycle online — daily=${cron}, tz=${TZ}`);
+    // Second repeatable on the SAME queue and worker — the OTP purge is another
+    // small periodic DELETE, so it needs a different cadence, not another
+    // Redis connection.
+    const otpCron = process.env.JOB_LIFECYCLE_OTP_PURGE_CRON ?? OTP_PURGE_CRON_DEFAULT;
+    await this.queue.add(
+      JOB_NAMES.PURGE_EXPIRED_OTPS,
+      {},
+      { repeat: { pattern: otpCron, tz: TZ }, jobId: 'purge-expired-otps-hourly' },
+    );
+
+    this.logger.log(
+      `job-lifecycle online — daily=${cron}, otpPurge=${otpCron}, tz=${TZ}`,
+    );
   }
 
   async onApplicationShutdown(): Promise<void> {
