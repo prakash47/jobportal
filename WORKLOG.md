@@ -33,7 +33,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | The #1 conflict source. See COLLABORATION.md §3. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Jayesh | `bugfix/forgot-password-otp` | 2026-07-29 | Additive only: OTP columns on `PasswordResetToken`. Released on merge. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Jayesh | `bugfix/forgot-password-otp` | **RPT-008 — forgot password reworked from emailed LINK to OTP** (`apps/web` seeker + `apps/api`; recruiter/sadmin/services untouched). Tester: no email arrives and the flow sends a reset *link* where every other platform sends a code. **Two causes:** (1) `RESEND_API_KEY` is blank so `ResendClient` stubs EVERY send — config, not code (owner call: add a strictly dev-gated OTP log fallback now, real Resend key later); (2) the flow is link-based by design. New flow: email → 6-digit OTP → verify → new password → **auto sign-in**. **Schema (LOCK TAKEN, additive):** `PasswordResetToken` gains `codeHash`/`attempts`/`resendCount`/`lastSentAt` (+ migration). API: `POST /auth/forgot-password` issues a code, new `POST /auth/verify-reset-otp` → one-time ticket, `POST /auth/reset-password` takes ticket+password and mints a session. Attempt cap via conditional UPDATE (fails closed), constant-time compare, resend cooldown, no enumeration. `/forgot-password` page **redesigned** (owner asked for modern/unique/professional — artifact-approved before building). **Not touching `OtpChallenge`** (teammate's pre-registration signup model). | `packages/db/prisma/schema.prisma` **(lock held)** + `apps/api/src/auth/*` + `apps/web/app/(auth)/forgot-password` |
 
 ---
 
