@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/recruiter-auth-ui-revamp` | **Recruiter portal auth UI revamp — visual only.** Split-screen shell for the `(auth)` route group: brand-navy aside (designed flat SVG illustration + proof points) on the left, form on the right. Touches `apps/recruiter/app/(auth)/layout.tsx` + `login/page.tsx` + `register/page.tsx`; new `apps/recruiter/components/auth/*` (AuthSplit, AuthAside, illustrations, PasswordInput). **No auth endpoint, request body, redirect, validation or field changed.** | **None.** `apps/recruiter` only — no schema/migration, no new flag key, no `theme.css`, no `packages/types`, no `keys.ts`, no barrel edit (all icons already exported). |
 
 ---
 
