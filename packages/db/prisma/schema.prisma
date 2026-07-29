@@ -34,6 +34,16 @@ enum AuthProvider {
   GOOGLE
 }
 
+// Delivery channel for a recruiter-signup one-time code (SRS §4.9 / §4.12).
+// Modelled as a discriminator on OtpChallenge rather than as paired
+// email*/phone* column families, so adding a third channel (WhatsApp is the
+// plausible next one in India) is a one-value change here with no migration
+// to the table itself. Same call KycDocument makes with docType.
+enum OtpChannel {
+  EMAIL
+  PHONE
+}
+
 enum JobStatus {
   DRAFT
   PENDING_MODERATION
@@ -238,6 +248,18 @@ enum ProfileAuditAction {
   // need no audit action — the SupportTicket / SupportTicketMessage rows are
   // the record. Never write message bodies to the diff — only ids + statuses.
   SUPPORT_TICKET_STATUS_CHANGED
+  // Signup OTP relay (SRS §4.9). Written with the REVEALING ADMIN's User id
+  // when a staff member reveals a live code on /sadmin/otp-sessions in order to
+  // relay it to the person signing up.
+  //
+  // This is the only audit action in this enum that records a READ rather than
+  // a mutation, and that is deliberate: with no SMS/email provider wired, the
+  // staff member IS the delivery channel, so reading the code is the sensitive
+  // act and the only thing worth attributing. The diff carries the challenge
+  // id, the channel and the destination — NEVER the code itself, matching the
+  // minimisation rule KYC (GSTIN/PAN), job moderation and billing already
+  // follow.
+  OTP_CODE_REVEALED
 }
 
 // SRS §4.9 — legal / organisational classification of an employer, shown on the
@@ -351,6 +373,23 @@ model User {
   phone         String?
   image         String? // avatar URL from an OAuth provider (e.g. Google), optional
   emailVerified Boolean      @default(false)
+  // True only once a PHONE OtpChallenge for this number has been consumed.
+  // Lives on User (not Recruiter) because the phone is an account-identity
+  // fact: `phone` above is already written by candidate signup and by the
+  // candidate profile PATCH, so a second Recruiter.phone would be the parallel
+  // column COLLABORATION.md §3.3 forbids. Distinct from
+  // Recruiter.contactPhone, which is an editable profile field.
+  //
+  // `phone` is deliberately NOT @unique and NOT normalised: the platform
+  // stores free-form phone text (register validates only length; the profile
+  // DTOs allow +, spaces, dashes and parens anywhere), so "9876543210",
+  // "+919876543210" and "+91 98765 43210" are three distinct index keys for
+  // one number — a unique index would enforce nothing while looking like it
+  // does. "One verified phone per account" is a service-layer rule, the same
+  // way RecruiterInvite enforces its partial constraint in the service.
+  //
+  // INVARIANT: any path that writes User.phone must reset this to false.
+  phoneVerified Boolean      @default(false)
   role          UserRole     @default(CANDIDATE)
   provider      AuthProvider @default(LOCAL) // auth method — SRS §4.12.6
   googleId      String?      @unique // Google "sub" claim; null for non-Google
@@ -419,6 +458,82 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+// A one-time code issued during recruiter signup, one row per channel
+// (SRS §4.9 / §4.12). The recruiter must consume both an EMAIL and a PHONE
+// challenge before registration is allowed to complete.
+//
+// ── DELIBERATELY NOT HASHED ──────────────────────────────────────────────
+// This is the one place in this schema that stores a live secret in plaintext.
+// Session.refreshTokenHash, PasswordResetToken.tokenHash and
+// RecruiterInvite.tokenHash are all sha256'd because the raw value reaches the
+// user out-of-band, in an email. Here it does not: no SMS or email provider is
+// wired for signup codes yet, so a Career Queue staff member reads the code off
+// /sadmin/otp-sessions and relays it. A hash would make the feature impossible.
+//
+// The consequences are accepted, recorded in docs/adr/0002, and mitigated:
+// a short TTL, an hourly purge on the job-lifecycle queue, an ADMIN-only
+// reveal path that writes a ProfileAuditAction.OTP_CODE_REVEALED row, and a
+// hard rule that `code` is never logged, never sent to Sentry, and never
+// copied into an audit diff. Revisit the moment a real provider lands — at
+// that point this becomes a hash and the sadmin page loses its code columns.
+//
+// ── NO FK TO USER ────────────────────────────────────────────────────────
+// The challenge is issued BEFORE the account exists, so there is nothing to
+// point at. `signupId` is the correlation key binding this attempt's EMAIL row
+// to its PHONE row: a high-entropy handle minted server-side on first request
+// and echoed back by the browser. It is unguessable on purpose — possessing it
+// is what lets the final register call claim a verified pair. `name` and
+// `destination` are snapshots of what was typed, not joins, the same way
+// SupportContactMessage snapshots its sender.
+model OtpChallenge {
+  id          Int        @id @default(autoincrement())
+  signupId    String
+  channel     OtpChannel
+  // The email address or phone number exactly as entered. Phone is NOT
+  // normalised — see the User.phoneVerified comment.
+  destination String
+  // String, not Int: a leading-zero code ("012345") must survive the round
+  // trip, and Int would silently eat it.
+  code        String
+  // The registrant's typed name — the sadmin table's "User name" column. It is
+  // captured at request time precisely because no User row exists yet.
+  name        String
+  // No default: the service computes now + TTL, matching PasswordResetToken.
+  expiresAt   DateTime
+  // Wrong guesses against the CURRENT code; reset to 0 on resend. This is the
+  // load-bearing brute-force control, not the throttler: the throttler is
+  // per-IP and in-memory, so it bounds one attacker's rate but not a proxy
+  // pool. This bounds total guesses per issued code regardless of source.
+  attempts    Int        @default(0)
+  // How many times a fresh code was generated for this row.
+  resendCount Int        @default(0)
+  // Single-use marker, and what drives the "verified" tick. Mirrors
+  // PasswordResetToken.usedAt. Status is DERIVED from these timestamps rather
+  // than stored as an enum — the RecruiterInvite convention.
+  consumedAt  DateTime?
+  // The sadmin "Last generated" column. A SEPARATE column from updatedAt on
+  // purpose: updatedAt also moves when `attempts` increments on a wrong guess,
+  // so it would read "generated 3s ago" when nothing was generated.
+  lastSentAt  DateTime   @default(now())
+  // Abuse triage on an unauthenticated endpoint. Mirrors Session.ipAddress.
+  ipAddress   String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Exactly one live challenge per channel per signup attempt. A resend
+  // UPDATES this row in place (new code, new expiresAt, resendCount++,
+  // attempts back to 0) instead of inserting a superseded sibling: fewer
+  // plaintext secrets at rest, and it means N resends cannot produce N
+  // simultaneously-valid codes, which would otherwise gut the attempt cap.
+  // Unlike RecruiterInvite's partial constraint this one is total, so it can
+  // be a real database guarantee rather than a service convention.
+  @@unique([signupId, channel])
+  // The sadmin list: ORDER BY lastSentAt DESC.
+  @@index([lastSentAt(sort: Desc)])
+  // The hourly purge sweep: WHERE expiresAt < ?. Mirrors Session.
+  @@index([expiresAt])
 }
 
 model Candidate {
