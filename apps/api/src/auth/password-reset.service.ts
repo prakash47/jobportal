@@ -93,14 +93,33 @@ export class PasswordResetService {
       select: { lastSentAt: true, resendCount: true, expiresAt: true },
     });
 
-    if (existing) {
-      const resendAvailableAt = new Date(existing.lastSentAt.getTime() + RESET_RESEND_COOLDOWN_MS);
-      // Still cooling down, or the resend budget is spent: skip the send but
-      // answer exactly as if we had sent one.
-      if (resendAvailableAt > now || existing.resendCount >= RESET_MAX_RESENDS) {
+    // The resend budget is scoped to the LIVE code, not to the account for all
+    // time. Once the code has expired the row is inert — it can no longer be
+    // guessed against — so a new request starts a fresh window. Without this
+    // reset, spending five resends would lock the account out of password
+    // recovery permanently, which is a far worse outcome than the abuse the cap
+    // exists to bound.
+    const stale = !existing || existing.expiresAt <= now;
+
+    if (existing && !stale) {
+      const cooldownEndsAt = new Date(existing.lastSentAt.getTime() + RESET_RESEND_COOLDOWN_MS);
+      if (cooldownEndsAt > now) {
+        // Still cooling down — skip the send, and hand back the real moment the
+        // button should re-enable.
         return {
           expiresAt: existing.expiresAt.toISOString(),
-          resendAvailableAt: resendAvailableAt.toISOString(),
+          resendAvailableAt: cooldownEndsAt.toISOString(),
+        };
+      }
+      if (existing.resendCount >= RESET_MAX_RESENDS) {
+        // Budget spent while the code is still live. Report the code's OWN
+        // expiry as the next opportunity: that is the moment `stale` above
+        // flips and a fresh window opens. Returning the elapsed cooldown here
+        // would be a trap — the form would re-enable Resend, the press would
+        // answer 200, and nothing would ever be sent.
+        return {
+          expiresAt: existing.expiresAt.toISOString(),
+          resendAvailableAt: existing.expiresAt.toISOString(),
         };
       }
     }
@@ -129,7 +148,9 @@ export class PasswordResetService {
         attempts: 0,
         verifiedAt: null,
         usedAt: null,
-        resendCount: { increment: 1 },
+        // A stale row is a fresh window, so its spent budget goes back to zero
+        // (see `stale` above); a live one is a genuine resend and counts.
+        resendCount: stale ? 0 : { increment: 1 },
       },
       select: { id: true, expiresAt: true, lastSentAt: true },
     });
@@ -227,8 +248,12 @@ export class PasswordResetService {
   // caller can mint a session (the reset ends signed in).
   async resetWithTicket(ticket: string, newPassword: string): Promise<User> {
     if (!isStrongPassword(newPassword)) {
+      // Must match PASSWORD_RE in packages/auth/src/password.ts, which requires
+      // 8+ characters, a DIGIT and a SPECIAL CHARACTER — a letter is not
+      // required. Stating anything else sends users round a loop trying to
+      // satisfy a rule that is not the one being enforced.
       throw new BadRequestException(
-        'Password must be at least 8 characters and include a letter and a number.',
+        'Password must be at least 8 characters and include a number and a special character.',
       );
     }
 

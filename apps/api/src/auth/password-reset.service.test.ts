@@ -118,6 +118,40 @@ describe('requestCode — enumeration safety', () => {
     expect(db.passwordResetToken.upsert).not.toHaveBeenCalled();
   });
 
+  // Regression: a spent budget used to answer with the ELAPSED cooldown, i.e. a
+  // timestamp already in the past. The form would re-enable Resend, the press
+  // would answer 200, and nothing would ever be sent — a silent dead end.
+  it('never reports a resend time in the past when the budget is spent', async () => {
+    db.user.findUnique.mockResolvedValue(USER);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    db.passwordResetToken.findUnique.mockResolvedValue({
+      lastSentAt: new Date(Date.now() - 60_000),
+      resendCount: RESET_MAX_RESENDS,
+      expiresAt,
+    });
+    const res = await svc.requestCode('a@b.com');
+    expect(new Date(res.resendAvailableAt).getTime()).toBeGreaterThan(Date.now());
+    // The next real opportunity is when the live code goes stale.
+    expect(res.resendAvailableAt).toBe(expiresAt.toISOString());
+  });
+
+  // Regression: resendCount never reset, so spending the budget once locked the
+  // account out of password recovery permanently.
+  it('a stale row starts a fresh window instead of locking the account out', async () => {
+    db.user.findUnique.mockResolvedValue(USER);
+    db.passwordResetToken.findUnique.mockResolvedValue({
+      lastSentAt: new Date(Date.now() - 60 * 60 * 1000),
+      resendCount: RESET_MAX_RESENDS, // budget was fully spent...
+      expiresAt: new Date(Date.now() - 30 * 60 * 1000), // ...but the code expired
+    });
+    await svc.requestCode('a@b.com');
+    expect(email.enqueuePasswordReset).toHaveBeenCalledOnce();
+    const written = db.passwordResetToken.upsert.mock.calls[0]![0] as {
+      update: { resendCount: unknown };
+    };
+    expect(written.update.resendCount).toBe(0);
+  });
+
   it('issues a 6-digit code and emails it for a live local account', async () => {
     db.user.findUnique.mockResolvedValue(USER);
     db.passwordResetToken.findUnique.mockResolvedValue(null);
@@ -213,6 +247,16 @@ describe('resetWithTicket', () => {
     mockedStrong.mockReturnValue(false);
     await expect(svc.resetWithTicket('t', 'weak')).rejects.toThrow(BadRequestException);
     expect(db.passwordResetToken.findUnique).not.toHaveBeenCalled();
+  });
+
+  // Regression: the message used to say "a letter and a number". PASSWORD_RE
+  // requires a digit AND a special character, and does not require a letter —
+  // so that copy sent users round a loop satisfying a rule nobody enforces.
+  it('states the rule that is actually enforced', async () => {
+    mockedStrong.mockReturnValue(false);
+    await expect(svc.resetWithTicket('t', 'weak')).rejects.toThrow(
+      /number and a special character/,
+    );
   });
 
   it('refuses a ticket that was never verified', async () => {
