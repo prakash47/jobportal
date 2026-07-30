@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { NavigationProgress, notifyNavStart } from '@jobportal/ui';
+import { NavigationProgress, isSameDocumentNav, notifyNavStart } from '@jobportal/ui';
 
 // Thin Next-aware wrapper around the shared NavigationProgress (packages/ui
 // has no `next` dependency, so the router hooks live here).
@@ -34,12 +34,17 @@ export function AppNavigationProgress() {
     r[PATCHED] = true;
     const origPush = r.push.bind(r);
     const origReplace = r.replace.bind(r);
+    // Same-URL guard: a push to the URL already on screen (search re-submitted
+    // unchanged, a notification linking to the open page) never changes the
+    // route key, so signalling it would strand the veil until the failsafe.
+    // isSameDocumentNav reads window.location AT CALL TIME — the patch
+    // installs once, so closing over hook values would go stale.
     r.push = (...args: Parameters<typeof origPush>) => {
-      notifyNavStart();
+      if (!isSameDocumentNav(String(args[0]))) notifyNavStart();
       return origPush(...args);
     };
     r.replace = (...args: Parameters<typeof origReplace>) => {
-      notifyNavStart();
+      if (!isSameDocumentNav(String(args[0]))) notifyNavStart();
       return origReplace(...args);
     };
     // No unpatch on cleanup: the root layout never unmounts, and the machine

@@ -24,13 +24,18 @@ export const FAILSAFE_MS = 15_000;
 
 export type NavProgressPhase = 'idle' | 'armed' | 'shown' | 'exiting';
 
+/** Why the veil is being unmounted — 'commit' is the normal exit; 'failsafe'
+ * means the navigation was lost and the machine force-hid so the announcement
+ * can say so instead of leaving "Loading page…" as the last thing heard. */
+export type NavHideReason = 'commit' | 'failsafe';
+
 export interface NavProgressCallbacks {
   /** The delay elapsed with the navigation still pending — mount the veil. */
   onShow(): void;
   /** Navigation committed (and the min-visible floor passed) — play the exit. */
   onExit(): void;
-  /** Exit finished (or failsafe fired) — unmount the veil. */
-  onHide(): void;
+  /** Exit finished ('commit') or the failsafe fired — unmount the veil. */
+  onHide(reason: NavHideReason): void;
 }
 
 // Injectable timers so the machine is unit-testable with fake time.
@@ -43,7 +48,10 @@ export interface NavProgressTimers {
 const realTimers: NavProgressTimers = {
   set: (fn, ms) => setTimeout(fn, ms),
   clear: (id) => clearTimeout(id),
-  now: () => Date.now(),
+  // Monotonic on purpose: the min-visible floor is an ELAPSED measurement, and
+  // Date.now() goes backwards on NTP corrections — a backwards step while the
+  // veil is up would hold it for the step's duration (review finding).
+  now: () => (typeof performance !== 'undefined' ? performance.now() : Date.now()),
 };
 
 export class NavProgressMachine {
@@ -111,7 +119,7 @@ export class NavProgressMachine {
       this.endTimer = this.timers.set(() => {
         this.endTimer = null;
         this.phase = 'idle';
-        this.cb.onHide();
+        this.cb.onHide('commit');
       }, EXIT_MS);
     }, wait);
   }
@@ -135,7 +143,7 @@ export class NavProgressMachine {
       this.clear('end');
       const wasShown = this.phase === 'shown' || this.phase === 'exiting';
       this.phase = 'idle';
-      if (wasShown) this.cb.onHide();
+      if (wasShown) this.cb.onHide('failsafe');
     }, FAILSAFE_MS);
   }
 
@@ -173,12 +181,67 @@ export interface NavClickInfo {
   currentSearch: string;
 }
 
+/** Query strings compared the way the route key sees them: URLSearchParams
+ * serialization, so `%20` vs `+` (or key-order-identical re-encodes) cannot
+ * make a "different" URL that never changes the committed route key. */
+function canonicalSearch(search: string): string {
+  return new URLSearchParams(search).toString();
+}
+
+/**
+ * Does `href` point at the SAME document position (path + canonicalized query,
+ * hash ignored) the window is already showing? Such a navigation never changes
+ * the committed route key, so starting the loader for it would strand the veil
+ * until the failsafe.
+ *
+ * `basePath`: Next's router.push('/x') in a basePath app targets basePath +
+ * '/x', while window.location already carries the prefix — so PATH-ABSOLUTE
+ * hrefs get the prefix applied before comparing. Relative and fully-qualified
+ * hrefs resolve against the current URL and need no help.
+ */
+export function isSameDocumentUrl(
+  href: string,
+  currentOrigin: string,
+  currentPath: string,
+  currentSearch: string,
+  basePath = '',
+): boolean {
+  let url: URL;
+  try {
+    url = new URL(href, `${currentOrigin}${currentPath}${currentSearch}`);
+  } catch {
+    return false;
+  }
+  if (url.origin !== currentOrigin) return false;
+  let path = url.pathname;
+  if (basePath && href.startsWith('/') && !href.startsWith('//') && !path.startsWith(basePath)) {
+    path = basePath + (path === '/' ? '' : path);
+  }
+  return path === currentPath && canonicalSearch(url.search) === canonicalSearch(currentSearch);
+}
+
+/**
+ * Client-side convenience for the app wrappers' router.push/replace patches:
+ * reads window.location AT CALL TIME (the patch installs once — closed-over
+ * hook values would go stale). SSR-safe: returns false without a window.
+ */
+export function isSameDocumentNav(href: string, basePath = ''): boolean {
+  if (typeof window === 'undefined') return false;
+  return isSameDocumentUrl(
+    href,
+    window.location.origin,
+    window.location.pathname,
+    window.location.search,
+    basePath,
+  );
+}
+
 /**
  * Should this anchor click start the loader? True only for a primary-button,
  * unmodified click on a same-origin http(s) link that actually changes the
- * page (not hash-only, not the identical URL — the App Router still handles
- * those, but the route key would never change and the veil would hang until
- * the failsafe).
+ * page (not hash-only, not the same URL under any query encoding — the App
+ * Router still handles those, but the route key would never change and the
+ * veil would hang until the failsafe).
  */
 export function isEligibleNavClick(info: NavClickInfo): boolean {
   if (info.button !== 0) return false;
@@ -195,9 +258,10 @@ export function isEligibleNavClick(info: NavClickInfo): boolean {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
   if (url.origin !== info.currentOrigin) return false;
-  // Same document position (ignoring hash) → the router will not stream a new
-  // page; starting the loader would strand it.
-  if (url.pathname === info.currentPath && url.search === (info.currentSearch || '')) return false;
+  // Anchor hrefs read from the DOM already carry any basePath, so no prefix arg.
+  if (isSameDocumentUrl(info.href, info.currentOrigin, info.currentPath, info.currentSearch)) {
+    return false;
+  }
   return true;
 }
 

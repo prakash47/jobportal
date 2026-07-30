@@ -39,11 +39,13 @@ const CYAN = 'var(--color-accent-500)';
 const C_ARC_D = 'M 179.7 34.9 A 61.5 61.5 0 1 0 118.1 135.4';
 const ARROW_D = 'M 149 123 L 187 123 L 187 107 L 227 140 L 187 171 L 187 153 L 117 153 Z';
 const QTAIL_D = 'M 315 85 L 360 151 L 339 165 L 295 99 Z';
-// Clip edge continuing the tail's slant (through (149,123)–(117,153)): the
-// arrow is only ever visible to the RIGHT of the seam, so at translateX(-104)
-// it is entirely "inside" the C and emerges through open geometry — no mask
-// tricks, no glyph contortion.
-const CLIP_D = 'M 166.1 96 L 79 196 L 420 196 L 420 96 Z';
+// Clip edge: the LINE THROUGH the tail's slant (149,123)–(117,153), extended
+// (dx/dy = −32/30; at y=96 → x=177.8, at y=196 → x=71.1). The arrow is only
+// ever visible to the RIGHT of that seam, so at translateX(-104) it is
+// entirely "inside" the C and emerges through open geometry — and at dock the
+// tail's own slant edge coincides with the clip edge exactly. No mask tricks,
+// no glyph contortion.
+const CLIP_D = 'M 177.8 96 L 71.1 196 L 420 196 L 420 96 Z';
 
 export interface BrandLoaderMarkProps {
   /** Extra classes on the <svg> (size it from the outside; defaults to w-full). */
@@ -63,7 +65,11 @@ export function BrandLoaderMark({ className, still = false }: BrandLoaderMarkPro
     <svg
       viewBox="0 0 400 178"
       aria-hidden="true"
-      className={cn('block w-full', className)}
+      // overflow-visible: the ring model (r 61.5 + half the 33 stroke) crowns
+      // 2 units above y=0. Clipped, that paints a flat cut WIDER than the
+      // brand's own tangency; visible, it is a 2-unit round crown nobody can
+      // see at loader scale. The veil has the headroom.
+      className={cn('block w-full overflow-visible', className)}
     >
       <defs>
         <clipPath id={clipId}>

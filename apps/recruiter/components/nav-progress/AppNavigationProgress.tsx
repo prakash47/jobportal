@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { NavigationProgress, notifyNavStart } from '@jobportal/ui';
+import { NavigationProgress, isSameDocumentNav, notifyNavStart } from '@jobportal/ui';
 
 // Thin Next-aware wrapper around the shared NavigationProgress — the recruiter
 // portal variant. Mirrors apps/web's wrapper (apps cannot import each other's
@@ -35,12 +35,16 @@ export function AppNavigationProgress() {
     r[PATCHED] = true;
     const origPush = r.push.bind(r);
     const origReplace = r.replace.bind(r);
+    // Same-URL guard: a push to the URL already on screen (a notification
+    // linking to the open page, a filter re-submitted unchanged) never changes
+    // the route key, so signalling it would strand the veil until the
+    // failsafe. isSameDocumentNav reads window.location AT CALL TIME.
     r.push = (...args: Parameters<typeof origPush>) => {
-      notifyNavStart();
+      if (!isSameDocumentNav(String(args[0]))) notifyNavStart();
       return origPush(...args);
     };
     r.replace = (...args: Parameters<typeof origReplace>) => {
-      notifyNavStart();
+      if (!isSameDocumentNav(String(args[0]))) notifyNavStart();
       return origReplace(...args);
     };
   }, [router]);

@@ -271,7 +271,9 @@
   animation: cq-mark-in var(--duration-base) var(--ease-out) both;
 }
 /* Freeze-and-fade exit (the shipped default): whatever pose the loop is in,
- * the whole veil lifts in 170ms while the mark eases 2% forward. */
+ * the whole veil lifts in 170ms while the mark eases 2% forward. The veil is
+ * pointer-events-none throughout its life, so the window between the fade
+ * finishing and React unmounting (EXIT_MS) blocks nothing. */
 .cq-loader-veil[data-state='exiting'] {
   animation: cq-veil-out 170ms var(--ease-out) forwards;
 }
@@ -279,11 +281,23 @@
   animation: cq-mark-out 170ms var(--ease-out) forwards;
 }
 
+/* Re-shown while the exit fade was running (the user navigated again):
+ * skip the entrance so the veil snaps back to opaque instead of blinking
+ * through transparent, and the loop just keeps running. */
+.cq-loader-veil[data-revived='true'] {
+  animation: none;
+  opacity: 1;
+}
+.cq-loader-veil[data-revived='true'] .cq-loader-markwrap {
+  animation: none;
+}
+
 /* Long-wait caption: silent until 3s — the moment doubt starts — then one
- * quiet line. Nothing else ever escalates. */
+ * quiet line. Nothing else ever escalates. (The sr-only live region mirrors
+ * this escalation in NavigationProgress.) */
 .cq-loader-cap-motion {
   opacity: 0;
-  animation: cq-cap-in 250ms ease-out 3s forwards;
+  animation: cq-cap-in 250ms cubic-bezier(0.16, 1, 0.3, 1) 3s forwards;
 }
 @media (prefers-reduced-motion: reduce) {
   /* Text carries the signal when nothing moves: immediate "Loading" instead

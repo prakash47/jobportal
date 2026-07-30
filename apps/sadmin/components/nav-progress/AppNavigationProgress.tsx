@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { NavigationProgress, notifyNavStart } from '@jobportal/ui';
+import { NavigationProgress, isSameDocumentNav, notifyNavStart } from '@jobportal/ui';
 
 // Thin Next-aware wrapper around the shared NavigationProgress — the sadmin
 // variant. Mirrors the recruiter wrapper (apps cannot import each other's
@@ -32,12 +32,17 @@ export function AppNavigationProgress() {
     r[PATCHED] = true;
     const origPush = r.push.bind(r);
     const origReplace = r.replace.bind(r);
+    // Same-URL guard: a push to the URL already on screen never changes the
+    // route key, so signalling it would strand the veil until the failsafe.
+    // basePath matters here: router.push('/x') targets /sadmin/x while
+    // window.location already carries the prefix — the helper reconciles the
+    // two before comparing. Reads window.location AT CALL TIME.
     r.push = (...args: Parameters<typeof origPush>) => {
-      notifyNavStart();
+      if (!isSameDocumentNav(String(args[0]), '/sadmin')) notifyNavStart();
       return origPush(...args);
     };
     r.replace = (...args: Parameters<typeof origReplace>) => {
-      notifyNavStart();
+      if (!isSameDocumentNav(String(args[0]), '/sadmin')) notifyNavStart();
       return origReplace(...args);
     };
   }, [router]);

@@ -6,6 +6,7 @@ import {
   NavProgressMachine,
   SHOW_DELAY_MS,
   isEligibleNavClick,
+  isSameDocumentUrl,
   notifyNavStart,
   onNavStart,
   type NavClickInfo,
@@ -55,7 +56,7 @@ function harness() {
     {
       onShow: () => log.push('show'),
       onExit: () => log.push('exit'),
-      onHide: () => log.push('hide'),
+      onHide: (reason) => log.push(reason === 'commit' ? 'hide' : 'hide:failsafe'),
     },
     clock.timers,
   );
@@ -146,27 +147,20 @@ describe('NavProgressMachine', () => {
     expect(h.log).toEqual(['show', 'exit', 'show']);
   });
 
-  it('failsafe force-hides a stranded veil', () => {
+  it('failsafe force-hides a stranded veil, reporting the failsafe reason', () => {
     const h = harness();
     h.machine.navStart();
     h.advance(FAILSAFE_MS);
-    expect(h.log).toEqual(['show', 'hide']);
+    expect(h.log).toEqual(['show', 'hide:failsafe']);
     expect(h.machine.getPhase()).toBe('idle');
   });
 
   it('failsafe on a never-shown (armed) navigation stays silent', () => {
     const h = harness();
-    const local = fakeClock();
-    const log: string[] = [];
-    const m = new NavProgressMachine(
-      { onShow: () => log.push('show'), onExit: () => log.push('exit'), onHide: () => log.push('hide') },
-      local.timers,
-    );
-    m.navStart();
-    m.navEnd(); // committed fast…
-    local.advance(FAILSAFE_MS + 1000);
-    expect(log).toEqual([]); // …so the failsafe was disarmed with it
-    void h;
+    h.machine.navStart();
+    h.machine.navEnd(); // committed fast…
+    h.advance(FAILSAFE_MS + 1000);
+    expect(h.log).toEqual([]); // …so the failsafe was disarmed with it
   });
 
   it('re-navigation refreshes the failsafe', () => {
@@ -177,7 +171,7 @@ describe('NavProgressMachine', () => {
     h.advance(1000);
     expect(h.log).toEqual(['show']); // old failsafe must NOT fire at the original deadline
     h.advance(FAILSAFE_MS - 1000);
-    expect(h.log).toEqual(['show', 'hide']); // refreshed one fires
+    expect(h.log).toEqual(['show', 'hide:failsafe']); // refreshed one fires
   });
 
   it('destroy clears every timer', () => {
@@ -249,6 +243,12 @@ describe('isEligibleNavClick', () => {
     ).toBe(false);
   });
 
+  it('rejects an encoding-only variant of the current URL', () => {
+    expect(
+      isEligibleNavClick({ ...base, currentPath: '/jobs', currentSearch: '?q=a+b', href: '/jobs?q=a%20b' }),
+    ).toBe(false);
+  });
+
   it('accepts a same-path link whose query differs (SRP filter change)', () => {
     expect(
       isEligibleNavClick({ ...base, currentPath: '/jobs', currentSearch: '?city=pune', href: '/jobs?city=mumbai' }),
@@ -257,6 +257,42 @@ describe('isEligibleNavClick', () => {
 
   it('rejects a missing href', () => {
     expect(isEligibleNavClick({ ...base, href: null })).toBe(false);
+  });
+});
+
+describe('isSameDocumentUrl', () => {
+  const origin = 'http://localhost:3000';
+
+  it('true for the identical URL and for hash-only variants of it', () => {
+    expect(isSameDocumentUrl('/jobs', origin, '/jobs', '')).toBe(true);
+    expect(isSameDocumentUrl('/jobs#apply', origin, '/jobs', '')).toBe(true);
+    expect(isSameDocumentUrl('#openings', origin, '/company/acme-12', '')).toBe(true);
+  });
+
+  it('true across query ENCODINGS that serialize identically (%20 vs +)', () => {
+    // The route key is URLSearchParams-normalized, so an encoding-only
+    // "navigation" never changes it — treating it as different would strand
+    // the veil (review finding).
+    expect(isSameDocumentUrl('/jobs?q=a%20b', origin, '/jobs', '?q=a+b')).toBe(true);
+    expect(isSameDocumentUrl('/jobs?q=a+b', origin, '/jobs', '?q=a%20b')).toBe(true);
+  });
+
+  it('false when path or query genuinely differ', () => {
+    expect(isSameDocumentUrl('/companies', origin, '/jobs', '')).toBe(false);
+    expect(isSameDocumentUrl('/jobs?city=pune', origin, '/jobs', '?city=mumbai')).toBe(false);
+    expect(isSameDocumentUrl('/jobs?city=pune', origin, '/jobs', '')).toBe(false);
+  });
+
+  it('false for cross-origin (never "same document")', () => {
+    expect(isSameDocumentUrl('https://example.com/jobs', origin, '/jobs', '')).toBe(false);
+  });
+
+  it('reconciles basePath for path-absolute hrefs (the sadmin router.push case)', () => {
+    // router.push('/dashboard') under basePath /sadmin targets /sadmin/dashboard
+    expect(isSameDocumentUrl('/dashboard', 'http://localhost:3003', '/sadmin/dashboard', '', '/sadmin')).toBe(true);
+    expect(isSameDocumentUrl('/jobs', 'http://localhost:3003', '/sadmin/dashboard', '', '/sadmin')).toBe(false);
+    // already-prefixed hrefs (anchor hrefs read from the DOM) are not double-prefixed
+    expect(isSameDocumentUrl('/sadmin/dashboard', 'http://localhost:3003', '/sadmin/dashboard', '', '/sadmin')).toBe(true);
   });
 });
 
