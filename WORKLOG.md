@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Jayesh | `feature/brand-nav-loader` | **Global navigation loading feedback (tester report: dead-click page switches).** New `packages/ui` `BrandLoader` (animated CQ-mark loader, design pending owner approval via Artifact) + `NavigationProgress` client provider wired into `apps/web`, `apps/recruiter`, `apps/sadmin` root layouts. No schema, no migration, no flag. | `packages/ui` atoms/molecules barrel — **append-only** (no lock needed) |
 
 ---
 
