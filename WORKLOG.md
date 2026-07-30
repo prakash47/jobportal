@@ -34,7 +34,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
 | **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-07-30 after `bugfix/forgot-password-otp` merged. |
-| **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | New colors/spacing/tokens only. |
+| **UI theme tokens** | `packages/ui/src/styles/theme.css` | Claude/Jayesh | `feature/brand-nav-loader` | 2026-07-30 | Adding the BrandLoader keyframes + reduced-motion override. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
