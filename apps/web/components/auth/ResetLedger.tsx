@@ -282,9 +282,17 @@ export function ResetLedger() {
                 Use the address on your Career Queue account.
               </p>
               {error && <div className="mt-3">{<FormError>{error}</FormError>}</div>}
-              <Button type="submit" size="lg" loading={busy} className="mt-5 w-full">
+              {/* The icon goes through `trailingIcon`, NOT as a child: Button
+                  wraps children in a <span>, and preflight makes svg
+                  display:block, so an icon child breaks onto its own line. */}
+              <Button
+                type="submit"
+                size="lg"
+                loading={busy}
+                className="mt-5 w-full"
+                trailingIcon={<ArrowRight aria-hidden="true" className="size-4 text-[var(--color-accent-500)]" />}
+              >
                 Send code
-                {!busy && <ArrowRight aria-hidden="true" className="size-4 text-[var(--color-accent-500)]" />}
               </Button>
             </form>
           </LedgerStep>
@@ -358,9 +366,9 @@ export function ResetLedger() {
               disabled={code.length !== 6 || codeDead}
               onClick={() => verify(code)}
               className="mt-4 w-full"
+              trailingIcon={<ArrowRight aria-hidden="true" className="size-4 text-[var(--color-accent-500)]" />}
             >
               Verify code
-              {!busy && <ArrowRight aria-hidden="true" className="size-4 text-[var(--color-accent-500)]" />}
             </Button>
 
             <button
@@ -452,9 +460,14 @@ export function ResetLedger() {
 
               {error && <div className="mt-3">{<FormError>{error}</FormError>}</div>}
 
-              <Button type="submit" size="lg" loading={busy} className="mt-5 w-full">
+              <Button
+                type="submit"
+                size="lg"
+                loading={busy}
+                className="mt-5 w-full"
+                trailingIcon={<ArrowRight aria-hidden="true" className="size-4 text-[var(--color-accent-500)]" />}
+              >
                 Set password and sign in
-                {!busy && <ArrowRight aria-hidden="true" className="size-4 text-[var(--color-accent-500)]" />}
               </Button>
             </form>
           </LedgerStep>
