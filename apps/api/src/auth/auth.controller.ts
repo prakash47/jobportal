@@ -29,7 +29,14 @@ import { isFlagEnabled } from '@jobportal/feature-flags';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
 import { PasswordResetService } from './password-reset.service';
-import { ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto, UpdateNameDto } from './dto';
+import {
+  ForgotPasswordDto,
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+  UpdateNameDto,
+  VerifyResetOtpDto,
+} from './dto';
 import { EmailService } from '../email/email.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
@@ -192,23 +199,62 @@ export class AuthController {
     clearAuthCookies(res, cookieEnvFromProcess());
   }
 
+  // Step 1 — issue a 6-digit reset code (SRS §4.12.5).
+  //
+  // Answers 200 with the code's expiry and the next resend time so the form can
+  // run its countdown off a server clock. Those timings are returned for EVERY
+  // caller, including unknown addresses and OAuth-only accounts — the service
+  // synthesises them rather than revealing that nothing was sent, which is what
+  // keeps this from being an account-existence oracle.
   @Post('forgot-password')
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async forgotPassword(@Body() body: unknown) {
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() body: unknown, @Req() req: Request) {
     await assertEmailsEnabled();
     const parsed = ForgotPasswordDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
-    await this.passwordReset.issueAndSend(parsed.data.email);
+    return this.passwordReset.requestCode(parsed.data.email, req.ip);
   }
 
+  // Step 2 — verify the code, returning the one-time ticket step 3 spends.
+  //
+  // Deliberately NOT behind assertEmailsEnabled: nothing is sent here, and
+  // flipping the email killswitch mid-flow must not strand somebody who is
+  // already holding a valid code.
+  @Post('verify-reset-otp')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  async verifyResetOtp(@Body() body: unknown) {
+    const parsed = VerifyResetOtpDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return this.passwordReset.verifyCode(parsed.data.email, parsed.data.code);
+  }
+
+  // Step 3 — spend the ticket, set the password, and sign the user in.
+  //
+  // The reset ends authenticated: the caller has just proven control of the
+  // mailbox AND chosen the new password, so making them retype it at a login
+  // form adds friction without adding proof. Every OTHER session was revoked
+  // inside the same transaction that set the password, so the cookies minted
+  // here are the only ones left alive.
   @Post('reset-password')
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async resetPassword(@Body() body: unknown) {
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const parsed = ResetPasswordDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
-    await this.passwordReset.reset(parsed.data.token, parsed.data.password);
+    const user = await this.passwordReset.resetWithTicket(parsed.data.ticket, parsed.data.password);
+    const session = await this.auth.issueSession(
+      user,
+      req.headers['user-agent'] ? String(req.headers['user-agent']) : undefined,
+      req.ip,
+    );
+    setAuthCookies(res, session.accessToken, session.refreshToken, cookieEnvFromProcess());
+    return { user: publicUser(user) };
   }
 
   @Get('verify-email')

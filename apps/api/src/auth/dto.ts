@@ -24,8 +24,20 @@ export const ForgotPasswordDto = z.object({
 });
 export type ForgotPasswordInput = z.infer<typeof ForgotPasswordDto>;
 
+// Step 2 of the reset — the emailed 6-digit code. Constrained to exactly six
+// digits so a malformed guess never reaches the attempt budget: spending a slot
+// on input that could not possibly be a code would let an attacker exhaust a
+// victim's attempts with junk.
+export const VerifyResetOtpDto = z.object({
+  email: z.string().email().toLowerCase(),
+  code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code.'),
+});
+export type VerifyResetOtpInput = z.infer<typeof VerifyResetOtpDto>;
+
+// Step 3 — spend the one-time ticket minted by step 2. The `ticket` replaced the
+// emailed link's `token`: the code is verified once and never travels again.
 export const ResetPasswordDto = z.object({
-  token: z.string().min(1),
+  ticket: z.string().min(1),
   password: passwordSchema,
 });
 export type ResetPasswordInput = z.infer<typeof ResetPasswordDto>;

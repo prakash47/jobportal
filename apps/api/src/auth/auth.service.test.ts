@@ -159,6 +159,45 @@ describe('AuthService.login (deactivated-recruiter block)', () => {
     expect(mocked.session.create).toHaveBeenCalled();
   });
 
+  // The gate lives in issueSession, not login(), because login() is no longer
+  // the only way to obtain cookies: Google OAuth and the password-reset flow
+  // both call issueSession directly and would otherwise hand a removed
+  // recruiter a working session — which matters because the recruiter
+  // jobs/applicants controllers authorise on the JWT role claim and never
+  // re-check deactivatedAt.
+  it('blocks a deactivated recruiter at issueSession, whatever the entry point', async () => {
+    mocked.recruiter.findUnique.mockResolvedValue({ deactivatedAt: new Date('2026-07-01') });
+    await expect(
+      service.issueSession(
+        {
+          id: 9,
+          email: 'ex@acme.com',
+          role: 'RECRUITER',
+          emailVerified: true,
+        } as never,
+        undefined,
+        undefined,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(mocked.session.create).not.toHaveBeenCalled();
+  });
+
+  it('does not query the recruiter table for a candidate', async () => {
+    mockedIssue.mockReturnValue({
+      accessToken: 'a',
+      refreshToken: 'r',
+      refreshJti: 'j',
+      refreshExpiresAt: new Date(),
+    });
+    await service.issueSession(
+      { id: 11, email: 'c@x.com', role: 'CANDIDATE', emailVerified: true } as never,
+      undefined,
+      undefined,
+    );
+    expect(mocked.recruiter.findUnique).not.toHaveBeenCalled();
+    expect(mocked.session.create).toHaveBeenCalledOnce();
+  });
+
   it('blocks a deactivated recruiter with 403 and mints no session', async () => {
     mocked.user.findUnique.mockResolvedValue({
       id: 9,
