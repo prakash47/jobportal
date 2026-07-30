@@ -1,8 +1,10 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
+import { Suspense } from 'react';
 import { CanonicalLink } from '../lib/seo';
 import { AnalyticsProvider } from '../components/AnalyticsProvider';
+import { AppNavigationProgress } from '../components/nav-progress/AppNavigationProgress';
 import { readUserFromCookie } from '../lib/auth/server-session';
 
 export const metadata: Metadata = {
@@ -37,6 +39,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               : null
           }
         />
+        {/* Global navigation loader — shows after 250ms of pending client-side
+            navigation (tester report: page switches read as dead clicks).
+            Suspense: the wrapper reads useSearchParams, which would otherwise
+            bail static routes out to CSR. */}
+        <Suspense fallback={null}>
+          <AppNavigationProgress />
+        </Suspense>
         {children}
       </body>
     </html>
