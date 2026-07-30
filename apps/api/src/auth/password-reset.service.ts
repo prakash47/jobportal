@@ -29,6 +29,15 @@ function ticketHash(raw: string): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
+// Key for pg_advisory_xact_lock's (int, int) overload — the same device
+// RecruiterOtpService uses. Two 32-bit halves of a SHA-256 digest, so an
+// accidental collision between distinct keys is negligible and harmless when it
+// happens (two unrelated requests merely take turns).
+function advisoryLockKey(value: string): [number, number] {
+  const digest = createHash('sha256').update(`pwreset|${value}`).digest();
+  return [digest.readInt32BE(0), digest.readInt32BE(4)];
+}
+
 // CSPRNG-backed. Math.random is seeded predictably and would make one code
 // guessable from a handful of earlier ones.
 function generateCode(): string {
@@ -48,6 +57,21 @@ function hashesMatch(a: string, b: string): boolean {
 export interface RequestResetResult {
   expiresAt: string;
   resendAvailableAt: string;
+  // DURATIONS, not just the absolute instants above. A client counting down by
+  // comparing a server timestamp against its own clock is at the mercy of that
+  // clock: a device running an hour fast would declare a freshly-issued code
+  // expired and lock the user out of a flow the server considers perfectly
+  // live. Counting down from a duration measures only ELAPSED local time, which
+  // is unaffected by skew. The absolute forms are kept for logging/debugging.
+  expiresInSeconds: number;
+  resendInSeconds: number;
+}
+
+// Seconds from `now` until `at`, never negative. The two duration fields are
+// derived from the same instants the ISO fields carry, so they can never
+// disagree with them.
+function secondsBetween(now: Date, at: Date): number {
+  return Math.max(0, Math.round((at.getTime() - now.getTime()) / 1000));
 }
 
 export interface VerifyResetResult {
@@ -73,14 +97,18 @@ export class PasswordResetService {
     const now = new Date();
     // The response every caller gets, computed before any lookup so the shape
     // cannot depend on what we find.
+    const fallbackExpiry = new Date(now.getTime() + RESET_TTL_MINUTES * 60 * 1000);
+    const fallbackResend = new Date(now.getTime() + RESET_RESEND_COOLDOWN_MS);
     const fallback: RequestResetResult = {
-      expiresAt: new Date(now.getTime() + RESET_TTL_MINUTES * 60 * 1000).toISOString(),
-      resendAvailableAt: new Date(now.getTime() + RESET_RESEND_COOLDOWN_MS).toISOString(),
+      expiresAt: fallbackExpiry.toISOString(),
+      resendAvailableAt: fallbackResend.toISOString(),
+      expiresInSeconds: secondsBetween(now, fallbackExpiry),
+      resendInSeconds: secondsBetween(now, fallbackResend),
     };
 
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, name: true, passwordHash: true },
+      select: { id: true, passwordHash: true },
     });
     // Unknown address — say nothing, do nothing.
     if (!user) return fallback;
@@ -88,73 +116,103 @@ export class PasswordResetService {
     // silently mint a second login path for it (ADR 0001).
     if (!user.passwordHash) return fallback;
 
-    const existing = await prisma.passwordResetToken.findUnique({
-      where: { userId: user.id },
-      select: { lastSentAt: true, resendCount: true, expiresAt: true },
-    });
-
-    // The resend budget is scoped to the LIVE code, not to the account for all
-    // time. Once the code has expired the row is inert — it can no longer be
-    // guessed against — so a new request starts a fresh window. Without this
-    // reset, spending five resends would lock the account out of password
-    // recovery permanently, which is a far worse outcome than the abuse the cap
-    // exists to bound.
-    const stale = !existing || existing.expiresAt <= now;
-
-    if (existing && !stale) {
-      const cooldownEndsAt = new Date(existing.lastSentAt.getTime() + RESET_RESEND_COOLDOWN_MS);
-      if (cooldownEndsAt > now) {
-        // Still cooling down — skip the send, and hand back the real moment the
-        // button should re-enable.
-        return {
-          expiresAt: existing.expiresAt.toISOString(),
-          resendAvailableAt: cooldownEndsAt.toISOString(),
-        };
-      }
-      if (existing.resendCount >= RESET_MAX_RESENDS) {
-        // Budget spent while the code is still live. Report the code's OWN
-        // expiry as the next opportunity: that is the moment `stale` above
-        // flips and a fresh window opens. Returning the elapsed cooldown here
-        // would be a trap — the form would re-enable Resend, the press would
-        // answer 200, and nothing would ever be sent.
-        return {
-          expiresAt: existing.expiresAt.toISOString(),
-          resendAvailableAt: existing.expiresAt.toISOString(),
-        };
-      }
-    }
-
     const code = generateCode();
     const expiresAt = new Date(now.getTime() + RESET_TTL_MINUTES * 60 * 1000);
 
-    // Upsert, not insert: @@unique([userId]) means a resend REPLACES the code in
-    // place, so N resends cannot leave N simultaneously-valid codes standing —
-    // which would otherwise gut the attempt cap. attempts/verifiedAt/usedAt and
-    // any previously minted ticket all reset, because this is a brand-new
-    // secret and anything earned against the old one is void.
-    const row = await prisma.passwordResetToken.upsert({
-      where: { userId: user.id },
-      create: {
-        userId: user.id,
-        codeHash: codeHash(user.id, code),
-        expiresAt,
-        lastSentAt: now,
-      },
-      update: {
-        codeHash: codeHash(user.id, code),
-        tokenHash: null,
-        expiresAt,
-        lastSentAt: now,
-        attempts: 0,
-        verifiedAt: null,
-        usedAt: null,
-        // A stale row is a fresh window, so its spent budget goes back to zero
-        // (see `stale` above); a live one is a genuine resend and counts.
-        resendCount: stale ? 0 : { increment: 1 },
-      },
-      select: { id: true, expiresAt: true, lastSentAt: true },
+    // Read-then-write, so it has to be serialised. Without the lock, N
+    // concurrent requests for one address all read the same pre-write snapshot,
+    // all clear the cooldown and the resend cap, and all send — which is the
+    // one scenario those caps exist for. The advisory lock is transaction
+    // scoped, so it is released by COMMIT and by ROLLBACK alike.
+    //
+    // $executeRaw, NOT $queryRaw: pg_advisory_xact_lock() returns `void`, which
+    // Prisma cannot deserialize — $queryRaw fails at RUNTIME. (Same trap
+    // RecruiterOtpService documents.)
+    const outcome = await prisma.$transaction(async (tx) => {
+      const [keyA, keyB] = advisoryLockKey(String(user.id));
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${keyA}::int, ${keyB}::int)`;
+
+      const existing = await tx.passwordResetToken.findUnique({
+        where: { userId: user.id },
+        select: { lastSentAt: true, resendCount: true, expiresAt: true, usedAt: true },
+      });
+
+      // The resend budget is scoped to the LIVE code, not to the account for
+      // all time. A row that has expired OR has already been spent is inert —
+      // it can no longer be guessed against — so a new request starts a fresh
+      // window. Without this, spending five resends would lock the account out
+      // of password recovery permanently, and a COMPLETED reset would keep
+      // gating the next one behind its dead cooldown.
+      const stale = !existing || existing.usedAt !== null || existing.expiresAt <= now;
+
+      if (existing && !stale) {
+        const cooldownEndsAt = new Date(existing.lastSentAt.getTime() + RESET_RESEND_COOLDOWN_MS);
+        if (cooldownEndsAt > now) {
+          // Still cooling down — skip the send, and hand back the real moment
+          // the button should re-enable.
+          return {
+            sent: false as const,
+            expiresAt: existing.expiresAt,
+            resendAvailableAt: cooldownEndsAt,
+          };
+        }
+        if (existing.resendCount >= RESET_MAX_RESENDS) {
+          // Budget spent while the code is still live. Report the code's OWN
+          // expiry as the next opportunity: that is the moment `stale` flips.
+          // Returning the elapsed cooldown here would be a trap — the form
+          // would re-enable Resend, the press would answer 200, and nothing
+          // would ever be sent.
+          return {
+            sent: false as const,
+            expiresAt: existing.expiresAt,
+            resendAvailableAt: existing.expiresAt,
+          };
+        }
+      }
+
+      // Upsert, not insert: @@unique([userId]) means a resend REPLACES the code
+      // in place, so N resends cannot leave N simultaneously-valid codes
+      // standing — which would otherwise gut the attempt cap. attempts /
+      // verifiedAt / usedAt and any previously minted ticket all reset, because
+      // this is a brand-new secret and anything earned against the old one is
+      // void.
+      const row = await tx.passwordResetToken.upsert({
+        where: { userId: user.id },
+        create: {
+          userId: user.id,
+          codeHash: codeHash(user.id, code),
+          expiresAt,
+          lastSentAt: now,
+        },
+        update: {
+          codeHash: codeHash(user.id, code),
+          tokenHash: null,
+          expiresAt,
+          lastSentAt: now,
+          attempts: 0,
+          verifiedAt: null,
+          usedAt: null,
+          // A stale row is a fresh window, so its spent budget goes back to
+          // zero; a live one is a genuine resend and counts.
+          resendCount: stale ? 0 : { increment: 1 },
+        },
+        select: { id: true, expiresAt: true, lastSentAt: true },
+      });
+
+      return { sent: true as const, row };
     });
 
+    if (!outcome.sent) {
+      return {
+        expiresAt: outcome.expiresAt.toISOString(),
+        resendAvailableAt: outcome.resendAvailableAt.toISOString(),
+        expiresInSeconds: secondsBetween(now, outcome.expiresAt),
+        resendInSeconds: secondsBetween(now, outcome.resendAvailableAt),
+      };
+    }
+
+    // Enqueued AFTER the transaction commits — an email send has no business
+    // holding a database lock.
     await this.email.enqueuePasswordReset(email, user.id, {
       code,
       expiresInMinutes: RESET_TTL_MINUTES,
@@ -162,13 +220,14 @@ export class PasswordResetService {
     this.devOnlyLogCode(email, code);
 
     // Ids only — never the code, never the address.
-    this.logger.log(`password reset code issued row=${row.id} ip=${ipAddress ?? 'n/a'}`);
+    this.logger.log(`password reset code issued row=${outcome.row.id} ip=${ipAddress ?? 'n/a'}`);
 
+    const nextResendAt = new Date(outcome.row.lastSentAt.getTime() + RESET_RESEND_COOLDOWN_MS);
     return {
-      expiresAt: row.expiresAt.toISOString(),
-      resendAvailableAt: new Date(
-        row.lastSentAt.getTime() + RESET_RESEND_COOLDOWN_MS,
-      ).toISOString(),
+      expiresAt: outcome.row.expiresAt.toISOString(),
+      resendAvailableAt: nextResendAt.toISOString(),
+      expiresInSeconds: secondsBetween(now, outcome.row.expiresAt),
+      resendInSeconds: secondsBetween(now, nextResendAt),
     };
   }
 
@@ -197,9 +256,15 @@ export class PasswordResetService {
       // conditional UPDATE below, and a snapshot here would only invite gating
       // on a stale value again.
       where: { userId: user.id },
-      select: { id: true, codeHash: true, expiresAt: true, usedAt: true },
+      select: { id: true, codeHash: true, expiresAt: true, usedAt: true, verifiedAt: true },
     });
     if (!row || row.usedAt) throw new BadRequestException(generic);
+    // A code is single-use. Without this, the same six digits could be verified
+    // over and over — each pass minting a NEW ticket and silently voiding the
+    // one the legitimate user is holding — and would stay redeemable past its
+    // advertised 15-minute life, because verification re-bases expiresAt onto
+    // the longer ticket window.
+    if (row.verifiedAt) throw new BadRequestException(generic);
     if (row.expiresAt <= new Date()) throw new BadRequestException(generic);
 
     // Claim one of the guess slots BEFORE comparing, in a single conditional
@@ -236,9 +301,18 @@ export class PasswordResetService {
     const ticketExpiresAt = new Date(Date.now() + RESET_TICKET_TTL_MINUTES * 60 * 1000);
     await prisma.passwordResetToken.update({
       where: { id: row.id },
-      // The code is overwritten with the ticket's own phase: verifiedAt gates
-      // step 3, and expiresAt is re-based onto the shorter ticket window.
-      data: { tokenHash: ticketHash(raw), verifiedAt: new Date(), expiresAt: ticketExpiresAt },
+      data: {
+        tokenHash: ticketHash(raw),
+        verifiedAt: new Date(),
+        // Re-based onto the ticket window: the row's remaining life is now the
+        // time to type a password, not the code's.
+        expiresAt: ticketExpiresAt,
+        // Burn the code. `codeHash(userId, code)` is a SHA-256 hex digest, so
+        // this sentinel can never be produced by any code the user could type —
+        // belt-and-braces behind the verifiedAt gate above, and it means the
+        // spent secret is not sitting at rest either.
+        codeHash: `spent:${randomBytes(16).toString('hex')}`,
+      },
     });
 
     return { ticket: raw, ticketExpiresAt: ticketExpiresAt.toISOString() };
@@ -267,26 +341,35 @@ export class PasswordResetService {
 
     const passwordHash = await hashPassword(newPassword);
 
-    // Atomic: spend the ticket, set the password, and revoke every active
-    // session so a leaked refresh token can no longer be rotated. The spend is
-    // guarded on usedAt being null so two concurrent submits cannot both win.
-    const [spent] = await prisma.$transaction([
-      prisma.passwordResetToken.updateMany({
+    // INTERACTIVE transaction, not the array form. Prisma's array/batch
+    // $transaction runs every statement and COMMITS unless one of them rejects
+    // — and `updateMany` matching zero rows resolves with { count: 0 } rather
+    // than rejecting. Checking that count afterwards would therefore only shape
+    // the HTTP response: the password write and the session revocation would
+    // already have committed. The loser of a double-submit would change the
+    // password and sign the winner out while being told the reset had failed.
+    // Throwing INSIDE the callback is what actually rolls those writes back.
+    const user = await prisma.$transaction(async (tx) => {
+      const spent = await tx.passwordResetToken.updateMany({
         where: { id: row.id, usedAt: null },
         data: { usedAt: new Date() },
-      }),
-      prisma.user.update({ where: { id: row.userId }, data: { passwordHash } }),
-      prisma.session.updateMany({
+      });
+      if (spent.count === 0) {
+        throw new BadRequestException('This reset session has expired. Start again.');
+      }
+      const updated = await tx.user.update({
+        where: { id: row.userId },
+        data: { passwordHash },
+      });
+      // Revoke every active session so a leaked refresh token can no longer be
+      // rotated. The caller mints a fresh one immediately afterwards.
+      await tx.session.updateMany({
         where: { userId: row.userId, revokedAt: null },
         data: { revokedAt: new Date() },
-      }),
-    ]);
-    if (spent.count === 0) {
-      throw new BadRequestException('This reset session has expired. Start again.');
-    }
+      });
+      return updated;
+    });
 
-    const user = await prisma.user.findUnique({ where: { id: row.userId } });
-    if (!user) throw new BadRequestException('This reset session has expired. Start again.');
     return user;
   }
 

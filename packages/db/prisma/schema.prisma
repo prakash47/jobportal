@@ -446,8 +446,6 @@ model Session {
   @@index([expiresAt])
 }
 
-// One-time password-reset tokens per SRS §4.12.5.
-// tokenHash = sha256(raw) — the raw token only lives in the email body.
 // One in-flight password reset per user (SRS §4.12.5). Reworked from an emailed
 // LINK to a 6-digit OTP: the reset is now three server steps — request a code,
 // verify it, then spend a one-time ticket to set the password.
@@ -494,7 +492,13 @@ model PasswordResetToken {
   // than inserting a superseded sibling, so N resends can never leave N
   // simultaneously-valid codes standing (which would gut the attempt cap).
   @@unique([userId])
-  // The purge sweep: WHERE expiresAt < now.
+  // Supports an expiry-range scan. Be honest about what this does and does not
+  // buy today: there is NO purge job in the codebase, and @@unique([userId])
+  // already bounds the table at one row per user (a resend overwrites in
+  // place), so it earns nothing yet. It is kept because the write cost at that
+  // size is negligible and a sweep is the obvious next step — spent codeHash /
+  // tokenHash values otherwise sit at rest indefinitely. FOLLOW-UP: a small
+  // repeatable job doing deleteMany({ where: { expiresAt: { lt: now } } }).
   @@index([expiresAt])
 }
 

@@ -106,24 +106,33 @@ export class AuthService {
     ipAddress: string | undefined,
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     const user = await this.verifyCredentials(input);
-
-    // A recruiter removed from their team (soft-deactivated) is blocked from
-    // re-authenticating — their existing sessions were already revoked at
-    // removal (SRS §4.9). Scoped strictly to RECRUITER so candidate/admin login
-    // is byte-unchanged; runs only after credentials verify, so it leaks nothing.
-    if (user.role === 'RECRUITER') {
-      const rec = await prisma.recruiter.findUnique({
-        where: { userId: user.id },
-        select: { deactivatedAt: true },
-      });
-      if (rec?.deactivatedAt) {
-        throw new ForbiddenException(
-          'This recruiter account has been deactivated. Contact your team administrator.',
-        );
-      }
-    }
-
     return this.issueSession(user, deviceInfo, ipAddress);
+  }
+
+  // A recruiter removed from their team (soft-deactivated) may not hold a
+  // session — their existing ones were revoked at removal (SRS §4.9). Scoped
+  // strictly to RECRUITER so candidate/admin flows are unchanged.
+  //
+  // This lives in issueSession rather than login() because login() is no longer
+  // the only way to obtain cookies: Google OAuth links onto an existing local
+  // account by email, and password reset now signs the user in. Both called
+  // issueSession directly and so skipped this gate entirely — a deactivated
+  // recruiter could reset their password and be handed a working session, which
+  // matters because the recruiter jobs/applicants controllers authorise on the
+  // JWT role claim and do NOT re-check deactivatedAt. Putting the check at the
+  // single point that mints sessions closes every path at once, including the
+  // Google one that predates this change.
+  private async assertSessionAllowed(user: User): Promise<void> {
+    if (user.role !== 'RECRUITER') return;
+    const rec = await prisma.recruiter.findUnique({
+      where: { userId: user.id },
+      select: { deactivatedAt: true },
+    });
+    if (rec?.deactivatedAt) {
+      throw new ForbiddenException(
+        'This recruiter account has been deactivated. Contact your team administrator.',
+      );
+    }
   }
 
   // Mint an access + refresh token pair for an already-authenticated user and
@@ -136,6 +145,8 @@ export class AuthService {
     deviceInfo: string | undefined,
     ipAddress: string | undefined,
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+    await this.assertSessionAllowed(user);
+
     const claims: AccessClaims = {
       sub: user.id,
       email: user.email,

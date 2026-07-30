@@ -14,18 +14,28 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 // Cheap shape check only, so an obvious typo doesn't spend one of five sends.
 // The API's Zod .email() stays the authority.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Mirrors RESET_TTL_MINUTES on the API. Only used if the response omits the
+// duration — never to override what the server actually said.
+const DEFAULT_CODE_TTL_SECONDS = 15 * 60;
 
 type Phase = 1 | 2 | 3 | 4;
-
-function secondsUntil(iso: string | null): number {
-  if (!iso) return 0;
-  return Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 1000));
-}
+// One flag per request, so a resend can never render the code field as
+// "verifying" or claim "Checking your code…" while a new code is being issued.
+type Pending = null | 'send' | 'verify' | 'reset';
 
 function mmss(total: number): string {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+// Countdowns are seeded from the server's DURATIONS and then decremented
+// locally. Comparing a server timestamp against the device clock would put the
+// flow at the mercy of that clock — a phone running an hour fast would call a
+// freshly-issued code expired and lock the user out of a session the server
+// considers live. Elapsed local time is unaffected by skew.
+function countdownLabel(total: number): string {
+  return total > 60 ? mmss(total) : `${total}s`;
 }
 
 async function postJson(path: string, body: unknown): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
@@ -68,38 +78,64 @@ export function ResetLedger() {
   const [confirm, setConfirm] = useState('');
   const [visible, setVisible] = useState(false);
 
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState<string | null>(null);
-  const [resendAt, setResendAt] = useState<string | null>(null);
+  // Seconds remaining, decremented locally (see countdownLabel). `null` means
+  // "no code has been issued yet", which is distinct from zero.
+  const [codeSecondsLeft, setCodeSecondsLeft] = useState<number | null>(null);
+  const [resendSecondsLeft, setResendSecondsLeft] = useState(0);
   // A real send always returns a FRESH expiry (now + 15 min). If expiresAt does
   // not move forward across a resend, the server skipped the send — the only
   // signal available, since the response is deliberately identical either way.
   const lastExpiry = useRef<string | null>(null);
-  const [resendNote, setResendNote] = useState<string | null>(null);
+  const [resendNote, setResendNote] = useState('');
 
-  const [now, setNow] = useState(() => Date.now());
   const emailRef = useRef<HTMLInputElement>(null);
+  const otpWrapRef = useRef<HTMLDivElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const doneRef = useRef<HTMLHeadingElement>(null);
 
   // One ticking clock for both countdowns; only runs while they matter.
   useEffect(() => {
     if (phase !== 2) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
+    const t = setInterval(() => {
+      setCodeSecondsLeft((s) => (s === null ? s : Math.max(0, s - 1)));
+      setResendSecondsLeft((s) => Math.max(0, s - 1));
+    }, 1000);
     return () => clearInterval(t);
   }, [phase]);
-  void now;
 
-  const codeSecondsLeft = secondsUntil(expiresAt);
-  const resendSecondsLeft = secondsUntil(resendAt);
-  const codeDead = phase === 2 && expiresAt !== null && codeSecondsLeft === 0;
+  const busy = pending !== null;
+  const codeDead = phase === 2 && codeSecondsLeft === 0;
+
+  // Move focus into each newly-opened step. Without this, advancing dumps focus
+  // on <body>: a keyboard user has to tab back in from the top of the document,
+  // and a screen-reader user is told nothing at all. Skipped on first mount so
+  // the email field's own autoFocus still wins.
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    const target =
+      phase === 2
+        ? otpWrapRef.current?.querySelector<HTMLInputElement>('input')
+        : phase === 3
+          ? passwordRef.current
+          : phase === 4
+            ? doneRef.current
+            : emailRef.current;
+    target?.focus();
+  }, [phase]);
 
   const requestCode = useCallback(
     async (address: string, isResend: boolean) => {
-      setBusy(true);
+      setPending('send');
       setError(null);
-      setResendNote(null);
+      setResendNote('');
       const res = await postJson('/auth/forgot-password', { email: address });
-      setBusy(false);
+      setPending(null);
 
       if (!res.ok) {
         setError(
@@ -111,7 +147,17 @@ export function ResetLedger() {
       }
 
       const nextExpiry = typeof res.data['expiresAt'] === 'string' ? (res.data['expiresAt'] as string) : null;
-      const nextResend = typeof res.data['resendAvailableAt'] === 'string' ? (res.data['resendAvailableAt'] as string) : null;
+      // Fall back to the documented TTL rather than 0 if the field is ever
+      // missing. Zero would read as "already expired" and lock the user out of
+      // a code the server considers perfectly live — and this countdown is only
+      // advisory anyway: the server is the authority on expiry, and says so by
+      // rejecting a stale code.
+      const expiresIn =
+        typeof res.data['expiresInSeconds'] === 'number'
+          ? (res.data['expiresInSeconds'] as number)
+          : DEFAULT_CODE_TTL_SECONDS;
+      const resendIn =
+        typeof res.data['resendInSeconds'] === 'number' ? (res.data['resendInSeconds'] as number) : 0;
 
       if (isResend && nextExpiry && lastExpiry.current === nextExpiry) {
         // Same expiry back — nothing was sent. Say so instead of implying a new
@@ -122,8 +168,8 @@ export function ResetLedger() {
       }
 
       lastExpiry.current = nextExpiry;
-      setExpiresAt(nextExpiry);
-      setResendAt(nextResend);
+      setCodeSecondsLeft(expiresIn);
+      setResendSecondsLeft(resendIn);
       setSentTo(address);
       setCode('');
       return true;
@@ -144,10 +190,10 @@ export function ResetLedger() {
   const verify = useCallback(
     async (value: string) => {
       if (value.length !== 6 || busy) return;
-      setBusy(true);
+      setPending('verify');
       setError(null);
       const res = await postJson('/auth/verify-reset-otp', { email: sentTo, code: value });
-      setBusy(false);
+      setPending(null);
       if (!res.ok) {
         setError(
           res.status === 0
@@ -177,10 +223,10 @@ export function ResetLedger() {
       setError('Both passwords must match.');
       return;
     }
-    setBusy(true);
+    setPending('reset');
     setError(null);
     const res = await postJson('/auth/reset-password', { ticket, password });
-    setBusy(false);
+    setPending(null);
     if (!res.ok) {
       setError(
         res.status === 0
@@ -207,7 +253,7 @@ export function ResetLedger() {
     setPassword('');
     setConfirm('');
     setError(null);
-    setResendNote(null);
+    setResendNote('');
     requestAnimationFrame(() => {
       emailRef.current?.focus();
       emailRef.current?.select();
@@ -215,7 +261,8 @@ export function ResetLedger() {
   };
 
   const stepState = (n: Phase): StepState => (phase > n ? 'done' : phase === n ? 'active' : 'pending');
-  const otpState: OtpState = codeDead ? 'dead' : busy && phase === 2 ? 'verifying' : error && phase === 2 ? 'error' : 'idle';
+  const otpState: OtpState =
+    codeDead ? 'dead' : pending === 'verify' ? 'verifying' : error && phase === 2 ? 'error' : 'idle';
 
   return (
     <div className="w-full max-w-[30rem] rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-5 shadow-[var(--shadow-card)] sm:p-8">
@@ -239,7 +286,13 @@ export function ResetLedger() {
           >
             <Check className="size-6 text-[var(--color-accent-500)]" />
           </span>
-          <h2 className="mt-4 text-lg font-semibold text-[var(--color-fg)]">You’re signed in</h2>
+          <h2
+            ref={doneRef}
+            tabIndex={-1}
+            className="mt-4 text-lg font-semibold text-[var(--color-fg)] outline-none"
+          >
+            You’re signed in
+          </h2>
           <p className="mt-1.5 text-sm text-[var(--color-fg-muted)]" role="status">
             Password updated. Every other device was signed out. Taking you to your dashboard…
           </p>
@@ -275,20 +328,27 @@ export function ResetLedger() {
                   setError(null);
                 }}
                 readOnly={busy}
-                aria-describedby={`${uid}-email-hint`}
+                invalid={Boolean(error)}
+                aria-describedby={
+                  error ? `${uid}-email-hint ${uid}-email-error` : `${uid}-email-hint`
+                }
                 className="mt-2 h-11 text-base"
               />
               <p id={`${uid}-email-hint`} className="mt-2 text-xs text-[var(--color-fg-muted)]">
                 Use the address on your Career Queue account.
               </p>
-              {error && <div className="mt-3">{<FormError>{error}</FormError>}</div>}
+              {error && (
+                <div className="mt-3">
+                  <FormError id={`${uid}-email-error`}>{error}</FormError>
+                </div>
+              )}
               {/* The icon goes through `trailingIcon`, NOT as a child: Button
                   wraps children in a <span>, and preflight makes svg
                   display:block, so an icon child breaks onto its own line. */}
               <Button
                 type="submit"
                 size="lg"
-                loading={busy}
+                loading={pending === 'send'}
                 className="mt-5 w-full"
                 trailingIcon={<ArrowRight aria-hidden="true" className="size-4 text-[var(--color-accent-500)]" />}
               >
@@ -313,57 +373,67 @@ export function ResetLedger() {
               6-digit code is on its way. It expires in 15 minutes.
             </p>
 
-            <OtpField
-              value={code}
-              onChange={(v) => {
-                setCode(v);
-                setError(null);
-              }}
-              onComplete={verify}
-              state={otpState}
-              describedBy={`${uid}-otp-status`}
-            />
+            <div ref={otpWrapRef}>
+              <OtpField
+                value={code}
+                onChange={(v) => {
+                  setCode(v);
+                  setError(null);
+                }}
+                onComplete={verify}
+                state={otpState}
+                // The error is chained on ONLY while it is on screen — pointing
+                // at an absent id would leave the field describing nothing.
+                describedBy={
+                  error ? `${uid}-otp-status ${uid}-otp-error` : `${uid}-otp-status`
+                }
+              />
+            </div>
 
             {/* Fixed height so nothing shifts under the digits — the CLS guarantee. */}
             <div id={`${uid}-otp-status`} className="mt-3 flex min-h-5 items-center gap-1.5 text-xs">
-              {busy ? (
+              {pending === 'verify' || pending === 'send' ? (
                 <>
                   <Loader2 aria-hidden="true" className="size-3 animate-spin text-[var(--color-fg-muted)]" />
-                  <span className="text-[var(--color-fg-muted)]">Checking your code…</span>
+                  <span className="text-[var(--color-fg-muted)]">
+                    {pending === 'send' ? 'Sending a new code…' : 'Checking your code…'}
+                  </span>
                 </>
               ) : codeDead ? (
                 <span className="text-[color-mix(in_oklch,var(--color-danger),var(--color-fg)_30%)]">
                   That code has expired. Request a new one.
                 </span>
-              ) : expiresAt ? (
+              ) : codeSecondsLeft !== null ? (
                 <>
                   <Clock aria-hidden="true" className="size-3 text-[var(--color-fg-muted)]" />
                   <span
                     className={cn(
                       'tabular-nums',
-                      codeSecondsLeft <= 60
+                      (codeSecondsLeft ?? 0) <= 60
                         ? 'text-[color-mix(in_oklch,var(--color-danger),var(--color-fg)_30%)]'
                         : 'text-[var(--color-fg-muted)]',
                     )}
                   >
-                    Code expires in {mmss(codeSecondsLeft)}
+                    Code expires in {mmss(codeSecondsLeft ?? 0)}
                   </span>
                 </>
               ) : null}
             </div>
 
-            {error && <div className="mt-3">{<FormError>{error}</FormError>}</div>}
-            {resendNote && (
-              <p role="status" className="mt-3 text-xs text-[var(--color-fg-muted)]">
-                {resendNote}
-              </p>
+            {error && (
+              <div className="mt-3">
+                <FormError id={`${uid}-otp-error`}>{error}</FormError>
+              </div>
             )}
+            <p role="status" className="mt-3 min-h-4 text-xs text-[var(--color-fg-muted)]">
+              {resendNote}
+            </p>
 
             <Button
               type="button"
               size="lg"
-              loading={busy}
-              disabled={code.length !== 6 || codeDead}
+              loading={pending === 'verify'}
+              disabled={code.length !== 6 || codeDead || busy}
               onClick={() => verify(code)}
               className="mt-4 w-full"
               trailingIcon={<ArrowRight aria-hidden="true" className="size-4 text-[var(--color-accent-500)]" />}
@@ -380,7 +450,7 @@ export function ResetLedger() {
               className="-mb-2 mt-1 inline-flex min-h-11 items-center gap-1.5 text-xs text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:text-[var(--color-fg-muted)]"
             >
               <RotateCcw aria-hidden="true" className="size-3" />
-              {resendSecondsLeft > 0 ? `Resend in ${resendSecondsLeft}s` : 'Resend code'}
+              {resendSecondsLeft > 0 ? `Resend in ${countdownLabel(resendSecondsLeft)}` : 'Resend code'}
             </button>
           </LedgerStep>
 
@@ -403,6 +473,7 @@ export function ResetLedger() {
 
               <Label htmlFor={`${uid}-pw`}>New password</Label>
               <PasswordInput
+                ref={passwordRef}
                 id={`${uid}-pw`}
                 autoComplete="new-password"
                 required
@@ -413,7 +484,7 @@ export function ResetLedger() {
                 }}
                 visible={visible}
                 onVisibleChange={setVisible}
-                aria-describedby={`${uid}-rules`}
+                aria-describedby={error ? `${uid}-rules ${uid}-pw-error` : `${uid}-rules`}
                 className="mt-2 h-11 text-base"
               />
 
@@ -458,12 +529,16 @@ export function ResetLedger() {
                 />
               </div>
 
-              {error && <div className="mt-3">{<FormError>{error}</FormError>}</div>}
+              {error && (
+                <div className="mt-3">
+                  <FormError id={`${uid}-pw-error`}>{error}</FormError>
+                </div>
+              )}
 
               <Button
                 type="submit"
                 size="lg"
-                loading={busy}
+                loading={pending === 'reset'}
                 className="mt-5 w-full"
                 trailingIcon={<ArrowRight aria-hidden="true" className="size-4 text-[var(--color-accent-500)]" />}
               >

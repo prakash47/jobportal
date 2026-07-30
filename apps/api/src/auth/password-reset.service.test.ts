@@ -71,6 +71,19 @@ beforeEach(() => {
     expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     lastSentAt: new Date(),
   });
+  // requestCode serialises its read-then-write inside an interactive
+  // transaction (advisory lock + read + upsert). The tx delegates to the SAME
+  // mocks as the top-level client, so assertions can stay on `db.*`.
+  db.$transaction.mockImplementation(async (arg: unknown) =>
+    typeof arg === 'function'
+      ? (arg as (t: unknown) => Promise<unknown>)({
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          passwordResetToken: db.passwordResetToken,
+          user: db.user,
+          session: db.session,
+        })
+      : Promise.all(arg as Promise<unknown>[]),
+  );
 });
 
 describe('requestCode — enumeration safety', () => {
@@ -95,6 +108,7 @@ describe('requestCode — enumeration safety', () => {
     const lastSentAt = new Date(Date.now() - 5_000); // inside the 30s cooldown
     db.passwordResetToken.findUnique.mockResolvedValue({
       lastSentAt,
+      usedAt: null,
       resendCount: 0,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     });
@@ -111,6 +125,7 @@ describe('requestCode — enumeration safety', () => {
     db.user.findUnique.mockResolvedValue(USER);
     db.passwordResetToken.findUnique.mockResolvedValue({
       lastSentAt: new Date(Date.now() - 60_000), // cooldown elapsed
+      usedAt: null,
       resendCount: RESET_MAX_RESENDS,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
     });
@@ -126,6 +141,7 @@ describe('requestCode — enumeration safety', () => {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     db.passwordResetToken.findUnique.mockResolvedValue({
       lastSentAt: new Date(Date.now() - 60_000),
+      usedAt: null,
       resendCount: RESET_MAX_RESENDS,
       expiresAt,
     });
@@ -141,6 +157,7 @@ describe('requestCode — enumeration safety', () => {
     db.user.findUnique.mockResolvedValue(USER);
     db.passwordResetToken.findUnique.mockResolvedValue({
       lastSentAt: new Date(Date.now() - 60 * 60 * 1000),
+      usedAt: null,
       resendCount: RESET_MAX_RESENDS, // budget was fully spent...
       expiresAt: new Date(Date.now() - 30 * 60 * 1000), // ...but the code expired
     });
@@ -281,36 +298,60 @@ describe('resetWithTicket', () => {
     await expect(svc.resetWithTicket('t', 'Str0ngPass')).rejects.toThrow(/expired/);
   });
 
+  // The transaction mock MODELS Prisma's real semantics rather than returning a
+  // canned array. That matters: the previous version never ran the callback, so
+  // it could not tell an atomic implementation from a fail-open one — and it
+  // passed while the password write was committing on the losing path.
+  function mockTx(spendCount: number) {
+    const tx = {
+      passwordResetToken: { updateMany: vi.fn().mockResolvedValue({ count: spendCount }) },
+      user: { update: vi.fn().mockResolvedValue({ id: USER.id, email: 'a@b.com' }) },
+      session: { updateMany: vi.fn().mockResolvedValue({ count: 3 }) },
+    };
+    db.$transaction.mockImplementation(async (arg: unknown) =>
+      typeof arg === 'function'
+        ? (arg as (t: unknown) => Promise<unknown>)(tx)
+        : Promise.all(arg as Promise<unknown>[]),
+    );
+    return tx;
+  }
+
+  const verifiedRow = {
+    id: 1,
+    userId: USER.id,
+    expiresAt: new Date(Date.now() + 60_000),
+    usedAt: null,
+    verifiedAt: new Date(),
+  };
+
   it('sets the password and revokes every session in one transaction', async () => {
-    db.passwordResetToken.findUnique.mockResolvedValue({
-      id: 1,
-      userId: USER.id,
-      expiresAt: new Date(Date.now() + 60_000),
-      usedAt: null,
-      verifiedAt: new Date(),
-    });
-    db.$transaction.mockResolvedValue([{ count: 1 }, {}, { count: 3 }]);
-    db.user.findUnique.mockResolvedValue({ id: USER.id, email: 'a@b.com' });
+    db.passwordResetToken.findUnique.mockResolvedValue(verifiedRow);
+    const tx = mockTx(1);
 
     await svc.resetWithTicket('t', 'Str0ngPass');
 
     expect(db.$transaction).toHaveBeenCalledOnce();
-    expect(db.session.updateMany).toHaveBeenCalledWith({
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: USER.id },
+      data: { passwordHash: 'new-argon2-hash' },
+    });
+    expect(tx.session.updateMany).toHaveBeenCalledWith({
       where: { userId: USER.id, revokedAt: null },
       data: { revokedAt: expect.any(Date) },
     });
   });
 
-  it('loses the race when a concurrent submit already spent the ticket', async () => {
-    db.passwordResetToken.findUnique.mockResolvedValue({
-      id: 1,
-      userId: USER.id,
-      expiresAt: new Date(Date.now() + 60_000),
-      usedAt: null,
-      verifiedAt: new Date(),
-    });
-    // The guarded updateMany matched nothing — the other request won.
-    db.$transaction.mockResolvedValue([{ count: 0 }, {}, { count: 0 }]);
+  // The load-bearing one. The spend must ABORT the transaction, not merely
+  // change the HTTP response after the writes have already committed —
+  // otherwise the loser of a double-submit still changes the password and signs
+  // the winner out while being told the reset failed.
+  it('writes NOTHING when a concurrent submit already spent the ticket', async () => {
+    db.passwordResetToken.findUnique.mockResolvedValue(verifiedRow);
+    const tx = mockTx(0); // the guarded updateMany matched nothing
+
     await expect(svc.resetWithTicket('t', 'Str0ngPass')).rejects.toThrow(/expired/);
+
+    expect(tx.user.update).not.toHaveBeenCalled();
+    expect(tx.session.updateMany).not.toHaveBeenCalled();
   });
 });
