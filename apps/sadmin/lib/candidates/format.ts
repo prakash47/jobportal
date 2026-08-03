@@ -24,6 +24,25 @@ export const CANDIDATES_PAGE_SIZE = 20;
 export { clampPage, lastPageFor } from '../employers/format';
 
 /**
+ * Collapse a search param to a single value.
+ *
+ * Next's App Router delivers `string | string[] | undefined` — a REPEATED key
+ * (`?q=a&q=b`, from a hand-edited URL, a pasted link, or a bookmark that grew a
+ * duplicate) arrives as an array. Without this, `normalizeQuery` reached
+ * `raw.trim()` on an array and threw `TypeError: raw.trim is not a function`,
+ * taking the whole route down — reproduced in the dev server before this guard
+ * existed. The sibling `page` param survived the same input only by accident,
+ * because `clampPage` funnels through `Number(...)` and `Number(['1','2'])` is
+ * `NaN`; it is routed through here too rather than left to that luck.
+ *
+ * First value wins, mirroring `firstParam` in apps/recruiter's jobs page — the
+ * repo's other `?q`-consuming surface, which already guards exactly this.
+ */
+export function firstParam(raw: string | string[] | undefined): string | undefined {
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
+/**
  * Longest `?q` we act on.
  *
  * `q` is user-controlled and reaches Postgres as a `contains` pattern on an

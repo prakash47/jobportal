@@ -2,11 +2,47 @@ import { describe, expect, it } from 'vitest';
 import {
   candidatesHref,
   clampPage,
+  firstParam,
   formatHeadline,
   initials,
   lastPageFor,
   normalizeQuery,
 } from './format';
+
+// Regression: `?q=a&q=b` used to reach `raw.trim()` on an ARRAY and throw
+// `TypeError: raw.trim is not a function`, 500-ing the whole route. Reproduced
+// in the dev server before the guard existed.
+describe('firstParam', () => {
+  it('passes a plain string through', () => {
+    expect(firstParam('arjun')).toBe('arjun');
+  });
+
+  it('passes undefined through', () => {
+    expect(firstParam(undefined)).toBeUndefined();
+  });
+
+  it('takes the FIRST value of a repeated param', () => {
+    expect(firstParam(['arjun', 'priya'])).toBe('arjun');
+  });
+
+  // noUncheckedIndexedAccess makes `raw[0]` possibly-undefined, and an empty
+  // array is what `?q=` can degrade to; it must not become the string "".
+  it('returns undefined for an empty array', () => {
+    expect(firstParam([])).toBeUndefined();
+  });
+
+  it('composes with normalizeQuery instead of throwing', () => {
+    expect(() => normalizeQuery(firstParam(['  arjun  ', 'priya']))).not.toThrow();
+    expect(normalizeQuery(firstParam(['  arjun  ', 'priya']))).toBe('arjun');
+  });
+
+  // The page routes ?page through here too, so the same repeated key cannot
+  // reach clampPage as an array.
+  it('composes with clampPage', () => {
+    expect(clampPage(firstParam(['3', '9']))).toBe(3);
+    expect(clampPage(firstParam([]))).toBe(1);
+  });
+});
 
 describe('normalizeQuery', () => {
   // `?q=` and a missing `q` must fold to the SAME state, or the where-clause

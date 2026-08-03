@@ -7,6 +7,7 @@ import { displayName } from '../../../lib/employers/format';
 import {
   candidatesHref,
   clampPage,
+  firstParam,
   formatHeadline,
   initials,
   lastPageFor,
@@ -23,14 +24,19 @@ export const metadata: Metadata = {
 // Reads Postgres per request; there is nothing to statically render.
 export const dynamic = 'force-dynamic';
 
+// Typed as Next actually delivers it, not as we wish it were: a REPEATED key
+// (`?q=a&q=b`) arrives as an array, so both params go through firstParam. Typing
+// these as bare strings is what let an array reach `raw.trim()` and 500 the
+// route. The sibling /employers page gets away with `{ page?: string }` only
+// because it has no text param.
 interface PageProps {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string | string[]; page?: string | string[] }>;
 }
 
 export default async function CandidatesPage({ searchParams }: PageProps) {
   const sp = await searchParams;
-  const q = normalizeQuery(sp.q);
-  const page = clampPage(sp.page);
+  const q = normalizeQuery(firstParam(sp.q));
+  const page = clampPage(firstParam(sp.page));
 
   const result = await listCandidates(page, q);
 
@@ -55,6 +61,17 @@ export default async function CandidatesPage({ searchParams }: PageProps) {
     if (page > lastPage) redirect(candidatesHref(lastPage, q));
   }
 
+  const isEmpty = result.rows.length === 0;
+  // Two different sentences for the empty case, because under an active filter
+  // the "nobody has registered" copy would be a lie.
+  const summary = isEmpty
+    ? q
+      ? `No candidates match “${q}”.`
+      : 'No candidates have registered yet.'
+    : `${result.total.toLocaleString('en-IN')} ${
+        result.total === 1 ? 'candidate' : 'candidates'
+      }${q ? ` matching “${q}”` : ''}`;
+
   return (
     <div data-wide className="space-y-6">
       <header className="space-y-1">
@@ -69,20 +86,32 @@ export default async function CandidatesPage({ searchParams }: PageProps) {
 
       <CandidateSearchBar />
 
-      {result.rows.length === 0 ? (
-        // Two different sentences, because under an active filter the
-        // "nobody has registered" copy would be a lie.
-        <p className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-6 text-sm text-[var(--color-fg-muted)]">
-          {q ? `No candidates match “${q}”.` : 'No candidates have registered yet.'}
-        </p>
-      ) : (
-        <>
-          <p className="text-sm text-[var(--color-fg-muted)]">
-            {result.total.toLocaleString('en-IN')}{' '}
-            {result.total === 1 ? 'candidate' : 'candidates'}
-            {q ? ` matching “${q}”` : ''}
-          </p>
+      {/* ONE always-mounted live region carrying the result summary.
+          The search bar commits with router.replace(..., { scroll: false }), so
+          results swap in place: focus never moves, the pathname and <title> are
+          unchanged, and Next's route announcer (which diffs the title) therefore
+          says nothing. Without this, narrowing 1,240 rows to 0 was announced by
+          nothing at all and a screen-reader user kept believing the old results
+          were on screen. This mirrors the `<p role="status">` the recruiter jobs
+          page pairs with the same search island.
+          It must be ONE element that always renders and only changes its TEXT —
+          a role="status" that mounts together with its message does not
+          announce, a trap already documented in RevealCodeButton and
+          VerifiableField. Hence the summary (count vs. empty copy) is computed
+          above and only the styling switches. */}
+      <p
+        role="status"
+        className={
+          isEmpty
+            ? 'rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-6 text-sm text-[var(--color-fg-muted)]'
+            : 'text-sm text-[var(--color-fg-muted)]'
+        }
+      >
+        {summary}
+      </p>
 
+      {!isEmpty && (
+        <>
           {/* The table scrolls inside its own card rather than the document —
               the app shell locks the viewport (h-screen + overflow-hidden) and
               scrolls each pane independently. */}
@@ -145,7 +174,16 @@ function CandidateRow({ row }: { row: CandidateListRow }) {
               under which an explicit `undefined` is not assignable to an
               optional `src?: string`. Omitting the prop is exactly what Avatar
               expects — it renders the Image child only when src is truthy. */}
+          {/* aria-hidden on the ROOT, not just alt="" on the image. Radix
+              renders the fallback as a plain <span> carrying no aria-hidden of
+              its own, so the monogram is announced as ordinary cell text — and
+              because the initials are derived from the very name rendered
+              beside it, a screen reader read every row as "P S Priya Sharma".
+              The whole control is decorative (the name span carries the
+              information), so the root is hidden outright. Same treatment the
+              (authed) layout gives its identical account-row monogram. */}
           <Avatar
+            aria-hidden="true"
             size="sm"
             alt=""
             fallback={initials(name)}
