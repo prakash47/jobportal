@@ -194,6 +194,15 @@ function CandidateRow({ row }: { row: CandidateListRow }) {
  * There is no `onClick`, so in this server component it ships zero JavaScript
  * and the click is a genuine no-op rather than a handler that swallows it.
  *
+ * The name is carried by an explicit `aria-label` rather than a visually-hidden
+ * span, because `title` was measured winning the accessible-name computation
+ * over the button's own content: in the browser's a11y tree all sixty controls
+ * came out named "Not available yet", so View, Suspend and Delete were
+ * indistinguishable to a screen reader and the visible word was lost entirely.
+ * `aria-label` outranks `title`, so the name is now unambiguous. It STARTS with
+ * the visible label so voice control still matches "click View" (WCAG 2.5.3
+ * Label in Name), and `title` is kept only for the sighted hover hint.
+ *
  * Deliberately NOT dimmed with `opacity`, which drops 14px muted text below
  * legibility, and Delete is deliberately NOT red: colour here would promise a
  * destructive action that cannot happen yet. It earns the danger tone the day it
@@ -204,13 +213,13 @@ function InertAction({ label, subject }: { label: string; subject: string }) {
     <button
       type="button"
       aria-disabled="true"
+      // Self-describing out of context: a screen-reader user listing the page's
+      // controls otherwise hears the same three words twenty times over.
+      aria-label={`${label} ${subject} — not available yet`}
       title="Not available yet"
       className="cursor-not-allowed rounded font-medium text-[var(--color-fg-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
     >
       {label}
-      {/* Row actions must be self-describing out of context: a screen-reader
-          user listing controls otherwise hears "View" twenty times. */}
-      <span className="sr-only"> {subject} — not available yet</span>
     </button>
   );
 }
