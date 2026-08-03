@@ -42,7 +42,7 @@ describe('TransactionalEmailProcessor.handle', () => {
       kind: 'password_reset',
       to: 'a@b.com',
       userId: 1,
-      payload: { resetUrl: 'https://x', expiresInMinutes: 15 },
+      payload: { code: '123456', expiresInMinutes: 15 },
     });
     expect(resend.send).not.toHaveBeenCalled();
   });
@@ -57,7 +57,7 @@ describe('TransactionalEmailProcessor.handle', () => {
       kind: 'password_reset',
       to: 'a@b.com',
       userId: 1,
-      payload: { resetUrl: 'https://x', expiresInMinutes: 15 },
+      payload: { code: '123456', expiresInMinutes: 15 },
     });
     // Mandatory categories don't even read the preference row.
     expect(mockedPrisma.emailPreference.findUnique).not.toHaveBeenCalled();

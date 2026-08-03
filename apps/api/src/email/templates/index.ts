@@ -26,7 +26,11 @@ export interface EmailVerificationPayload {
   verifyUrl: string;
 }
 export interface PasswordResetPayload {
-  resetUrl: string;
+  // The 6-digit one-time code. Replaced the emailed reset URL when the flow
+  // moved from a link to an OTP (SRS §4.12.5) — a code cannot be silently
+  // followed by a mail scanner, and it keeps the reset in the tab the user
+  // started it in.
+  code: string;
   expiresInMinutes: number;
 }
 export interface ApplicationSubmittedPayload {

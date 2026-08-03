@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { prisma } from '@jobportal/db';
 import { FLAG, isFlagEnabled } from '@jobportal/feature-flags';
 import { requireRecruiter } from '../../lib/auth/require-recruiter';
+import { AppNavigationProgress } from '../../components/nav-progress/AppNavigationProgress';
 import { SidebarNav } from '../../components/SidebarNav';
 import { SignOutButton } from '../../components/SignOutButton';
 import { Logo } from '../../components/brand/Logo';
@@ -124,6 +126,12 @@ export default async function AuthedLayout({ children }: { children: React.React
   // content pane scrolls on its own.
   return (
     <div className="h-screen overflow-hidden bg-[var(--color-bg-muted)]">
+      {/* Navigation loader: pane-only opaque veil (offset past the rail at md+)
+          so the navy rail stays crisp while the content pane loads. Suspense:
+          the wrapper reads useSearchParams. */}
+      <Suspense fallback={null}>
+        <AppNavigationProgress />
+      </Suspense>
       <div className="grid h-screen grid-cols-1 md:grid-cols-[256px_minmax(0,1fr)]">
         <aside className="hidden h-screen bg-[var(--color-primary-600)] md:flex md:flex-col">
           <Link

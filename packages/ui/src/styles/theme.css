@@ -205,6 +205,109 @@
 }
 
 /* ============================================================
+ * BrandLoader — "The Advance" (navigation loader, owner-approved
+ * 2026-07-30). transform/opacity ONLY, GPU-composited.
+ *
+ * The 1.8s cycle on the arrow (its resting coordinates ARE the
+ * docked lockup; the keyframes move it AWAY, so the no-animation
+ * state is the finished brand mark):
+ *   0–600ms    ADVANCE  behind-the-seam → dock (the C launches it)
+ *   600–1050   HOLD     total stillness — the exact static lockup
+ *   1050–1400  HANDOFF  docked arrow absorbed (opacity)
+ *   1400–1800  REST     reset behind the clip seam (invisible)
+ * The tempo NEVER changes on long waits — a queue advancing at a
+ * constant rate is the trust signal (design-panel decision).
+ *
+ * Deviation from the §2 150–250ms budget: the loop is a continuous
+ * indicator, not a transition; its ENTRANCE (200ms) and EXIT
+ * (170ms) stay inside the budget.
+ *
+ * Reduced motion: the global kill rule (below, @layer base) floors
+ * animation-duration at 0.01ms with a single iteration, which
+ * snaps every keyframe here to its resting state — the finished
+ * lockup — by design. The caption swap gives those users a static
+ * "Loading" from the first frame; nothing further is needed.
+ * ============================================================ */
+@keyframes cq-loader-advance {
+  0%     { transform: translateX(-104px); opacity: 1;
+           animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1); }
+  33.33% { transform: translateX(0);      opacity: 1;
+           animation-timing-function: linear; }
+  58.33% { transform: translateX(0);      opacity: 1;
+           animation-timing-function: ease-out; }
+  77.77% { transform: translateX(0);      opacity: 0;
+           animation-timing-function: linear; }
+  78%    { transform: translateX(-104px); opacity: 0; }
+  82%    { transform: translateX(-104px); opacity: 1; }
+  100%   { transform: translateX(-104px); opacity: 1; }
+}
+@keyframes cq-veil-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes cq-veil-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes cq-mark-in {
+  from { transform: scale(0.97); }
+  to   { transform: scale(1); }
+}
+@keyframes cq-mark-out {
+  from { transform: scale(1); }
+  to   { transform: scale(1.02); }
+}
+@keyframes cq-cap-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.cq-loader-arrow { animation: cq-loader-advance 1800ms infinite; }
+
+.cq-loader-veil[data-state='shown'] {
+  animation: cq-veil-in var(--duration-base) var(--ease-out) both;
+}
+.cq-loader-veil[data-state='shown'] .cq-loader-markwrap {
+  animation: cq-mark-in var(--duration-base) var(--ease-out) both;
+}
+/* Freeze-and-fade exit (the shipped default): whatever pose the loop is in,
+ * the whole veil lifts in 170ms while the mark eases 2% forward. The veil is
+ * pointer-events-none throughout its life, so the window between the fade
+ * finishing and React unmounting (EXIT_MS) blocks nothing. */
+.cq-loader-veil[data-state='exiting'] {
+  animation: cq-veil-out 170ms var(--ease-out) forwards;
+}
+.cq-loader-veil[data-state='exiting'] .cq-loader-markwrap {
+  animation: cq-mark-out 170ms var(--ease-out) forwards;
+}
+
+/* Re-shown while the exit fade was running (the user navigated again):
+ * skip the entrance so the veil snaps back to opaque instead of blinking
+ * through transparent, and the loop just keeps running. */
+.cq-loader-veil[data-revived='true'] {
+  animation: none;
+  opacity: 1;
+}
+.cq-loader-veil[data-revived='true'] .cq-loader-markwrap {
+  animation: none;
+}
+
+/* Long-wait caption: silent until 3s — the moment doubt starts — then one
+ * quiet line. Nothing else ever escalates. (The sr-only live region mirrors
+ * this escalation in NavigationProgress.) */
+.cq-loader-cap-motion {
+  opacity: 0;
+  animation: cq-cap-in 250ms cubic-bezier(0.16, 1, 0.3, 1) 3s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Text carries the signal when nothing moves: immediate "Loading" instead
+   * of a 3s-delayed "Still loading" (animation-DELAY is not covered by the
+   * global kill rule, so without this swap the caption would appear late). */
+  .cq-loader-cap-motion { display: none; }
+  .cq-loader-cap-static { display: inline; }
+}
+
+/* ============================================================
  * Base resets
  * ============================================================ */
 @layer base {

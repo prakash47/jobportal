@@ -1,84 +1,52 @@
-'use client';
-
-import { useState } from 'react';
 import Link from 'next/link';
-import { Button, Card, Input, Label } from '@jobportal/ui';
+import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
+import { ArrowLeft } from '@jobportal/ui/icons';
+import { Logo } from '../../../components/brand/Logo';
+import { ResetLedger } from '../../../components/auth/ResetLedger';
+import { readUserFromCookie } from '../../../lib/auth/server-session';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+// Password reset (SRS §4.12.5) — the whole three-step OTP flow lives on this one
+// route: request a code, verify it, set the password, then land signed in.
+//
+// Deliberately NOT wrapped in SiteShell. During a reset the user is by
+// definition signed out, so the site header — which resolves signed-in state
+// server-side and carries Sign in / Register plus the two-pane mega-menu — is
+// empty at best and wrong at worst, and it puts ~40 exits above a 15-minute
+// timed task. The footer would add a link farm under a security surface. It
+// matches the product's own precedent too: the primary sign-in surface is
+// AuthModal, i.e. chrome-suppressed by construction. One masthead, one escape
+// hatch.
+export const metadata: Metadata = {
+  title: 'Reset your password',
+  robots: { index: false, follow: false },
+};
 
-export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/auth/forgot-password`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      if (!res.ok && res.status !== 204) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(body.message ?? 'Request failed');
-      }
-      setSubmitted(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Request failed');
-    } finally {
-      setLoading(false);
-    }
-  }
+export default async function ForgotPasswordPage() {
+  // A signed-in seeker has no use for this form — and can change their password
+  // from settings instead.
+  const user = await readUserFromCookie();
+  if (user?.role === 'CANDIDATE') redirect('/profile');
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center justify-center p-6">
-      <div className="w-full">
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-fg)]">Reset your password</h1>
-        <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
-          Enter the email associated with your account. We will send you a reset link valid for 15 minutes.
-        </p>
-
-        {submitted ? (
-          <Card className="mt-8 bg-[var(--color-bg-muted)] p-4 text-sm text-[var(--color-fg)]" role="status">
-            If an account exists for{' '}
-            <span className="font-medium">{email}</span>, a reset link is on its way. Check your inbox.
-          </Card>
-        ) : (
-          <form onSubmit={onSubmit} className="mt-8 space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-
-            {error && (
-              <p role="alert" className="text-sm text-[var(--color-danger)]">
-                {error}
-              </p>
-            )}
-
-            <Button type="submit" loading={loading} className="w-full">
-              Send reset link
-            </Button>
-          </form>
-        )}
-
-        <p className="mt-6 text-center text-sm text-[var(--color-fg-muted)]">
-          <Link href="/login" className="hover:text-[var(--color-fg)]">
+    <main className="min-h-dvh bg-[var(--color-bg)]">
+      <header className="border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
+        <div className="mx-auto flex h-14 w-full max-w-[var(--container-max)] items-center justify-between px-4 sm:h-16 sm:px-6">
+          <Link href="/" aria-label="Career Queue — home">
+            <Logo variant="mark" className="h-6 w-auto sm:h-7" />
+          </Link>
+          <Link
+            href="/login"
+            className="-mx-3 inline-flex items-center gap-1.5 px-3 py-2 text-sm text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)]"
+          >
+            <ArrowLeft aria-hidden="true" className="size-3.5" />
             Back to sign in
           </Link>
-        </p>
+        </div>
+      </header>
+
+      <div className="flex min-h-[calc(100dvh-3.5rem)] items-start justify-center px-4 py-10 sm:min-h-[calc(100dvh-4rem)] sm:items-center sm:py-16">
+        <ResetLedger />
       </div>
     </main>
   );
