@@ -18,6 +18,7 @@
 
 import argon2 from 'argon2';
 import type { ApplicationStatus, PrismaClient } from '../../generated/client';
+import { advanceSequence } from '../../src/sequence';
 
 // ============================================================
 // Candidates — 20, mix of seniority + skill backgrounds
@@ -481,14 +482,21 @@ export async function seedDemoApplications(prisma: PrismaClient): Promise<void> 
   }
 
   // --- Advance User_id_seq past demo range ---
+  //
+  // Monotonic on purpose. This was a bare
+  // `setval(pg_get_serial_sequence('"User"','id'), 200020, true)`, which is an
+  // unconditional assignment to a constant derived from CANDIDATES.length
+  // alone — it ignored every User row above it. Real accounts created by
+  // registering through the app, and the super-admin from seed/admin.ts (plain
+  // autoincrement), all live above 200020, so each re-run of
+  // `db:seed:demo:full` pushed the sequence back BELOW existing rows and the
+  // next few registrations died on the User_pkey unique constraint (P2002).
+  // advanceSequence() never lowers it — see src/sequence.ts.
   const maxDemoUserId = 200000 + CANDIDATES.length;
-  await prisma.$executeRawUnsafe(
-    `SELECT setval(pg_get_serial_sequence('"User"', 'id'), $1, true)`,
-    maxDemoUserId,
-  );
+  const userSeq = await advanceSequence(prisma, 'User', 'id', maxDemoUserId);
 
   console.log(
-    `[seed:demo:apps] complete — ${CANDIDATES.length} candidates, ${totalApps} applications across ${jobs.length} jobs.`,
+    `[seed:demo:apps] complete — ${CANDIDATES.length} candidates, ${totalApps} applications across ${jobs.length} jobs. User_id_seq at ${userSeq.after} (was ${userSeq.before}).`,
   );
   console.log('  status breakdown:');
   for (const [status, count] of Object.entries(statusCounts).sort()) {

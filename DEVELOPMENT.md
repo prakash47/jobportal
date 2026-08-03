@@ -171,7 +171,7 @@ Run from the repo root; Turborepo runs the task across every workspace.
 | Command | Checks |
 |---|---|
 | `pnpm typecheck` | TypeScript strict mode across all apps + packages. Must be 0 errors. |
-| `pnpm test` | Vitest unit tests across packages + apps. Must all pass. |
+| `pnpm test` | Vitest unit tests across packages + apps. Must all pass. `packages/db` also carries Postgres-backed tests for `advanceSequence` — they run on a throwaway table when a local database is reachable and **skip with a reason on stderr** when it is not, so this stays green without `pnpm infra:up`. Run infra up if you touch sequence handling. |
 | `pnpm build` | Production build of all five apps. Must succeed. |
 | `pnpm lint` | ESLint where configured. |
 

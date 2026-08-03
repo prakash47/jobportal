@@ -18,6 +18,7 @@
 
 import argon2 from 'argon2';
 import type { PrismaClient } from '../../generated/client';
+import { advanceSequence } from '../../src/sequence';
 
 // ============================================================
 // Companies — 12, spread across the 10 seeded industries
@@ -690,20 +691,21 @@ export async function seedDemo(prisma: PrismaClient): Promise<void> {
     });
   }
 
-  // Advance the SERIAL sequence past our explicit demo IDs. Postgres
-  // does NOT auto-advance Job_id_seq when an explicit id is inserted via
+  // Advance the SERIAL sequence past our explicit demo IDs. Postgres does NOT
+  // auto-advance Job_id_seq when an explicit id is inserted via
   // create({ data: { id: 100001 } }) — so the next real `prisma.job.create()`
-  // without an id would allocate id=1 and collide with the very first demo
-  // row, repeating up to id=100050. setval ensures the next allocation is
-  // 100051. `true` = the next nextval() returns last_value+1; safe to call
-  // multiple times (idempotent).
+  // without an id would allocate id=1 and collide with the very first demo row,
+  // repeating up to id=100050.
+  //
+  // This used to be a bare `setval(seq, maxDemoJobId, true)`, which fixed that
+  // and introduced the mirror-image bug: an unconditional assignment to a
+  // constant, so re-seeding a database that had since grown real jobs above
+  // 100050 pulled the sequence back UNDER them and the next posts collided.
+  // advanceSequence() only ever raises it — see src/sequence.ts.
   const maxDemoJobId = 100000 + JOBS.length;
-  await prisma.$executeRawUnsafe(
-    `SELECT setval(pg_get_serial_sequence('"Job"', 'id'), $1, true)`,
-    maxDemoJobId,
-  );
+  const jobSeq = await advanceSequence(prisma, 'Job', 'id', maxDemoJobId);
 
   console.log(
-    `[seed:demo] complete — ${COMPANIES.length} companies, ${RECRUITERS.length} recruiters, ${REVIEWS.length} reviews, ${JOBS.length} jobs. Job_id_seq advanced to ${maxDemoJobId}.`,
+    `[seed:demo] complete — ${COMPANIES.length} companies, ${RECRUITERS.length} recruiters, ${REVIEWS.length} reviews, ${JOBS.length} jobs. Job_id_seq at ${jobSeq.after} (was ${jobSeq.before}).`,
   );
 }
