@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/sadmin-candidate-management` | **sadmin "Candidate Management" master list** — new sidebar item below Employer management. Creates `app/(authed)/candidates/page.tsx` (RSC table: name+avatar · headline · email+phone · location · created · inert actions), `lib/candidates/queries.ts` (`listCandidates`), `lib/candidates/format.ts` (`candidatesHref`/`normalizeQuery`/`formatHeadline`/`initials`) + its test, and `components/candidates/CandidateSearchBar.tsx` (client island). **Reads `User where role=CANDIDATE`** — deliberately NOT `prisma.candidate`, whose row is provisioned lazily and would hide real signups. View/Suspend/Delete render inert; wiring them is a later PR (Suspend additionally needs a `User.deactivatedAt` migration). | **No lock needed / none taken.** No schema change, no migration, no new flag key, no `theme.css` token, no barrel edit (`Users`/`Search`/`X` are already in the `@jobportal/ui/icons` allowlist). ⚠️ **Soft conflict warning:** touches `components/SidebarNav.tsx` `NAV_ITEMS` with a one-line insert — the 🅿️ Planned `feature/sadmin-admin-migration` will append its own entries to that same array. Both are one-line adds; whoever merges second should expect a trivial resolve. |
 
 ---
 
