@@ -88,12 +88,31 @@ describe('resolveStoredAssetUrl', () => {
     ).toBe('https://cdn.example.com/l/a.png');
   });
 
-  // Keys with spaces or unicode round-trip through the URL encoding.
-  it('round-trips an encoded key', () => {
+  // An encoded key must come back ENCODED. The first cut of this decoded and
+  // never re-encoded, so a key with a space produced a URL containing a literal
+  // space — not a valid URL, and broken in both an <img src> and JSON-LD.
+  it('re-encodes the key rather than emitting a raw space', () => {
     expect(
       resolveStoredAssetUrl('http://localhost:4000/media/logos/1/my%20logo.png', {
         publicBase: 'https://cdn.example.com',
       }),
-    ).toBe('https://cdn.example.com/logos/1/my logo.png');
+    ).toBe('https://cdn.example.com/logos/1/my%20logo.png');
+  });
+
+  it('keeps the / separators unescaped when re-encoding', () => {
+    expect(
+      resolveStoredAssetUrl('http://localhost:4000/media/a/b/c.png', {
+        publicBase: 'https://cdn.example.com',
+      }),
+    ).toBe('https://cdn.example.com/a/b/c.png');
+  });
+
+  // decodeURIComponent throws URIError on a malformed escape, and this runs
+  // inside API serialisers and server components — an uncaught throw would 500
+  // a public route over one stray '%' in one row.
+  it('does not throw on a malformed percent-escape', () => {
+    const bad = 'http://localhost:4000/media/a%b.png';
+    expect(() => resolveStoredAssetUrl(bad, { publicBase: 'https://cdn.example.com' })).not.toThrow();
+    expect(resolveStoredAssetUrl(bad, { publicBase: 'https://cdn.example.com' })).toBe(bad);
   });
 });

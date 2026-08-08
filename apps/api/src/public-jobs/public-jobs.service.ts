@@ -274,7 +274,7 @@ export class PublicJobsService {
         id: job.companyId,
         name: job.company.name,
         slug: job.company.slug,
-        logoUrl: job.company.logoUrl,
+        logoUrl: publicAssetUrl(job.company.logoUrl),
         websiteUrl: job.company.websiteUrl,
       },
       industry: job.industry ? { slug: job.industry.slug, name: job.industry.name } : null,

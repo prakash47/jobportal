@@ -20,6 +20,7 @@ import {
   type BreadcrumbEntry,
   type ItemListEntry,
 } from '../../lib/seo/json-ld';
+import { publicAssetUrl } from '../../lib/assets';
 
 export interface SrpShellProps {
   basePath: string;
@@ -90,7 +91,7 @@ export async function SrpShell({
       ? prisma.city.findMany({ where: { slug: { in: citySlugs } }, select: { slug: true, name: true } })
       : Promise.resolve<{ slug: string; name: string }[]>([]),
   ]);
-  const logoByCompanyId = new Map(companies.map((c) => [c.id, c.logoUrl]));
+  const logoByCompanyId = new Map(companies.map((c) => [c.id, publicAssetUrl(c.logoUrl)]));
   const cityNameBySlug = new Map(cityRows.map((c) => [c.slug, c.name]));
 
   const totalPages = Math.max(1, Math.ceil(resultCount / pageSize));

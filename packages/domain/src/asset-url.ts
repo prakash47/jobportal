@@ -69,8 +69,30 @@ export function storageKeyFromUrl(url: string, bases: AssetBases): string | null
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
   if (!parsed.pathname.startsWith(MEDIA_PATH)) return null;
 
-  const key = decodeURIComponent(parsed.pathname.slice(MEDIA_PATH.length));
+  // decodeURIComponent THROWS a URIError on a malformed escape — a single
+  // stray `%` in a stored path is enough. This runs inside API serialisers and
+  // server components, so an uncaught throw here would 500 a public route over
+  // one bad character in one row. Treat undecodable as "not ours" and hand the
+  // value back untouched.
+  let key: string;
+  try {
+    key = decodeURIComponent(parsed.pathname.slice(MEDIA_PATH.length));
+  } catch {
+    return null;
+  }
   return key || null;
+}
+
+/**
+ * Re-encode a decoded key for use in a URL path.
+ *
+ * `storageKeyFromUrl` decodes, so rebuilding must encode again or a key
+ * containing a space comes back as a URL with a literal space in it — which is
+ * not a valid URL and breaks in an <img src> and in JSON-LD. Encoded
+ * per-segment so the `/` separators survive.
+ */
+function encodeKey(key: string): string {
+  return key.split('/').map(encodeURIComponent).join('/');
 }
 
 /**
@@ -93,13 +115,15 @@ export function resolveStoredAssetUrl(
   const key = storageKeyFromUrl(stored, bases);
   if (key === null) return stored;
 
+  const encoded = encodeKey(key);
+
   const publicBase = bases.publicBase ? trimEnd(bases.publicBase) : null;
-  if (publicBase) return `${publicBase}/${key}`;
+  if (publicBase) return `${publicBase}/${encoded}`;
 
   const apiBase = bases.apiBase ? trimEnd(bases.apiBase) : null;
   // No base to rebuild against: hand back what we were given rather than
   // inventing a relative URL that an <img> on another origin cannot load.
   if (!apiBase) return stored;
 
-  return `${apiBase}${MEDIA_PATH}${key}`;
+  return `${apiBase}${MEDIA_PATH}${encoded}`;
 }

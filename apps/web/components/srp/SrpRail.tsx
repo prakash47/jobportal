@@ -4,6 +4,7 @@ import { searchJobs, type JobDoc } from '@jobportal/search';
 import { ArrowRight, Bell } from '@jobportal/ui/icons';
 import { CompanyLogo } from '../companies/CompanyLogo';
 import { formatSalaryLpa } from '../../lib/job/format';
+import { publicAssetUrl } from '../../lib/assets';
 
 export interface SrpRailProps {
   /** Visible results — seed the "roles you might like" query + the exclusion set. */
@@ -83,7 +84,7 @@ export async function SrpRail({ hits, alertHref }: SrpRailProps) {
         ? prisma.city.findMany({ where: { slug: { in: citySlugs } }, select: { slug: true, name: true } })
         : Promise.resolve<{ slug: string; name: string }[]>([]),
     ]);
-    logoByCompanyId = new Map(companies.map((c) => [c.id, c.logoUrl]));
+    logoByCompanyId = new Map(companies.map((c) => [c.id, publicAssetUrl(c.logoUrl)]));
     cityNameBySlug = new Map(cities.map((c) => [c.slug, c.name]));
   }
 

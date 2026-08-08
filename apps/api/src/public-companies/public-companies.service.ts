@@ -295,7 +295,7 @@ export class PublicCompaniesService {
       slug: p.slug,
       name: p.name,
       handle: buildCompanyHandle({ slug: p.slug, id: p.id }),
-      logoUrl: p.logoUrl,
+      logoUrl: publicAssetUrl(p.logoUrl),
       averageRating: p.averageRating,
       openRoles: openByCompany.get(p.id) ?? 0,
     }));

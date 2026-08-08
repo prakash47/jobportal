@@ -4,6 +4,7 @@ import { searchJobs, type JobDoc } from '@jobportal/search';
 import { ArrowRight, Sparkles } from '@jobportal/ui/icons';
 import { RecommendedJobCard } from './RecommendedJobCard';
 import { loadSrpUserContext } from '../../lib/srp';
+import { publicAssetUrl } from '../../lib/assets';
 
 export interface RecommendedJobsProps {
   /** Candidate skill slugs (resolved from skillIds by the caller). */
@@ -68,7 +69,7 @@ export async function RecommendedJobs({
         })
       : Promise.resolve([]),
   ]);
-  const logoByCompanyId = new Map(companies.map((c) => [c.id, c.logoUrl]));
+  const logoByCompanyId = new Map(companies.map((c) => [c.id, publicAssetUrl(c.logoUrl)]));
   const cityNameBySlug = new Map(cities.map((c) => [c.slug, c.name]));
 
   return (

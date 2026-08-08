@@ -1,5 +1,6 @@
 import { unstable_cache } from 'next/cache';
 import { loadHomePageData } from '../home/queries';
+import { publicAssetUrl } from '../../lib/assets';
 
 // Data for the Jobs/Companies navbar mega-menu. A DATE-FREE subset of
 // loadHomePageData() so it is safe to cache as JSON, wrapped in the Next Data
@@ -62,7 +63,7 @@ export const loadNavMenuData = unstable_cache(
         id: c.id,
         slug: c.slug,
         name: c.name,
-        logoUrl: c.logoUrl,
+        logoUrl: publicAssetUrl(c.logoUrl),
         averageRating: c.averageRating,
         openingsCount: c.openingsCount,
       })),
