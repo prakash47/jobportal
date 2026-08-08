@@ -24,7 +24,23 @@ vi.mock('@jobportal/db', () => ({
 import { prisma } from '@jobportal/db';
 import { loadHomePageData } from './home-queries';
 
-const db = prisma as unknown as Record<string, Record<string, ReturnType<typeof vi.fn>>> & {
+// Spelled out rather than a Record index signature: under
+// noUncheckedIndexedAccess every property read off a Record<string, X> widens
+// to `X | undefined`, so `db.job.count` is a compile error even though it
+// always exists. Matches the idiom in apps/api/src/public-companies/
+// public-companies.test.ts.
+const db = prisma as unknown as {
+  job: {
+    count: ReturnType<typeof vi.fn>;
+    groupBy: ReturnType<typeof vi.fn>;
+    findMany: ReturnType<typeof vi.fn>;
+  };
+  company: { count: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
+  user: { count: ReturnType<typeof vi.fn> };
+  article: { findMany: ReturnType<typeof vi.fn> };
+  city: { findMany: ReturnType<typeof vi.fn> };
+  industry: { findMany: ReturnType<typeof vi.fn> };
+  skill: { findMany: ReturnType<typeof vi.fn> };
   $queryRaw: ReturnType<typeof vi.fn>;
 };
 
