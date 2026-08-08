@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Jayesh | `feature/applications-additive-fields` | **The last endpoint (ADR 0002 step 10)** — two purely additive fields on the EXISTING `GET /me/applications`: a per-row `statusHistory` (the raw `Json?` column, coalesced `null → []`) and a top-level `counts` object (per-status totals across ALL the user's applications, **independent of `?status=`**, sparse keys plus `ALL`). No new route, no query-param change, no removals — existing consumers are unaffected. Both go in `ApplicationsService.list()` so the controller is untouched. | **None** — no schema, no migration, no flag, no locks. `apps/web` untouched (it runs its own inline query for the `/applications` page, a pre-existing fork this deepens by one field). |
 
 ---
 
