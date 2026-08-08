@@ -4,6 +4,7 @@ import { PublicJobsModule } from './public-jobs/public-jobs.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
 import { PublicCompaniesModule } from './public-companies/public-companies.module';
 import { PublicHomeModule } from './public-home/public-home.module';
+import { PublicArticlesModule } from './public-articles/public-articles.module';
 import { AdminJobsModule } from './admin-jobs/admin-jobs.module';
 import { AdminKycModule } from './admin-kyc/admin-kyc.module';
 import { AdminOtpSessionsModule } from './admin-otp-sessions/admin-otp-sessions.module';
@@ -69,6 +70,7 @@ import { StorageModule } from './storage/storage.module';
     CatalogsModule,
     PublicCompaniesModule,
     PublicHomeModule,
+    PublicArticlesModule,
     AdminJobsModule,
     AdminKycModule,
     AdminOtpSessionsModule,
