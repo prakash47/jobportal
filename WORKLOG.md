@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/srp-emp-mode-filters` | **ADR 0002 decision 6 — make the `emp` / `mode` SRP facets actually filter.** Both facet groups render on the live site today and filter nothing: `Job.employmentType` / `Job.workMode` exist in Postgres but are absent from the Elasticsearch `jobs` index, and `parseSrpSearchParams` deliberately drops them. Adds `employmentType` + `workMode` to the ES mapping/transform/query (`packages/search`), maps `emp`/`mode` in `parseSrpSearchParams` (`packages/domain`) — which repairs all five SRP surfaces at once (`/jobs`, city-jobs, skill-city, skill-jobs, `GET /v1/jobs`) — and deletes the two now-false comments plus the user-facing "schema columns land with the recruiter feature" line in `Filters.tsx`. | `packages/search/src/{types,indexes/jobs.index,transforms/job.transform,queries/searchJobs}.ts`, `packages/domain/src/srp-params.ts`, `apps/api/src/public-jobs/dto.ts`, `apps/web/components/srp/Filters.tsx`. **No lock needed** — no schema change (columns already exist → no migration), no `theme.css`, no `packages/types`, no barrels, no `keys.ts`. ⚠️ **Ships an ES mapping change: run `pnpm --filter @jobportal/search search:reindex` on pull.** |
 
 ---
 
