@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Jayesh | `feature/public-catalogs-api` | **Reference catalogs for mobile (ADR 0002 step 6)** — `GET /v1/skills`, `GET /v1/cities`, `GET /v1/industries`. One `CatalogsController` + service over the three seed tables, `{hits,total,page,pageSize}` envelope, `?q=` server-side name search (the web pickers download the whole table and filter client-side; a phone must not). **Promoted ahead of companies** because `GET /me/profile` returns bare `skillIds`/`preferredCityIds`/`industryId` with no names — so these are a hard blocker for the app's PROFILE screen, not just for filters. Adds `?ids=` resolve mode for exactly that. | **None of the locked surfaces** — no schema, no migration, no flag, no barrels. `apps/web`/`recruiter`/`sadmin` untouched. |
 
 ---
 
