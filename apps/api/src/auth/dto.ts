@@ -19,6 +19,16 @@ export const LoginDto = z.object({
 });
 export type LoginInput = z.infer<typeof LoginDto>;
 
+// Mobile refresh/logout (ADR 0002 decision 1). A native client has no cookie
+// jar, so the refresh token travels in the request body on the /v1/auth/mobile
+// surface instead of the `refresh_token` cookie the three web apps use. The
+// browser endpoints are untouched — this is the documented divergence from
+// CLAUDE.md §9, and it applies to this surface only.
+export const MobileRefreshDto = z.object({
+  refreshToken: z.string().min(1),
+});
+export type MobileRefreshInput = z.infer<typeof MobileRefreshDto>;
+
 export const ForgotPasswordDto = z.object({
   email: z.string().email().toLowerCase(),
 });
