@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Jayesh | `feature/domain-package-extraction` | **New `@jobportal/domain` package (ADR 0002 decision 2 / step 4).** Moves six modules out of `apps/web/lib` — where `apps/api` structurally cannot reach them — into a shared workspace package with subpath exports: `url/slug.ts` (95L, zero imports), `job/visibility.ts` (59L), `srp/params.ts` (186L), `companies/params.ts` (54L), `cms/params.ts` (28L), `home/queries.ts` (326L). **Their 6 test files move too (73 tests)** → `apps/web` 216 → ~143, new package ~73. 22 import sites in `apps/web` are rewritten (no shims left behind). `home/queries.ts` is the one special case: the package exports the UNCACHED loader and `apps/web` keeps a thin `cache()` wrapper, since React's request-scoped cache is inert in Nest. **Behaviour-preserving: no endpoint, no query, no output changes.** | ⚠️ **`tsconfig.base.json`** (+2 path entries) — a shared surface not in the lock table above; flagging it here. Also `apps/web/package.json` (+1 dep). No schema, no `theme.css`, no `packages/types`, no `keys.ts`, no barrels. `pnpm-workspace.yaml` needs NO edit (it globs `packages/*`). |
 
 ---
 
