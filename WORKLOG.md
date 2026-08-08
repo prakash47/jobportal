@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/account-deletion` | **ADR 0002 decision 8 (half) — `DELETE /me/account`.** Apple and Google both reject an app that cannot delete the account it created, and nothing in the repo deletes a user today. Most User relations already cascade, but a DB cascade does NOT remove the candidate's resume objects from storage, so a "deleted" account would leave CVs in the bucket. Scoped to CANDIDATE; recruiters get a documented refusal, because deleting one has company-level consequences (sole owner, orphaned jobs). **The privacy-policy half is NOT in this branch** — it is legal text that needs the owner's company details and cannot be invented. | `apps/api/src/account/*` (new module), `apps/web` settings page. **No lock needed** — no schema change, no migration, no flag key. |
 
 ---
 
