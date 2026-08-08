@@ -9,7 +9,7 @@ import { CompanyFilters } from '../../components/companies/CompanyFilters';
 import { IndustryShowcase, type IndustryShowcaseItem } from '../../components/companies/IndustryShowcase';
 import { MobileFilterSheet } from '../../components/srp/MobileFilterSheet';
 import { SiteShell } from '../../components/shell/SiteShell';
-import { buildDirectoryQuery, parseDirectoryParams, type DirectorySort } from '../../lib/companies/params';
+import { buildDirectoryQuery, parseDirectoryParams, type DirectorySort } from '@jobportal/domain/company-params';
 import { JsonLd } from '../../lib/seo';
 import { breadcrumbList } from '../../lib/seo/json-ld';
 

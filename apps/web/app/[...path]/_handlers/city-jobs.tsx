@@ -10,7 +10,7 @@ import { prisma } from '@jobportal/db';
 import { searchJobs } from '@jobportal/search';
 import { SrpShell } from '../../../components/srp/SrpShell';
 import { cityBreadcrumb, loadSrpUserContext, parseSrpSearchParams } from '../../../lib/srp';
-import { buildMultiCitySlug, parseMultiCitySlug } from '../../../lib/url/slug';
+import { buildMultiCitySlug, parseMultiCitySlug } from '@jobportal/domain/slug';
 import type { ItemListEntry } from '../../../lib/seo/json-ld';
 
 const PAGE_SIZE = 20;

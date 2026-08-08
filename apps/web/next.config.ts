@@ -21,6 +21,7 @@ const config: NextConfig = {
     '@jobportal/types',
     '@jobportal/feature-flags',
     '@jobportal/observability',
+    '@jobportal/domain',
   ],
 
   // Image domains — Cloudflare R2 + Cloudflare CDN. Add company logo CDN here

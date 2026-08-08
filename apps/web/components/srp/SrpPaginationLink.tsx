@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight } from '@jobportal/ui/icons';
 // Direct import (NOT the lib/srp barrel) — the barrel re-exports
 // loadSrpUserContext which touches Prisma and would pull node:module
 // into the client bundle.
-import { buildSrpHref, readSelections } from '../../lib/srp/params';
+import { buildSrpHref, readSelections } from '@jobportal/domain/srp-params';
 
 interface Props {
   basePath: string;

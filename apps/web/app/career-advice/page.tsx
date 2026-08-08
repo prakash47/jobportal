@@ -12,7 +12,7 @@ import {
 import { tagLabel } from '../../components/career-advice/article-format';
 import { SiteShell } from '../../components/shell/SiteShell';
 import { JsonLd, breadcrumbList } from '../../lib/seo';
-import { parseArticleIndexParams } from '../../lib/cms/params';
+import { parseArticleIndexParams } from '@jobportal/domain/article-params';
 
 const PAGE_SIZE = 12;
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';

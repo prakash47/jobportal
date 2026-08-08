@@ -12,7 +12,7 @@ import { Button } from '@jobportal/ui';
 import { CompanyHero } from '../../../components/companies';
 import { JsonLd } from '../../../lib/seo';
 import { breadcrumbList } from '../../../lib/seo/json-ld';
-import { parseWorkingAtSlug } from '../../../lib/url/slug';
+import { parseWorkingAtSlug } from '@jobportal/domain/slug';
 
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 

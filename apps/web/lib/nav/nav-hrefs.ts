@@ -1,5 +1,5 @@
-import { buildSrpHref } from '../srp/params';
-import { buildDirectoryQuery, type DirectorySort } from '../companies/params';
+import { buildSrpHref } from '@jobportal/domain/srp-params';
+import { buildDirectoryQuery, type DirectorySort } from '@jobportal/domain/company-params';
 
 // Canonical URL builders for the navbar mega-menu. Every link is composed
 // through buildSrpHref / buildDirectoryQuery so the params are alphabetically

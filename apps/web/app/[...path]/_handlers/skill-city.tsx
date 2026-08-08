@@ -19,7 +19,7 @@ import {
   parseSrpSearchParams,
   skillCityBreadcrumb,
 } from '../../../lib/srp';
-import { buildMultiCitySlug } from '../../../lib/url/slug';
+import { buildMultiCitySlug } from '@jobportal/domain/slug';
 import type { ItemListEntry } from '../../../lib/seo/json-ld';
 
 const PAGE_SIZE = 20;

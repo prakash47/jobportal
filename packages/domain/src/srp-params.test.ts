@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSrpHref, parseSrpSearchParams } from './params';
+import { buildSrpHref, parseSrpSearchParams } from './srp-params';
 
 describe('parseSrpSearchParams', () => {
   it('parses an empty query', () => {

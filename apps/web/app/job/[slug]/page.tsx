@@ -18,11 +18,11 @@ import {
 // RelatedRoles is server-only (ES + Prisma) — deep import, not via the barrel.
 import { RelatedRoles } from '../../../components/job/RelatedRoles';
 import { readApplied, readSaved, readUserFromCookie } from '../../../lib/job';
-import { canViewJob } from '../../../lib/job/visibility';
+import { canViewJob } from '@jobportal/domain/job-visibility';
 import { readApplyQuota } from '../../../lib/applications/quota-state';
 import { classifyQuota } from '../../../lib/applications/quota-ui-state';
 import { jobPosting } from '../../../lib/seo/json-ld';
-import { parseJobSlug } from '../../../lib/url/slug';
+import { parseJobSlug } from '@jobportal/domain/slug';
 
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 

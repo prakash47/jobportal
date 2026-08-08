@@ -12,6 +12,8 @@
 
 ## Snapshot — 2026-08-08
 
+- **Newest merge (2026-08-08)**: `feature/domain-package-extraction` — **the shared-code prerequisite the mobile spec had no phase for.** Six of its nine endpoints need rules that lived in `apps/web/lib`, which `apps/api` structurally cannot import — so six modules (slug parsing, job visibility, the SRP / directory / article param codecs, and the home aggregate) moved into a new **`@jobportal/domain`** package, with their tests. **Behaviour-preserving, and the invariant proves it: web 216 → 138 + domain 78 = exactly 216.** Two things worth remembering: React's `cache()` could not come along (RSC-only, inert in Nest), so the package exports the *uncached* home loader while `apps/web` keeps a `cache()` wrapper; and subpath imports **typechecked but failed at runtime** until an explicit `exports` map was added — a green typecheck does not prove a new package resolves. Adversarial review **65/65 agents, 20 raised → 1 confirmed**. **On pull run `pnpm install`.** Full detail in the PR log below.
+
 - **Newest merge (2026-08-08)**: `feature/api-contract-and-mobile-auth` — **the mobile app can finally log in.** The CQ mobile team's spec asked for nine public endpoints and never mentioned the one thing blocking all of them: `JwtAuthGuard` **already accepted `Authorization: Bearer`**, so the entire authenticated API worked for a phone the instant it held a token — but nothing ever handed it one. Ships URI versioning (`VERSION_NEUTRAL`, so **every existing route keeps its path** and only opted-in controllers get `/v1`), one documented error envelope (Nest's own shape, so no existing web caller changes), and `/v1/auth/mobile/{register,login,refresh,logout}` returning tokens in the body — a **deliberate owner-approved divergence from CLAUDE.md §9**, recorded in ADR 0002. **Adversarial review run TWICE** because the first had 7 dead agents including the whole route-drift lens: **51 raised → 9 confirmed (5 distinct), all fixed**, headed by a HIGH where the rewrite left a pre-existing test red, and a MED where the new `Retry-After` **overwrote the throttler's accurate countdown with a flat 60**, making mobile back-off worse than develop. **API 812 → 858 tests.** `apps/api` only — no schema, no migration, no new flag key, no lock. Full detail in the PR log below.
 
 ---
@@ -249,6 +251,77 @@ its `node_modules` (the OneDrive de-materialization hazard). `pnpm install` rest
 **Still owner-blocked and unchanged:** nothing is deployed anywhere (no host, no CI, no managed
 Elasticsearch), `RESEND_API_KEY` is blank, and the store-compliance surfaces (privacy policy page,
 account-deletion endpoint) do not exist.
+
+
+### PR — `feature/domain-package-extraction` · 2026-08-08 — `@jobportal/domain` (ADR 0002 step 4)
+
+**Why this had to come first.** The CQ mobile spec listed nine endpoints and no extraction phase. Six
+of them depend on the same five modules in `apps/web/lib`, and `apps/api` **cannot import `apps/web`
+at all** — no dependency in `apps/api/package.json`, no alias in `tsconfig.base.json`, `include`
+scoped to `src/**/*.ts`. Built in the spec's order, every endpoint PR would have copy-pasted what it
+needed and the repo would have ended with the canonical-slug parser, the job-visibility rules and the
+SRP param mapping living in two places each, silently drifting from the website forever.
+
+**What moved** (via `git mv`, so history follows each file), together with its test file:
+
+| From | To | Unblocks |
+|---|---|---|
+| `lib/url/slug.ts` | `src/slug.ts` | `/jobs/:slug`, `/companies/:handle` |
+| `lib/job/visibility.ts` | `src/job-visibility.ts` | `/jobs/:slug` |
+| `lib/srp/params.ts` | `src/srp-params.ts` | `/jobs` |
+| `lib/companies/params.ts` | `src/company-params.ts` | `/companies` |
+| `lib/cms/params.ts` | `src/article-params.ts` | `/career-advice` |
+| `lib/home/queries.ts` | `src/home-queries.ts` | `/home` |
+
+**Behaviour-preserving, with an invariant that proves it.** No query, endpoint, route, output or
+rendered page changed. `apps/web` went **216 → 138** tests and the new package reports **78** —
+summing to **exactly 216**, so nothing was lost, skipped or duplicated in the move.
+
+**The one module that needed surgery.** `home-queries.ts` wrapped its loader in React's `cache()`.
+That helper is **RSC-only and inert outside a React request**, so it cannot live in a package shared
+with NestJS. The package now exports the **uncached** loader; `apps/web/lib/home/queries.ts` is a thin
+`cache()` wrapper at the original path. It stays because it is load-bearing *for the website
+specifically* — several server components call `loadHomePageData()` in the same render, and without
+the dedup each would re-run the whole 10-query aggregate.
+
+**A bug the tests caught that typecheck could not.** Subpath imports like
+`@jobportal/domain/srp-params` typechecked cleanly — TypeScript resolves through `tsconfig` paths —
+and then **failed at runtime**, because vitest and Node resolve through `package.json`. Fixed with an
+explicit **named** `exports` map (not a `./*` wildcard), matching `@jobportal/ui` and
+`@jobportal/observability`, so the public surface is documented and internals cannot be reached. Worth
+remembering: on this repo, a green typecheck does not prove a new package resolves.
+
+**22 import sites rewritten rather than shimmed**, so no permanent indirection is left behind; two
+barrels (`lib/url/index.ts`, `lib/srp/index.ts`) forward to the package so their consumers are
+untouched. Two imports used a sibling path (`'../srp/params'`) and were missed by the first pass —
+typecheck caught them.
+
+**Deliberately not moved:** `apps/web/lib/cms/markdown.ts`. It is the Shiki/unified pipeline, ESM-only
+against a CommonJS API build, and the owner's ADR 0002 decision 3 (return raw markdown to the mobile
+client) removes the reason to share it.
+
+**Browser-verified** on every surface these modules power: home, SRP with filters, companies with
+`category`+`hiring`, career advice with search — all **200**. Job detail **200**, slug drift **308**,
+malformed slug **404**, unknown id **404**; company handle **200** and its drift **308**. All 23 job
+hrefs on the SRP end in a numeric id per CLAUDE.md §5. **Zero console errors.**
+
+**Adversarial 5-lens review with three independent skeptics per finding — 65/65 agents, no errors:
+20 raised → 1 confirmed.** ARCHITECTURE.md still described the old seven-package layout in both the
+monorepo tree and the shared-packages table, so a reader had no way to learn the package exists —
+precisely the failure it was created to prevent. Fixed, with a callout for the `cache()` gotcha.
+Separately, `@jobportal/domain` was added to `apps/web`'s `transpilePackages`: the review raised this
+**five times and refuted it 3/3 every time**, correctly — it demonstrably works, the production build
+passes and every page renders. It was added anyway because `next.config.ts` states the rule in its own
+comment and `domain` was the only one of eight workspace dependencies missing from the list.
+
+**Gate green on the integrated state:** typecheck **13/13** (12 → 13 workspaces) · tests **10/10**
+(API 858 / sadmin 216 / **web 138** / recruiter 83 / **domain 78, new** / feature-flags 37 / ui 27 /
+db 20 / observability 19 / auth 17) · build **5/5**. **On pull run `pnpm install`** — there is a new
+workspace package.
+
+**Next per ADR 0002:** `GET /jobs` + `GET /jobs/:slug`, now unblocked — the biggest single win for the
+app. **Still owner-blocked and unchanged:** nothing is deployed (no host, no CI, no managed
+Elasticsearch), `RESEND_API_KEY` is blank, and the store-compliance surfaces do not exist.
 
 ---
 
