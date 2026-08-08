@@ -13,6 +13,7 @@ import { CompanyHero } from '../../../components/companies';
 import { JsonLd } from '../../../lib/seo';
 import { breadcrumbList } from '../../../lib/seo/json-ld';
 import { parseWorkingAtSlug } from '@jobportal/domain/slug';
+import { publicAssetUrl } from '../../../lib/assets';
 
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
@@ -111,7 +112,7 @@ export default async function WorkingAtPage({ params }: PageProps) {
         <CompanyHero
           id={company.id}
           name={company.name}
-          logoUrl={company.logoUrl}
+          logoUrl={publicAssetUrl(company.logoUrl)}
           industryName={company.industry?.name ?? null}
           hqCityName={company.headquartersCity?.name ?? null}
           employeeCount={company.employeeCount}
