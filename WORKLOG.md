@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `bugfix/asset-url-origin` | **Stored asset URLs bake in the origin (ADR 0002 negative-risks list).** `getPublicUrl` returns `${API_URL}/media/<key>` when `R2_PUBLIC_URL` is blank, and that ABSOLUTE url is written into `Company.logoUrl` — so a logo uploaded before R2 is provisioned keeps a `http://localhost:4000` origin forever, including inside the `Organization` / `JobPosting` JSON-LD Google indexes. **The ADR calls for a backfill; measured, none is needed** — 0 of 12 companies have a non-null `logoUrl` and the 2 non-null `User.image` values are Google CDN. So this fixes the mechanism instead: a shared resolver re-derives the origin at read time. | new `packages/domain/src/asset-url.ts`, API company serializers, `apps/web` company/job read paths. **No lock needed** — no schema, no migration, no flag key. |
 
 ---
 
