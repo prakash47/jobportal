@@ -12,6 +12,8 @@
 
 ## Snapshot — 2026-08-08
 
+- **Newest merge (2026-08-08)**: `feature/public-companies-api` — **companies browse + profile for the app**, reusing the SSR's ordering and query shape, with `parseHighlightSections` moved into `@jobportal/domain` so the two surfaces cannot disagree. Adversarial review **46/46 agents, 14 raised → 5 confirmed**, all one defect I introduced: handles were built from the company NAME rather than the stored `slug` column, so a company whose two values differ got a handle that **308'd to itself forever** — and the test fixture used a name where the two happened to match, so it could not fail. Fixed with a `buildCompanyHandle` that pairs with `parseCompanySlug`. **API 919 → 941 tests.** Full detail in the PR log below.
+
 - **Newest merge (2026-08-08)**: `feature/public-catalogs-api` — **the three reference catalogs, and the profile screen unblocked.** `GET /v1/{skills,cities,industries}` with an `?ids=` resolve mode, because `GET /me/profile` returns bare ids with no names and the app cannot render that screen without turning them into labels. Adversarial review **67/67 agents, 21 raised → 1 confirmed HIGH**, whose fix hint turned one instance into **five**: every `id` column is a Prisma `Int`, and a bigger value makes Prisma **throw** rather than match nothing — so an anonymous caller produced 500s and Sentry noise by adding a digit to a URL, including on the already-merged public `/v1/jobs/:slug`. Fixed in `@jobportal/domain`, so the **website** is repaired too. **API 899 → 919, domain 78 → 81 tests.** Full detail in the PR log below.
 
 - **Newest merge (2026-08-08)**: `feature/public-jobs-api` — **the app can browse jobs.** `GET /v1/jobs`, `GET /v1/jobs/:slug` and the bulk `POST /v1/me/job-state`, all reusing the website's own `searchJobs` + `@jobportal/domain` rules so the two surfaces cannot disagree. Visibility is checked BEFORE the canonical 308 (the redirect's `Location` carries the title-bearing slug), and all three not-found paths are byte-identical. Adversarial review **86/86 agents, 27 raised → 5 confirmed**, all one root defect: an unhandled Elasticsearch error **answered with ES's own status, echoed its raw exception text to anonymous callers, and was skipped by Sentry as an expected 4xx** — the second facet living in the error envelope from the previous PR. Now a clean 503, a derived page bound, and an `expose`-gated http-error check; **verified by actually stopping the Elasticsearch container**. **API 858 → 899 tests.** Full detail in the PR log below.
@@ -464,6 +466,58 @@ tests **10/10** · build **5/5**.
 **Next per ADR 0002:** companies, home, career advice, the applications extras, then the API contract
 document the app team needs while hosting is deferred. **Still owner-blocked:** hosting (deliberately
 deferred), `RESEND_API_KEY`, and the store-compliance surfaces.
+
+
+### PR — `feature/public-companies-api` · 2026-08-08 — companies (ADR 0002 step 7)
+
+`GET /v1/companies` and `GET /v1/companies/:handle`. Directory reuses `parseDirectoryParams` from
+`@jobportal/domain` and the SSR's exact orderBy ladder, every branch ending in a unique `id`
+tiebreaker because `name` is not unique and offset pagination over a non-unique key duplicates or
+drops a page-seam row. Open-role counts are **one grouped query per page**. An unknown category is
+**ignored rather than 404'd**, matching the SSR — a URL that works on the website must not fail on
+the app.
+
+Detail ports `loadCompany` and `loadRelatedCompanies` out of the page file where they were
+unexported, plus openings (ACTIVE, take 10, newest first), reviews (take 5) and the KYC-derived
+verified flag, where the **absence** of a `CompanyKyc` row is itself the not-submitted state.
+
+**`parseHighlightSections` moved into `@jobportal/domain` rather than being copied.** It decides what
+counts as a valid culture block; a block one surface rendered and the other dropped would read as
+missing data. The web component re-exports it, and the four website pages that use it were
+re-verified at 200.
+
+Page size is **20** here against the website directory's **24** — the owner's recorded decision, so
+page N holds different companies on each surface by design.
+
+**Adversarial 4-lens review — 46/46 agents, no errors: 14 raised → 5 confirmed**, all one root defect,
+and it was mine.
+
+Every handle was built with `buildCompanySlug({ name, id })`. But `Company.slug` is an **independent
+`@unique` column**, de-duplicated and edited separately from the name, so the two routinely disagree
+— the seeded *“Tarang Hotels & Resorts”* is stored as `tarang-hotels`. The drift check compared the
+request against `company.slug` while the canonical it redirected **to** was the name-derived form, so
+they never converged: the API published `tarang-hotels-resorts-overview-10` in its own list response,
+and fetching that exact handle returned a 308 pointing at itself. `curl -L` exited 47 on the loop.
+Every other surface in the repo (CompanyCard, the SSR page, sadmin employers) already built it from
+the stored slug, so the API was the only one that looped.
+
+Fixed with **`buildCompanyHandle({ slug, id })`** in `@jobportal/domain`, the proper pairing for
+`parseCompanySlug` so parse and build round-trip. `buildCompanySlug` remains, now documented as the
+function that **mints** a slug at company-creation time and is wrong for rebuilding an existing row's
+permalink. Verified live: 0 of 12 companies emit a mismatched handle, and the old bad handle now
+resolves in exactly **one** redirect to a 200.
+
+Worth recording why the tests missed it: the fixture was `'Sutra Labs'`/`'sutra-labs'`, where
+`slugify(name)` coincidentally equals `slug`. That collapsed the two sources of truth into one value,
+so all three canonical tests were **incapable of failing**. The fixture now deliberately diverges,
+and an explicit anti-loop invariant asserts a redirect target is never the handle that was requested.
+
+**API 919 → 941 tests.** Gate green on the integrated state: typecheck **13/13** · tests **10/10** ·
+build **5/5**.
+
+**Next per ADR 0002:** the home feed, career advice, the applications extras, then the API contract
+document. **Still owner-blocked:** hosting (deliberately deferred), `RESEND_API_KEY`, and the
+store-compliance surfaces.
 
 ---
 
