@@ -285,6 +285,7 @@ describe('RecruiterApplicantsService.getResumeUrl — snapshot vs legacy', () =>
       r2Key: 'submitted-key',
       originalFilename: 'submitted.pdf',
       scanStatus: 'CLEAN',
+      deletedAt: null,
     });
     // Deliberately arm the fallback with a DIFFERENT document, so a regression
     // that reaches for it produces the wrong file rather than the same one.
@@ -308,13 +309,49 @@ describe('RecruiterApplicantsService.getResumeUrl — snapshot vs legacy', () =>
   // showing a file the candidate has since replaced.
   it('still serves a snapshot whose resume was later soft-deleted', async () => {
     mocked.application.findUnique.mockResolvedValueOnce({ ...ownedApp, resumeId: 555 });
+    // deletedAt is SET — the state the test is named for. Earlier this fixture
+    // omitted the field entirely, which made the test indistinguishable from
+    // the not-deleted case and therefore incapable of failing.
     mocked.resume.findUnique.mockResolvedValue({
       r2Key: 'submitted-key',
       originalFilename: 'submitted.pdf',
       scanStatus: 'CLEAN',
+      deletedAt: new Date('2026-08-01T00:00:00Z'),
     });
     const out = await service.getResumeUrl(42, 99);
     expect(out.filename).toBe('submitted.pdf');
+    expect(fakeStorage.getSignedDownloadUrl).toHaveBeenCalledWith('submitted-key', 900);
+  });
+
+  // The two branches must treat the identical state differently, which is the
+  // only thing that makes the snapshot branch's deletedAt behaviour meaningful.
+  it('404s that SAME soft-deleted state when it arrives via the legacy path', async () => {
+    mocked.application.findUnique.mockResolvedValueOnce({ ...ownedApp, resumeId: null });
+    mocked.candidate.findUnique.mockResolvedValue({
+      activeResume: {
+        r2Key: 'submitted-key',
+        originalFilename: 'submitted.pdf',
+        scanStatus: 'CLEAN',
+        deletedAt: new Date('2026-08-01T00:00:00Z'),
+      },
+    });
+    await expect(service.getResumeUrl(42, 99)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  // The lookup must use the application's OWN resumeId. Asserting only that
+  // some id came back would stay green if the service fetched a constant.
+  it('fetches the snapshot by the id recorded on THIS application', async () => {
+    mocked.application.findUnique.mockResolvedValueOnce({ ...ownedApp, resumeId: 777 });
+    mocked.resume.findUnique.mockResolvedValue({
+      r2Key: 'k',
+      originalFilename: 'f.pdf',
+      scanStatus: 'CLEAN',
+      deletedAt: null,
+    });
+    await service.getResumeUrl(42, 99);
+    expect(mocked.resume.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 777 } }),
+    );
   });
 
   // Rows that predate the column. Which CV was sent is genuinely unknown, so

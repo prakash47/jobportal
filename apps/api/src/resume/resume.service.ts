@@ -172,10 +172,32 @@ export class ResumeService {
     });
 
     // Best-effort delete from R2 — soft-deleted DB row is the source of truth.
-    try {
-      await this.storage.deleteObject(r2Key);
-    } catch (err) {
-      this.logger.warn(`failed to delete resume from R2: ${r2Key} (${(err as Error).message})`);
+    //
+    // ADR 0002 decision 7: NOT when an application still points at this resume.
+    // Applications now record which document was submitted, and recruiters read
+    // it back through that snapshot. Destroying the object here would leave the
+    // row intact and the bytes gone, so the recruiter endpoint would hand out a
+    // presigned URL for a key that no longer exists — a 200 leading to a dead
+    // link, which is worse than either serving it or refusing cleanly.
+    //
+    // The candidate has still withdrawn it: `activeResumeId` is null, it no
+    // longer appears on their profile, and it can never be attached to a new
+    // application. What survives is the copy already delivered to recruiters
+    // they chose to apply to, which is the same thing as having sent it.
+    // Erasing that on request is account deletion's job, not this endpoint's.
+    const referencing = await prisma.application.count({
+      where: { resumeId: candidate.activeResumeId },
+    });
+    if (referencing > 0) {
+      this.logger.log(
+        `retaining resume object ${r2Key}: referenced by ${referencing} application(s)`,
+      );
+    } else {
+      try {
+        await this.storage.deleteObject(r2Key);
+      } catch (err) {
+        this.logger.warn(`failed to delete resume from R2: ${r2Key} (${(err as Error).message})`);
+      }
     }
 
     await recomputeCompleteness(userId);

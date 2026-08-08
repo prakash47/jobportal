@@ -49,6 +49,13 @@ export class RecruiterApplicantsService {
           status: true,
           appliedAt: true,
           recruiterNotes: true,
+          // Whether THIS application carries a resume snapshot (ADR 0002
+          // decision 7). The drawer used to gate its "Open resume" button on
+          // the candidate's CURRENT activeResumeId, which meant that a
+          // candidate withdrawing their CV hid the button for applications
+          // whose submitted document is still perfectly readable — the exact
+          // case the snapshot exists to serve.
+          resumeId: true,
           user: {
             select: {
               id: true,
@@ -186,13 +193,21 @@ export class RecruiterApplicantsService {
   // The fallback is not defensive coding, it is the permanent state of the
   // rows that predate the column: which CV was actually sent is genuinely
   // unknown for them, so they keep the old behaviour rather than 404-ing an
-  // application a recruiter could read yesterday. New applications always
-  // carry a snapshot, so they never take this path.
+  // application a recruiter could read yesterday. New applications are always
+  // written with a snapshot — though the FK is ON DELETE SET NULL, so a hard
+  // delete of the Resume row would drop one back onto this path.
   //
   // A soft-deleted resume IS still served when it is the snapshot: the
   // recruiter already received that document, and withdrawing it retroactively
-  // would break a review in progress. The deleted-check therefore only guards
-  // the legacy fallback, where "current CV" is the only meaning available.
+  // would break a review in progress. That is only safe because
+  // `ResumeService.delete` now RETAINS the stored object whenever an
+  // application references it — without that, this branch would presign a key
+  // the delete had already destroyed and answer 200 with a dead link.
+  // `deletedAt` is selected purely so the state is observable to tests and to
+  // anyone reading a row; it deliberately does not gate the snapshot branch.
+  //
+  // The legacy fallback still checks it, because there "the candidate's current
+  // CV" is the only meaning available and a withdrawn one is not current.
   async getResumeUrl(
     userId: number,
     applicationId: number,
@@ -202,11 +217,16 @@ export class RecruiterApplicantsService {
     const snapshot = app.resumeId
       ? await prisma.resume.findUnique({
           where: { id: app.resumeId },
-          select: { r2Key: true, originalFilename: true, scanStatus: true },
+          select: { r2Key: true, originalFilename: true, scanStatus: true, deletedAt: true },
         })
       : null;
 
-    let resume: { r2Key: string; originalFilename: string; scanStatus: string } | null = snapshot;
+    let resume: {
+      r2Key: string;
+      originalFilename: string;
+      scanStatus: string;
+      deletedAt: Date | null;
+    } | null = snapshot;
     if (!resume) {
       const candidate = await prisma.candidate.findUnique({
         where: { userId: app.userId },

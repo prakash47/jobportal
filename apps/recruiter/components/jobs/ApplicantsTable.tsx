@@ -50,6 +50,10 @@ export interface ApplicantRow {
   status: ApplicationStatus;
   appliedAt: string;
   recruiterNotes: string | null;
+  /** The resume SUBMITTED with this application (ADR 0002 decision 7).
+   *  Null on rows that predate the column. Non-null means the recruiter can
+   *  open it even if the candidate has since withdrawn their profile CV. */
+  resumeId: number | null;
   user: {
     name: string;
     email: string;

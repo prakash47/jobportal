@@ -743,8 +743,11 @@ model Resume {
   deletedAt        DateTime?
 
   activeOnCandidate Candidate?    @relation("ActiveResume")
-  // Applications submitted with THIS resume. Keeps a soft-deleted resume
-  // readable to the recruiters who already received it.
+  // Applications submitted with THIS resume. Load-bearing beyond navigation:
+  // `ResumeService.delete` counts these before removing the stored object, so a
+  // document a recruiter already received survives the candidate withdrawing it
+  // from their profile. Without that, the row would outlive its bytes and the
+  // recruiter endpoint would presign a key that no longer exists.
   applications      Application[] @relation("ApplicationResume")
 
   @@index([candidateId, deletedAt])
@@ -1142,9 +1145,10 @@ model Application {
   @@index([userId, status])
   @@index([jobId, status])
   // Postgres does not index a foreign key automatically. Without this, every
-  // Resume delete has to seq-scan Application to apply the SetNull — and the
-  // account-deletion endpoint (ADR 0002 decision 8) cascades Candidate →
-  // Resume, so that scan would run once per resume during a deletion.
+  // Resume delete has to seq-scan Application to apply the SetNull. That is
+  // already worth avoiding, and the planned account-deletion endpoint (ADR 0002
+  // decision 8 — not yet built) will cascade Candidate → Resume, which would
+  // run that scan once per resume.
   @@index([resumeId])
 }
 

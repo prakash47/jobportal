@@ -452,10 +452,12 @@ export async function seedDemoApplications(prisma: PrismaClient): Promise<void> 
     // exercise most.
     //
     // The row is what the apply gate reads (exists, CLEAN, not soft-deleted);
-    // it does not need bytes behind it. There is no object in local storage for
-    // this key, so the recruiter's "open resume" download will 404 in dev —
-    // that is a pre-existing property of the in-memory local storage backend,
-    // not something this seed can fix.
+    // it does not need bytes behind it. Nothing is written to storage for this
+    // key, so the recruiter's "open resume" cannot return a real document in
+    // dev — with R2 unconfigured, StorageService.getSignedDownloadUrl returns
+    // an opaque `local://memory/<key>` URL that the web layer already renders
+    // as preview-only, so it degrades exactly as an un-provisioned resume does
+    // today rather than erroring.
     //
     // Keyed on r2Key (which is @unique) so re-seeding updates rather than
     // accumulating one dead resume per run.

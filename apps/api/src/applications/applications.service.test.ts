@@ -324,6 +324,20 @@ describe('ApplicationsService.apply — resume gate + snapshot', () => {
     expect(arg.data.resumeId).toBe(900);
   });
 
+  // Without this, the previous test proves only that SOME id was written — it
+  // would stay green if the lookup were scoped to the wrong user, which would
+  // attach a stranger's document to the application. The neighbouring list
+  // block pins its query scope the same way.
+  it('looks the resume up for the APPLYING user, not anyone else', async () => {
+    mockedPrisma.candidate.findUnique.mockResolvedValue({
+      activeResume: { id: 900, scanStatus: 'CLEAN', deletedAt: null },
+    });
+    await service.apply(42, 7);
+    expect(mockedPrisma.candidate.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 42 } }),
+    );
+  });
+
   it('403s with RESUME_REQUIRED when the candidate has no active resume', async () => {
     mockedPrisma.candidate.findUnique.mockResolvedValue({ activeResume: null });
     await expect(service.apply(42, 7)).rejects.toBeInstanceOf(ForbiddenException);
@@ -361,10 +375,17 @@ describe('ApplicationsService.apply — resume gate + snapshot', () => {
     expect(mockedPrisma.application.create).not.toHaveBeenCalled();
   });
 
+  // The WIRE VALUES are the contract — apps/web compares against the literal
+  // 'RESUME_REQUIRED', and the Flutter app will too. Importing the constants
+  // does NOT protect that: both sides would move together and this would stay
+  // green while every client broke. So pin the literal strings.
+  it('pins the wire values of the two codes', () => {
+    expect(RESUME_REQUIRED).toBe('RESUME_REQUIRED');
+    expect(RESUME_SCANNING).toBe('RESUME_SCANNING');
+  });
+
   // The two 403s are NOT interchangeable: one is fixed by uploading, the other
   // by waiting, and both clients branch on the code rather than the prose.
-  // Asserted against the exported constants, so a typo in the service cannot
-  // be matched by a typo re-typed here.
   it('distinguishes the two refusals with a stable machine-readable code', async () => {
     mockedPrisma.candidate.findUnique.mockResolvedValue({ activeResume: null });
     const missing = await service.apply(42, 7).catch((e: unknown) => e);

@@ -16,12 +16,15 @@ const PAGE_SIZE = 20;
 /**
  * Stable error codes on the apply 403s (ADR 0002 decision 7).
  *
- * Exported so the tests assert the same constant the service emits rather than
- * a re-typed string literal — a test that hardcodes 'RESUME_REQUIRED' still
- * passes after a typo is introduced here, since both sides would be strings
- * nobody compares. These values are part of the client contract: apps/web
- * routes on them and the Flutter app branches on them, so treat a change here
- * as a breaking API change, not a rename.
+ * It is the VALUE that is the contract, not the identifier: apps/web compares
+ * against the literal 'RESUME_REQUIRED' and the Flutter app will too, so
+ * changing either string is a breaking API change rather than a rename.
+ *
+ * Exported for readability at the call sites — but note that importing the
+ * constant into a test does NOT protect the wire value, because both sides then
+ * move together and the assertion still passes. `trust-proxy`-style value
+ * pinning is what catches that, so the suite asserts the literal strings
+ * separately; see the "pins the wire values" test.
  */
 export const RESUME_REQUIRED = 'RESUME_REQUIRED';
 export const RESUME_SCANNING = 'RESUME_SCANNING';
