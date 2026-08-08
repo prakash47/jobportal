@@ -32,30 +32,42 @@ type RawParams = Record<string, string | string[] | undefined>;
 // and forwarding it to Elasticsearch would silently turn today's "200 with
 // unfiltered results" into "0 results". Dropping preserves that behaviour,
 // and mirrors how a non-finite expMin is already discarded below.
-const EMPLOYMENT_TYPE_BY_PARAM: Readonly<Record<string, EmploymentType>> = {
-  FULL_TIME: 'FULL_TIME',
-  PART_TIME: 'PART_TIME',
-  CONTRACTOR: 'CONTRACTOR',
-  INTERN: 'INTERN',
-};
+//
+// These are Maps, not object literals, and that is load-bearing rather than
+// stylistic. `table[value]` on an object literal walks the prototype chain, so
+// `?emp=toString` resolves to Object.prototype.toString — a FUNCTION, which is
+// not undefined, so it survives a `!== undefined` guard and lands in a
+// `terms` clause. JSON.stringify then renders it as `null`, Elasticsearch
+// rejects the body with a 400, and because the website's SRP calls searchJobs
+// straight from a server component with no try/catch, an anonymous GET of
+// `/jobs?emp=toString` returns a 500. `?emp=__proto__` is quieter and worse:
+// it serialises to `{}`, which ES accepts, so the page silently reports zero
+// jobs. `Map.get` consults only real entries, so the whole class is impossible
+// by construction — do not "simplify" these back into object literals.
+const EMPLOYMENT_TYPE_BY_PARAM: ReadonlyMap<string, EmploymentType> = new Map([
+  ['FULL_TIME', 'FULL_TIME'],
+  ['PART_TIME', 'PART_TIME'],
+  ['CONTRACTOR', 'CONTRACTOR'],
+  ['INTERN', 'INTERN'],
+]);
 
-const WORK_MODE_BY_PARAM: Readonly<Record<string, WorkMode>> = {
-  'on-site': 'ONSITE',
-  hybrid: 'HYBRID',
-  remote: 'REMOTE',
-};
+const WORK_MODE_BY_PARAM: ReadonlyMap<string, WorkMode> = new Map([
+  ['on-site', 'ONSITE'],
+  ['hybrid', 'HYBRID'],
+  ['remote', 'REMOTE'],
+]);
 
 // Maps each raw value through `table`, drops the unrecognised ones, and
 // de-duplicates — a repeated `?mode=remote&mode=remote` must not widen the
 // `terms` clause with the same value twice.
 function mapFacet<T extends string>(
   raw: string[] | undefined,
-  table: Readonly<Record<string, T>>,
+  table: ReadonlyMap<string, T>,
 ): T[] {
   if (!raw?.length) return [];
   const out: T[] = [];
   for (const value of raw) {
-    const mapped = table[value];
+    const mapped = table.get(value);
     if (mapped !== undefined && !out.includes(mapped)) out.push(mapped);
   }
   return out;

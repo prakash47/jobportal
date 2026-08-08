@@ -108,6 +108,39 @@ describe('parseSrpSearchParams', () => {
     expect(parseSrpSearchParams({ emp: 'full_time', mode: 'ONSITE' })).toEqual({});
   });
 
+  // Regression: the first cut of this used object literals, so `table[value]`
+  // walked the prototype chain. `emp=toString` resolved to a FUNCTION, passed
+  // the `!== undefined` guard, reached Elasticsearch as `null` inside a
+  // `terms` clause and 500'd the public SRP; `emp=__proto__` serialised to
+  // `{}` and silently reported zero jobs. The fixtures above cannot catch it,
+  // because BOGUS and teleport really are absent from the tables — only a key
+  // that Object.prototype actually defines exercises the hole.
+  it('drops Object.prototype keys instead of resolving them', () => {
+    for (const key of [
+      'toString',
+      'constructor',
+      'valueOf',
+      'hasOwnProperty',
+      'isPrototypeOf',
+      'propertyIsEnumerable',
+      'toLocaleString',
+      '__proto__',
+    ]) {
+      expect(parseSrpSearchParams({ emp: key })).toEqual({});
+      expect(parseSrpSearchParams({ mode: key })).toEqual({});
+    }
+  });
+
+  // The type says EmploymentType[]; the prototype bug put a Function there and
+  // tsc could not see it, so assert the runtime type too.
+  it('only ever emits primitive strings as facet values', () => {
+    const out = parseSrpSearchParams({ emp: ['FULL_TIME', 'toString'], mode: ['remote', '__proto__'] });
+    for (const v of [...(out.employmentTypes ?? []), ...(out.workModes ?? [])]) {
+      expect(typeof v).toBe('string');
+    }
+    expect(out).toEqual({ employmentTypes: ['FULL_TIME'], workModes: ['REMOTE'] });
+  });
+
   it('de-duplicates repeated facet values', () => {
     expect(parseSrpSearchParams({ mode: ['remote', 'remote'] })).toEqual({
       workModes: ['REMOTE'],
