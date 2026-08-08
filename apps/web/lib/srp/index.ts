@@ -6,7 +6,8 @@ export {
 } from './breadcrumbs';
 // The SRP param mapping moved to @jobportal/domain so the mobile GET /jobs
 // applies the identical URL→SearchJobsParams rules (ADR 0002) — including the
-// years→months conversion and the emp/mode no-ops.
+// years→months conversion and the emp/mode normalisation (`mode=on-site`
+// becomes the WorkMode enum ONSITE; unrecognised values are dropped).
 export {
   buildSrpHref,
   parseSrpSearchParams,

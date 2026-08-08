@@ -33,7 +33,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-07-30 after `bugfix/forgot-password-otp` merged. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/srp-emp-mode-filters` | 2026-08-08 | ⚠️ **COMMENT-ONLY — no model, field, enum or migration change.** One stale line on `enum WorkMode` said the field becomes "Filterable on the public SRP later"; this branch makes it filterable now. Safe to take over if you need the lock — ping me and I'll drop the line. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |

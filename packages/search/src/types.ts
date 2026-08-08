@@ -3,10 +3,12 @@
 // row changes, the indexer rewrites the doc.
 
 // Mirrors of the Prisma `EmploymentType` / `WorkMode` enums
-// (packages/db/prisma/schema.prisma). Declared structurally rather than
-// imported so `packages/search` keeps its current dependency shape — the
-// indexer already casts Prisma rows into `JobInput`, and these values are
-// stored in the index verbatim, exactly as `status` is.
+// (packages/db/prisma/schema.prisma). Hand-written unions rather than imported
+// Prisma types, following this file's existing treatment of `status` — a doc
+// shape describes what is stored in Elasticsearch, which is decoupled from the
+// row it was denormalised from. (`@jobportal/db` IS a dependency here, so this
+// is a consistency choice, not a dependency constraint.) The cost is that
+// these must be updated by hand if the enums gain a member.
 export type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACTOR' | 'INTERN';
 export type WorkMode = 'ONSITE' | 'REMOTE' | 'HYBRID';
 

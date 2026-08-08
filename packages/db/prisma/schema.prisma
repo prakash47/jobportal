@@ -61,7 +61,9 @@ enum EmploymentType {
   INTERN
 }
 
-// SRS §4.9.3 — wizard "work mode" step. Filterable on the public SRP later.
+// SRS §4.9.3 — wizard "work mode" step. Filterable on the public SRP via the
+// ?mode= facet (ADR 0002 decision 6). Note the URL spellings are on-site /
+// hybrid / remote, not these enum names — @jobportal/domain maps between them.
 enum WorkMode {
   ONSITE
   REMOTE

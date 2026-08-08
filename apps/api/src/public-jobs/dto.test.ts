@@ -77,11 +77,23 @@ describe('ListJobsQueryDto', () => {
     expect(ListJobsQueryDto.safeParse({ postedWithin: '14' }).success).toBe(false);
   });
 
-  it('still accepts emp/mode for URL parity even though they do not filter', () => {
-    // Accepted so a URL copied from the website round-trips; documented as
-    // non-functional so the app does not ship a filter that does nothing.
-    const r = ListJobsQueryDto.safeParse({ emp: 'FULL_TIME', mode: ['REMOTE'] });
+  it('accepts emp/mode in the spellings the website publishes', () => {
+    // Both filter as of ADR 0002 decision 6. The spellings matter and differ
+    // between the two facets: `emp` uses the enum form, `mode` does NOT —
+    // `on-site`, not the WorkMode enum's ONSITE. The DTO keeps them as free
+    // strings (like `skill`/`city`) so the accepted set lives only in
+    // parseSrpSearchParams and the API cannot drift from the website.
+    const r = ListJobsQueryDto.safeParse({ emp: 'FULL_TIME', mode: ['on-site', 'remote'] });
     expect(r.success).toBe(true);
+  });
+
+  it('accepts — rather than rejects — a value the parser will drop', () => {
+    // Deliberate: an unrecognised value filters nothing instead of 400-ing, so
+    // a stale bookmark still renders a page. Enforcement is the parser's job.
+    for (const bad of ['BOGUS', 'ONSITE', 'toString']) {
+      expect(ListJobsQueryDto.safeParse({ emp: bad }).success).toBe(true);
+      expect(ListJobsQueryDto.safeParse({ mode: bad }).success).toBe(true);
+    }
   });
 });
 
