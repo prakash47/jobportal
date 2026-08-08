@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Jayesh | `feature/public-companies-api` | **Companies for mobile (ADR 0002 step 7)** — `GET /v1/companies` (directory: `category`/`sort`/`hiring`/`page`, reusing `@jobportal/domain/company-params` + the SSR's exact orderBy ladder and the grouped open-roles count — no N+1) and `GET /v1/companies/:handle` (`<slug>-overview-<id>`, 308 on drift, with `loadCompany`/`loadRelatedCompanies`/openings/reviews ported out of the unexported page-file functions). Page size **20** per the owner's decision (the web directory uses 24). Also moves **`parseHighlightSections`** into `@jobportal/domain` so the two surfaces cannot disagree on what a valid culture block is, rather than duplicating 18 lines. | `packages/domain` (**append** — new `company-highlights.ts` + one barrel line) and a one-line import swap in `apps/web/components/companies/CompanyHighlights.tsx`. No schema, no migration, no flag, no `theme.css`, no `keys.ts`. |
 
 ---
 
