@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth.controller';
 import { GoogleOAuthController } from './google-oauth.controller';
+import { MobileAuthController } from './mobile-auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleOAuthService } from './google-oauth.service';
 import { EmailVerificationService } from './email-verification.service';
@@ -22,7 +23,7 @@ import { EmailModule } from '../email/email.module';
     // before SRS §4.13 landed).
     EmailModule,
   ],
-  controllers: [AuthController, GoogleOAuthController],
+  controllers: [AuthController, GoogleOAuthController, MobileAuthController],
   providers: [
     AuthService,
     GoogleOAuthService,

@@ -5,6 +5,7 @@
 import './instrument';
 
 import 'reflect-metadata';
+import { VERSION_NEUTRAL, VersioningType } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
@@ -18,6 +19,22 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.use(cookieParser());
+
+  // URI versioning for the public/mobile surface (ADR 0002 decision 2).
+  //
+  // defaultVersion: VERSION_NEUTRAL is load-bearing — it means every EXISTING
+  // controller keeps its exact current path (`/auth/login`, `/me/saved-jobs`,
+  // `/recruiter/jobs`, …). Only a controller that opts in with
+  // `@Controller({ path: 'x', version: '1' })` moves to `/v1/x`. A plain
+  // setGlobalPrefix('v1') would have relocated all 36 controllers and broken
+  // apps/web, apps/recruiter and apps/sadmin in one commit.
+  //
+  // Why version at all, when the websites never needed it: an installed mobile
+  // binary cannot be rolled forward. A field rename that is a one-line fix on
+  // the web permanently breaks every phone that has not updated, and a version
+  // prefix cannot be retrofitted after v1.0 ships without breaking those same
+  // users. It costs nothing today and is unbuyable later.
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: VERSION_NEUTRAL });
 
   const allowedOrigins = [
     process.env.WEB_URL ?? 'http://localhost:3000',
