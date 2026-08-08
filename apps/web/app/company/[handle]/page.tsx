@@ -19,6 +19,7 @@ import { SiteShell } from '../../../components/shell/SiteShell';
 import { JsonLd } from '../../../lib/seo';
 import { breadcrumbList, organization } from '../../../lib/seo/json-ld';
 import { parseCompanySlug } from '@jobportal/domain/slug';
+import { publicAssetUrl } from '../../../lib/assets';
 
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
@@ -84,7 +85,7 @@ async function loadRelatedCompanies(
     id: p.id,
     slug: p.slug,
     name: p.name,
-    logoUrl: p.logoUrl,
+    logoUrl: publicAssetUrl(p.logoUrl),
     averageRating: p.averageRating,
     openRoles: openByCompany.get(p.id) ?? 0,
   }));
@@ -138,7 +139,7 @@ export default async function CompanyProfilePage({ params }: PageProps) {
   const orgLd = organization({
     name: company.name,
     url: canonicalUrl,
-    ...(company.logoUrl ? { logo: company.logoUrl } : {}),
+    ...(publicAssetUrl(company.logoUrl) ? { logo: publicAssetUrl(company.logoUrl)! } : {}),
     ...(company.description ? { description: company.description } : {}),
     ...(company.websiteUrl ? { sameAs: [company.websiteUrl] } : {}),
   });
@@ -191,7 +192,7 @@ export default async function CompanyProfilePage({ params }: PageProps) {
         <CompanyProfileHero
           id={company.id}
           name={company.name}
-          logoUrl={company.logoUrl}
+          logoUrl={publicAssetUrl(company.logoUrl)}
           industryName={industryName}
           companyType={company.companyType}
           hqCityName={hqCityName}

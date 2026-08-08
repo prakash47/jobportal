@@ -14,7 +14,8 @@
     "./company-params": "./src/company-params.ts",
     "./company-highlights": "./src/company-highlights.ts",
     "./article-params": "./src/article-params.ts",
-    "./home-queries": "./src/home-queries.ts"
+    "./home-queries": "./src/home-queries.ts",
+    "./asset-url": "./src/asset-url.ts"
   },
   "scripts": {
     "lint": "echo 'no lint configured yet'",
