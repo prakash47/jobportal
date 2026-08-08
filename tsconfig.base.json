@@ -35,7 +35,9 @@
       "@jobportal/observability": ["packages/observability/src/index.ts"],
       "@jobportal/observability/*": ["packages/observability/src/*"],
       "@jobportal/types": ["packages/types/src/index.ts"],
-      "@jobportal/types/*": ["packages/types/src/*"]
+      "@jobportal/types/*": ["packages/types/src/*"],
+      "@jobportal/domain": ["packages/domain/src/index.ts"],
+      "@jobportal/domain/*": ["packages/domain/src/*"]
     }
   }
 }

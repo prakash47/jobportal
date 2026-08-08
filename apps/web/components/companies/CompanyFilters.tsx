@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@jobportal/ui';
 import { Check, Filter } from '@jobportal/ui/icons';
-import type { DirectorySort } from '../../lib/companies/params';
+import type { DirectorySort } from '@jobportal/domain/company-params';
 
 export interface CompanyFiltersProps {
   industries: { slug: string; name: string; count: number }[];

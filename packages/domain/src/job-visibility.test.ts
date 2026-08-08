@@ -6,7 +6,7 @@ vi.mock('@jobportal/db', () => ({
 
 import { prisma } from '@jobportal/db';
 import type { AccessClaims } from '@jobportal/auth';
-import { canViewJob, isPubliclyReadable } from './visibility';
+import { canViewJob, isPubliclyReadable } from './job-visibility';
 
 const m = prisma as unknown as {
   jobCollaborator: { findUnique: ReturnType<typeof vi.fn> };

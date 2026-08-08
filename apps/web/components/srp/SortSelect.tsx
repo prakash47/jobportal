@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useTransition } from 'react';
 // Direct path (NOT the lib/srp barrel) — see SrpPaginationLink for
 // the barrel-vs-client-bundle rationale.
-import { buildSrpHref, readSelections } from '../../lib/srp/params';
+import { buildSrpHref, readSelections } from '@jobportal/domain/srp-params';
 
 const OPTIONS = [
   { value: 'relevance', label: 'Relevance' },

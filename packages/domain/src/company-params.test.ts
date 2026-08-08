@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDirectoryQuery, parseDirectoryParams } from './params';
+import { buildDirectoryQuery, parseDirectoryParams } from './company-params';
 
 describe('parseDirectoryParams', () => {
   it('returns defaults on an empty query', () => {

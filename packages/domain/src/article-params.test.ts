@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseArticleIndexParams } from './params';
+import { parseArticleIndexParams } from './article-params';
 
 describe('parseArticleIndexParams', () => {
   it('returns defaults on an empty query', () => {

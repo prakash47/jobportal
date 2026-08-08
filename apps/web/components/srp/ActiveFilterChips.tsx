@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { X } from '@jobportal/ui/icons';
 // Direct path (NOT the lib/srp barrel) — the barrel re-exports Prisma-touching
 // helpers; importing it in a client component drags server code into the bundle.
-import { buildSrpHref, readSelections, type SrpHrefInput } from '../../lib/srp/params';
+import { buildSrpHref, readSelections, type SrpHrefInput } from '@jobportal/domain/srp-params';
 import { EMPLOYMENT_LABELS } from '../../lib/job/format';
 import type { FilterOption } from './FilterSidebar';
 

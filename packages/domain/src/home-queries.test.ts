@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hydratePopularItems } from './queries';
+import { hydratePopularItems } from './home-queries';
 
 describe('hydratePopularItems', () => {
   it('hydrates by id and preserves the group input order', () => {

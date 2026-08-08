@@ -18,7 +18,7 @@ import { CompanyProfileNav, type CompanyNavItem } from '../../../components/comp
 import { SiteShell } from '../../../components/shell/SiteShell';
 import { JsonLd } from '../../../lib/seo';
 import { breadcrumbList, organization } from '../../../lib/seo/json-ld';
-import { parseCompanySlug } from '../../../lib/url/slug';
+import { parseCompanySlug } from '@jobportal/domain/slug';
 
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
