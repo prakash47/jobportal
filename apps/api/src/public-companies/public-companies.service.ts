@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { prisma, type Prisma } from '@jobportal/db';
-import { parseCompanySlug, buildCompanySlug } from '@jobportal/domain/slug';
+import { parseCompanySlug, buildCompanyHandle } from '@jobportal/domain/slug';
 import {
   parseHighlightSections,
   type HighlightSection,
@@ -151,7 +151,7 @@ export class PublicCompaniesService {
         id: r.id,
         name: r.name,
         slug: r.slug,
-        handle: buildCompanySlug({ name: r.name, id: r.id }),
+        handle: buildCompanyHandle({ slug: r.slug, id: r.id }),
         logoUrl: r.logoUrl,
         industryName: r.industry?.name ?? null,
         hqCityName: r.headquartersCity?.name ?? null,
@@ -192,7 +192,12 @@ export class PublicCompaniesService {
     });
     if (!company) throw new NotFoundException('Company not found');
 
-    const canonical = buildCompanySlug({ name: company.name, id: company.id });
+    // Built from the STORED slug, never from the name. Company.slug is an
+    // independent @unique column that drifts from the name ("Tarang Hotels &
+    // Resorts" is stored as `tarang-hotels`), and the drift check below
+    // compares against that column — so deriving the canonical from the name
+    // made the handle fail its own check and 308 to itself forever.
+    const canonical = buildCompanyHandle({ slug: company.slug, id: company.id });
     // No visibility gate to run first (unlike jobs), but the redirect still
     // comes after the existence check so an unknown id cannot be probed via a
     // Location header.
@@ -288,7 +293,7 @@ export class PublicCompaniesService {
       id: p.id,
       slug: p.slug,
       name: p.name,
-      handle: buildCompanySlug({ name: p.name, id: p.id }),
+      handle: buildCompanyHandle({ slug: p.slug, id: p.id }),
       logoUrl: p.logoUrl,
       averageRating: p.averageRating,
       openRoles: openByCompany.get(p.id) ?? 0,

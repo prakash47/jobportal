@@ -33,10 +33,15 @@ const db = prisma as unknown as {
 const svc = new PublicCompaniesService();
 const base = { category: null, sort: 'rating' as const, hiring: false, page: 1 };
 
+// name and slug DELIBERATELY disagree, mirroring the real seeded row
+// "Tarang Hotels & Resorts" -> slug "tarang-hotels". The previous fixture used
+// 'Sutra Labs'/'sutra-labs', where slugify(name) happens to equal slug — which
+// collapsed the two sources of truth into one value and made every canonical
+// test below incapable of failing.
 const company = {
   id: 12,
-  slug: 'sutra-labs',
-  name: 'Sutra Labs',
+  slug: 'tarang-hotels',
+  name: 'Tarang Hotels & Resorts',
   description: 'd',
   logoUrl: null,
   websiteUrl: null,
@@ -144,10 +149,11 @@ describe('list', () => {
 
   it('derives the handle so the client never has to build it', async () => {
     db.company.findMany.mockResolvedValue([
-      { id: 12, slug: 'sutra-labs', name: 'Sutra Labs', logoUrl: null, averageRating: null, reviewCount: 0, industry: null, headquartersCity: null },
+      { id: 10, slug: 'tarang-hotels', name: 'Tarang Hotels & Resorts', logoUrl: null, averageRating: null, reviewCount: 0, industry: null, headquartersCity: null },
     ]);
     db.company.count.mockResolvedValue(1);
-    expect((await svc.list(base)).hits[0]!.handle).toBe('sutra-labs-overview-12');
+    // From the STORED slug — slugify(name) would give 'tarang-hotels-resorts'.
+    expect((await svc.list(base)).hits[0]!.handle).toBe('tarang-hotels-overview-10');
   });
 });
 
@@ -165,7 +171,23 @@ describe('detail', () => {
   it('redirects a drifted handle to the canonical one', async () => {
     const err = await svc.detail('old-name-overview-12').catch((e: unknown) => e);
     expect(err).toBeInstanceOf(CompanySlugRedirect);
-    expect((err as CompanySlugRedirect).handle).toBe('sutra-labs-overview-12');
+    expect((err as CompanySlugRedirect).handle).toBe('tarang-hotels-overview-12');
+  });
+
+  it('NEVER redirects a handle to itself — the canonical must come from the stored slug', async () => {
+    // Deriving it from the name instead produced 'tarang-hotels-resorts-overview-12',
+    // which then failed its own check and 308'd to itself forever.
+    const input = 'tarang-hotels-resorts-overview-12';
+    const err = await svc.detail(input).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(CompanySlugRedirect);
+    expect((err as CompanySlugRedirect).handle).not.toBe(input);
+    expect((err as CompanySlugRedirect).handle).toBe('tarang-hotels-overview-12');
+  });
+
+  it('accepts the stored-slug handle without redirecting', async () => {
+    await expect(svc.detail('tarang-hotels-overview-12')).resolves.toMatchObject({
+      handle: 'tarang-hotels-overview-12',
+    });
   });
 
   it('checks existence BEFORE redirecting, so an unknown id cannot be probed', async () => {
@@ -176,15 +198,15 @@ describe('detail', () => {
   });
 
   it('treats an ABSENT kyc row as unverified — most companies have none', async () => {
-    expect((await svc.detail('sutra-labs-overview-12')).isVerified).toBe(false);
+    expect((await svc.detail('tarang-hotels-overview-12')).isVerified).toBe(false);
     db.company.findUnique.mockResolvedValue({ ...company, kyc: { status: 'PENDING' } });
-    expect((await svc.detail('sutra-labs-overview-12')).isVerified).toBe(false);
+    expect((await svc.detail('tarang-hotels-overview-12')).isVerified).toBe(false);
     db.company.findUnique.mockResolvedValue({ ...company, kyc: { status: 'VERIFIED' } });
-    expect((await svc.detail('sutra-labs-overview-12')).isVerified).toBe(true);
+    expect((await svc.detail('tarang-hotels-overview-12')).isVerified).toBe(true);
   });
 
   it('gates openings to ACTIVE and caps them at 10, newest first', async () => {
-    await svc.detail('sutra-labs-overview-12');
+    await svc.detail('tarang-hotels-overview-12');
     const args = db.job.findMany.mock.calls[0]![0];
     expect(args.where).toEqual({ companyId: 12, status: 'ACTIVE' });
     expect(args.take).toBe(10);
@@ -195,20 +217,20 @@ describe('detail', () => {
     db.companyReview.findMany.mockResolvedValue([
       { id: 1, rating: 4, title: null, body: 'b', isVerified: false, createdAt: new Date('2026-07-20T00:00:00Z'), user: null },
     ]);
-    const out = await svc.detail('sutra-labs-overview-12');
+    const out = await svc.detail('tarang-hotels-overview-12');
     expect(out.reviews[0]!.authorName).toBeNull();
     expect(out.reviews[0]!.createdAt).toBe('2026-07-20T00:00:00.000Z');
   });
 
   it('returns no related companies when the company has no industry', async () => {
     db.company.findUnique.mockResolvedValue({ ...company, industryId: null });
-    const out = await svc.detail('sutra-labs-overview-12');
+    const out = await svc.detail('tarang-hotels-overview-12');
     expect(out.relatedCompanies).toEqual([]);
   });
 
   it('excludes the company itself from its own peers', async () => {
     db.company.findMany.mockResolvedValue([]);
-    await svc.detail('sutra-labs-overview-12');
+    await svc.detail('tarang-hotels-overview-12');
     expect(db.company.findMany.mock.calls[0]![0].where).toEqual({ industryId: 4, id: { not: 12 } });
   });
 
@@ -222,7 +244,7 @@ describe('detail', () => {
         'nonsense',
       ],
     });
-    const out = await svc.detail('sutra-labs-overview-12');
+    const out = await svc.detail('tarang-hotels-overview-12');
     expect(out.highlights).toEqual([{ heading: 'Culture', body: 'Good' }]);
   });
 });

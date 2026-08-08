@@ -56,8 +56,25 @@ export function parseCompanySlug(input: string): ParsedJobSlug | null {
   return { slug: m[1]!, id };
 }
 
+// MINTS a brand-new handle from a name. Correct only at company-creation
+// time, when no `slug` column exists yet.
+//
+// It is the WRONG function for rebuilding an existing company's permalink:
+// `Company.slug` is an independent `@unique` column that is de-duplicated and
+// edited separately from `name`, so `slugify(name)` and `slug` routinely
+// disagree — "Tarang Hotels & Resorts" is stored as `tarang-hotels`. Use
+// buildCompanyHandle for anything that reads an existing row.
 export function buildCompanySlug(opts: { name: string; id: number }): string {
   return `${slugify(opts.name)}-overview-${opts.id}`;
+}
+
+// The permalink for a company that already exists, built from its STORED slug.
+//
+// This is the pairing for parseCompanySlug, which returns the stored-slug half
+// — so `parse` and `build` round-trip. Deriving it from the name instead makes
+// a handle that fails its own canonical check and 308s to itself forever.
+export function buildCompanyHandle(opts: { slug: string; id: number }): string {
+  return `${opts.slug}-overview-${opts.id}`;
 }
 
 // "working-at-tcs-2114" → { slug: "tcs", id: 2114 }
