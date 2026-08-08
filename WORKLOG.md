@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `bugfix/trust-proxy-client-ip` | **Client IP behind a proxy (ADR 0002 negative-risks list).** `trust proxy` is never set, so `req.ip` is the socket peer — behind Render/Fly/Cloudflare that is the PROXY, meaning the whole internet shares one 100/min throttle bucket and every `Session.ipAddress` / `OtpChallenge.ipAddress` row records the proxy. Adds a parsed `TRUST_PROXY` env setting (default = today's exact behaviour) rather than the ADR's literal one-liner, which would have made the limiter spoofable. | `apps/api/src/main.ts`, new `apps/api/src/common/trust-proxy.ts` + test, `.env.example`. **No lock needed** — no schema, no theme, no types, no barrels, no flag keys. |
 
 ---
 
