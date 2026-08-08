@@ -63,3 +63,18 @@ export const WORK_MODE_LABELS: Record<string, string> = {
   REMOTE: 'Remote',
   HYBRID: 'Hybrid',
 };
+
+/**
+ * Resolve a display label, falling back to the raw value.
+ *
+ * Use this — never a bare `TABLE[value]` — whenever the value comes from the
+ * URL. A plain index walks the prototype chain, so `?emp=__proto__` returns
+ * Object.prototype and `?emp=toString` returns a function; React then refuses
+ * to render the result ("Objects are not valid as a React child") and the whole
+ * page 500s for an anonymous visitor. The own-property check makes the lookup
+ * total. Callers whose value comes from the database (a real enum column) were
+ * never exposed to this, but going through here costs them nothing.
+ */
+export function labelFor(table: Record<string, string>, value: string): string {
+  return (Object.hasOwn(table, value) ? table[value] : undefined) ?? value;
+}

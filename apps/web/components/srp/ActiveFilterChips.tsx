@@ -6,7 +6,7 @@ import { X } from '@jobportal/ui/icons';
 // Direct path (NOT the lib/srp barrel) — the barrel re-exports Prisma-touching
 // helpers; importing it in a client component drags server code into the bundle.
 import { buildSrpHref, readSelections, type SrpHrefInput } from '@jobportal/domain/srp-params';
-import { EMPLOYMENT_LABELS } from '../../lib/job/format';
+import { EMPLOYMENT_LABELS, labelFor } from '../../lib/job/format';
 import type { FilterOption } from './FilterSidebar';
 
 const WORK_MODE_LABELS: Record<string, string> = {
@@ -20,6 +20,11 @@ const POSTED_LABELS: Record<number, string> = {
   7: 'Last 7 days',
   30: 'Last 30 days',
 };
+
+// The emp/mode chip labels are looked up with a value taken STRAIGHT FROM THE
+// URL, so `labelFor` (not a bare `table[value]`) is required here — see its
+// docblock. The skill/city/industry lookups below are Maps and were never
+// exposed to it.
 
 export interface ActiveFilterChipsProps {
   basePath: string;
@@ -86,14 +91,14 @@ export function ActiveFilterChips({ basePath, skills, cities, industries }: Acti
   for (const value of sel.emp) {
     chips.push({
       key: `emp-${value}`,
-      label: EMPLOYMENT_LABELS[value] ?? value,
+      label: labelFor(EMPLOYMENT_LABELS, value),
       href: hrefWith({ emp: sel.emp.filter((e) => e !== value) }),
     });
   }
   for (const value of sel.mode) {
     chips.push({
       key: `mode-${value}`,
-      label: WORK_MODE_LABELS[value] ?? value,
+      label: labelFor(WORK_MODE_LABELS, value),
       href: hrefWith({ mode: sel.mode.filter((m) => m !== value) }),
     });
   }
