@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Jayesh | `feature/public-jobs-api` | **Public job browse for mobile (ADR 0002 step 5)** — the biggest single unblock. New `apps/api` module: **`GET /v1/jobs`** (paginated ACTIVE-only search wrapping `searchJobs` from `@jobportal/search`, params ported via `@jobportal/domain/srp-params`, plus the two batched company-logo/city-name hydration joins the SSR does) and **`GET /v1/jobs/:slug`** (slug parsed with `@jobportal/domain/slug`, visibility gated by `@jobportal/domain/job-visibility` with the check running **before** the 308 so an unapproved job's title cannot leak in a `Location` header). Also **`POST /v1/me/job-state`** — the bulk saved/applied lookup, shipped here deliberately because it changes the `/jobs` response shape and is far cheaper to decide now than to version later. Optional-auth guard (non-throwing) so a public route can carry per-user flags. | **None of the locked surfaces** — no schema, no migration, no `theme.css`, no `packages/types`, no `keys.ts`, no barrels. `apps/web`/`recruiter`/`sadmin` untouched; `@jobportal/domain` is consumed, not modified. |
 
 ---
 
