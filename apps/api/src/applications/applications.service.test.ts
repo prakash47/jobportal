@@ -5,6 +5,7 @@ vi.mock('@jobportal/db', () => ({
   prisma: {
     user: { findUnique: vi.fn() },
     job: { findUnique: vi.fn() },
+    candidate: { findUnique: vi.fn() },
     application: {
       create: vi.fn(),
       findUnique: vi.fn(),
@@ -18,11 +19,16 @@ vi.mock('@jobportal/db', () => ({
 }));
 
 import { prisma } from '@jobportal/db';
-import { ApplicationsService } from './applications.service';
+import {
+  ApplicationsService,
+  RESUME_REQUIRED,
+  RESUME_SCANNING,
+} from './applications.service';
 
 const mockedPrisma = prisma as unknown as {
   user: { findUnique: ReturnType<typeof vi.fn> };
   job: { findUnique: ReturnType<typeof vi.fn> };
+  candidate: { findUnique: ReturnType<typeof vi.fn> };
   application: {
     create: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
@@ -65,6 +71,13 @@ describe('ApplicationsService.apply', () => {
       upgradeAvailable: false,
     });
     fakeNotifications.notifyNewApplication.mockResolvedValue(undefined);
+    // A usable CV is the DEFAULT for this block. Every test here predates
+    // ADR 0002 decision 7 and is about some other gate; making them each
+    // restate the resume would bury what they actually assert. The resume
+    // gate gets its own describe below, where it is the subject.
+    mockedPrisma.candidate.findUnique.mockResolvedValue({
+      activeResume: { id: 900, scanStatus: 'CLEAN', deletedAt: null },
+    });
     service = new ApplicationsService(
       fakeEmail as unknown as never,
       fakeQuota as unknown as never,
@@ -86,7 +99,7 @@ describe('ApplicationsService.apply', () => {
     const app = await service.apply(42, 7);
     expect(app.id).toBe(1);
     expect(mockedPrisma.application.create).toHaveBeenCalledWith({
-      data: { userId: 42, jobId: 7, status: 'APPLIED' },
+      data: { userId: 42, jobId: 7, status: 'APPLIED', resumeId: 900 },
     });
   });
 
@@ -107,6 +120,7 @@ describe('ApplicationsService.apply', () => {
         userId: 42,
         jobId: 7,
         status: 'APPLIED',
+        resumeId: 900,
         coverLetter: 'Hello, I am interested.',
       },
     });
@@ -251,6 +265,169 @@ describe('ApplicationsService.apply', () => {
     fakeQuota.consume.mockRejectedValueOnce(new Error('429 race'));
     await expect(service.apply(42, 7)).rejects.toThrow('429 race');
     expect(mockedPrisma.application.delete).toHaveBeenCalledWith({ where: { id: 99 } });
+  });
+});
+
+// ADR 0002 decision 7 — a CV is required to apply, and the one used is pinned
+// to the application. Before this, the recruiter's resume view resolved the
+// candidate's CURRENT CV, so replacing it rewrote what recruiters saw for every
+// application already sent.
+describe('ApplicationsService.apply — resume gate + snapshot', () => {
+  let service: ApplicationsService;
+
+  function verifiedUserOnActiveJob(): void {
+    mockedPrisma.user.findUnique.mockResolvedValue({
+      emailVerified: true,
+      email: 'cand@example.com',
+      name: 'Cand',
+    });
+    mockedPrisma.job.findUnique.mockResolvedValue({
+      status: 'ACTIVE',
+      title: 'SE',
+      canonicalSlug: 'se-1',
+      postedById: 5,
+      company: { name: 'Acme' },
+    });
+    mockedPrisma.application.create.mockResolvedValue({
+      id: 1,
+      userId: 42,
+      jobId: 7,
+      status: 'APPLIED',
+      appliedAt: new Date(),
+    });
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    fakeEmail.enqueueApplicationSubmitted.mockResolvedValue(undefined);
+    fakeQuota.consume.mockResolvedValue({
+      count: 1,
+      limit: 10,
+      unlimited: false,
+      upgradeAvailable: false,
+    });
+    fakeNotifications.notifyNewApplication.mockResolvedValue(undefined);
+    service = new ApplicationsService(
+      fakeEmail as unknown as never,
+      fakeQuota as unknown as never,
+      fakeNotifications as unknown as never,
+    );
+    verifiedUserOnActiveJob();
+  });
+
+  it('pins the active resume id onto the application', async () => {
+    mockedPrisma.candidate.findUnique.mockResolvedValue({
+      activeResume: { id: 900, scanStatus: 'CLEAN', deletedAt: null },
+    });
+    await service.apply(42, 7);
+    const arg = mockedPrisma.application.create.mock.calls[0]![0];
+    expect(arg.data.resumeId).toBe(900);
+  });
+
+  // Without this, the previous test proves only that SOME id was written — it
+  // would stay green if the lookup were scoped to the wrong user, which would
+  // attach a stranger's document to the application. The neighbouring list
+  // block pins its query scope the same way.
+  it('looks the resume up for the APPLYING user, not anyone else', async () => {
+    mockedPrisma.candidate.findUnique.mockResolvedValue({
+      activeResume: { id: 900, scanStatus: 'CLEAN', deletedAt: null },
+    });
+    await service.apply(42, 7);
+    expect(mockedPrisma.candidate.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 42 } }),
+    );
+  });
+
+  it('403s with RESUME_REQUIRED when the candidate has no active resume', async () => {
+    mockedPrisma.candidate.findUnique.mockResolvedValue({ activeResume: null });
+    await expect(service.apply(42, 7)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(mockedPrisma.application.create).not.toHaveBeenCalled();
+  });
+
+  // The Candidate profile row is provisioned lazily on the first /profile read,
+  // so a user who registered and never opened their profile has none at all.
+  // That must read as "no resume", not blow up.
+  it('403s rather than throwing when the Candidate row does not exist yet', async () => {
+    mockedPrisma.candidate.findUnique.mockResolvedValue(null);
+    await expect(service.apply(42, 7)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('403s when the active resume is soft-deleted', async () => {
+    mockedPrisma.candidate.findUnique.mockResolvedValue({
+      activeResume: { id: 900, scanStatus: 'CLEAN', deletedAt: new Date() },
+    });
+    await expect(service.apply(42, 7)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(mockedPrisma.application.create).not.toHaveBeenCalled();
+  });
+
+  it('403s while the resume is still being scanned', async () => {
+    mockedPrisma.candidate.findUnique.mockResolvedValue({
+      activeResume: { id: 900, scanStatus: 'PENDING', deletedAt: null },
+    });
+    await expect(service.apply(42, 7)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('403s on an INFECTED resume', async () => {
+    mockedPrisma.candidate.findUnique.mockResolvedValue({
+      activeResume: { id: 900, scanStatus: 'INFECTED', deletedAt: null },
+    });
+    await expect(service.apply(42, 7)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(mockedPrisma.application.create).not.toHaveBeenCalled();
+  });
+
+  // The WIRE VALUES are the contract — apps/web compares against the literal
+  // 'RESUME_REQUIRED', and the Flutter app will too. Importing the constants
+  // does NOT protect that: both sides would move together and this would stay
+  // green while every client broke. So pin the literal strings.
+  it('pins the wire values of the two codes', () => {
+    expect(RESUME_REQUIRED).toBe('RESUME_REQUIRED');
+    expect(RESUME_SCANNING).toBe('RESUME_SCANNING');
+  });
+
+  // The two 403s are NOT interchangeable: one is fixed by uploading, the other
+  // by waiting, and both clients branch on the code rather than the prose.
+  it('distinguishes the two refusals with a stable machine-readable code', async () => {
+    mockedPrisma.candidate.findUnique.mockResolvedValue({ activeResume: null });
+    const missing = await service.apply(42, 7).catch((e: unknown) => e);
+    expect((missing as ForbiddenException).getResponse()).toMatchObject({
+      code: RESUME_REQUIRED,
+    });
+
+    mockedPrisma.candidate.findUnique.mockResolvedValue({
+      activeResume: { id: 900, scanStatus: 'PENDING', deletedAt: null },
+    });
+    const scanning = await service.apply(42, 7).catch((e: unknown) => e);
+    expect((scanning as ForbiddenException).getResponse()).toMatchObject({
+      code: RESUME_SCANNING,
+    });
+
+    expect(RESUME_REQUIRED).not.toBe(RESUME_SCANNING);
+  });
+
+  // Nothing may be spent on an apply that is refused.
+  it('never reaches quota.consume when the resume gate refuses', async () => {
+    mockedPrisma.candidate.findUnique.mockResolvedValue({ activeResume: null });
+    await expect(service.apply(42, 7)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(fakeQuota.consume).not.toHaveBeenCalled();
+  });
+
+  // A closed job is about the thing the user clicked; a missing CV is about
+  // their account. Reporting the job first avoids sending someone to upload a
+  // document that would not have let them apply anyway.
+  it('reports a non-ACTIVE job before asking for a resume', async () => {
+    mockedPrisma.job.findUnique.mockResolvedValue({
+      status: 'CLOSED',
+      title: 'SE',
+      canonicalSlug: 'se-1',
+      postedById: 5,
+      company: { name: 'Acme' },
+    });
+    mockedPrisma.candidate.findUnique.mockResolvedValue({ activeResume: null });
+    const err = await service.apply(42, 7).catch((e: unknown) => e);
+    expect((err as ForbiddenException).getResponse()).not.toMatchObject({
+      code: RESUME_REQUIRED,
+    });
+    expect(mockedPrisma.candidate.findUnique).not.toHaveBeenCalled();
   });
 });
 

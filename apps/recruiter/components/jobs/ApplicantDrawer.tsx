@@ -48,6 +48,10 @@ export interface ApplicantDrawerProps {
     status: ApplicationStatus;
     appliedAt: string;
     recruiterNotes: string | null;
+    /** The resume SUBMITTED with this application (ADR 0002 decision 7).
+     *  Null on rows that predate the column. Non-null means the recruiter can
+     *  open it even if the candidate has since withdrawn their profile CV. */
+    resumeId: number | null;
     user: {
       name: string;
       email: string;
@@ -209,7 +213,13 @@ export function ApplicantDrawer({ open, onOpenChange, applicant }: ApplicantDraw
             </dl>
           </section>
 
-          {candidate?.activeResumeId !== null && candidate?.activeResumeId !== undefined && (
+          {/* Show the button whenever the API can actually serve something.
+              The snapshot comes first: an application that recorded its resume
+              stays openable even after the candidate withdraws that CV from
+              their profile, which is precisely what decision 7 is for. Legacy
+              rows carry no snapshot, so they still depend on the current CV. */}
+          {(applicant.resumeId !== null ||
+            (candidate?.activeResumeId !== null && candidate?.activeResumeId !== undefined)) && (
             <section className="border-t border-[var(--color-border)] pt-4">
               <Button variant="secondary" onClick={openResume} loading={busy}>
                 Open resume (15-min link)

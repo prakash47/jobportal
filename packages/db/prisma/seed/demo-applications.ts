@@ -372,6 +372,9 @@ export async function seedDemoApplications(prisma: PrismaClient): Promise<void> 
   // Stable User IDs 200001-200020 so re-seeds don't churn and so apps
   // can be cleared cleanly via `id BETWEEN ...`.
   const userIdByEmail = new Map<string, number>();
+  // Which resume each demo candidate applies with, so the seeded
+  // applications carry the same snapshot a real apply() would write.
+  const resumeIdByUserId = new Map<number, number>();
   for (const [idx, c] of CANDIDATES.entries()) {
     const userId = 200001 + idx;
     const user = await prisma.user.upsert({
@@ -401,7 +404,7 @@ export async function seedDemoApplications(prisma: PrismaClient): Promise<void> 
       else console.warn(`[seed:demo:apps] unknown skill "${slug}" for candidate ${c.email}`);
     }
 
-    await prisma.candidate.upsert({
+    const candidateRow = await prisma.candidate.upsert({
       where: { userId: user.id },
       create: {
         userId: user.id,
@@ -436,6 +439,50 @@ export async function seedDemoApplications(prisma: PrismaClient): Promise<void> 
         preferredCityIds,
         skillIds: candidateSkillIds,
       },
+      select: { id: true },
+    });
+
+    // --- Resume ---
+    //
+    // ADR 0002 decision 7 made a CV a hard precondition for applying. Before
+    // this, exactly ONE candidate in the whole database had one — and that
+    // account was not email-verified, so it could not apply either. Seeding
+    // without resumes would therefore ship a demo database in which NO demo
+    // candidate can apply to anything, which is the single flow testers
+    // exercise most.
+    //
+    // The row is what the apply gate reads (exists, CLEAN, not soft-deleted);
+    // it does not need bytes behind it. Nothing is written to storage for this
+    // key, so the recruiter's "open resume" cannot return a real document in
+    // dev — with R2 unconfigured, StorageService.getSignedDownloadUrl returns
+    // an opaque `local://memory/<key>` URL that the web layer already renders
+    // as preview-only, so it degrades exactly as an un-provisioned resume does
+    // today rather than erroring.
+    //
+    // Keyed on r2Key (which is @unique) so re-seeding updates rather than
+    // accumulating one dead resume per run.
+    const r2Key = `demo/resumes/${user.id}.pdf`;
+    const resume = await prisma.resume.upsert({
+      where: { r2Key },
+      create: {
+        candidateId: candidateRow.id,
+        r2Key,
+        originalFilename: `${c.name.toLowerCase().replace(/[^a-z]+/g, '-')}-resume.pdf`,
+        sizeBytes: 184_320,
+        mimeType: 'application/pdf',
+        scanStatus: 'CLEAN',
+        deletedAt: null,
+      },
+      // Re-seeding must un-delete: a tester who removed their CV mid-session
+      // would otherwise keep a soft-deleted row and stay unable to apply.
+      update: { scanStatus: 'CLEAN', deletedAt: null },
+      select: { id: true },
+    });
+    resumeIdByUserId.set(user.id, resume.id);
+
+    await prisma.candidate.update({
+      where: { id: candidateRow.id },
+      data: { activeResumeId: resume.id },
     });
   }
 
@@ -469,6 +516,10 @@ export async function seedDemoApplications(prisma: PrismaClient): Promise<void> 
           jobId: job.id,
           status,
           appliedAt,
+          // The snapshot a real apply() would have written. Without it every
+          // seeded application would take getResumeUrl's LEGACY fallback, and
+          // the demo database would not exercise the behaviour that shipped.
+          resumeId: resumeIdByUserId.get(userId) ?? null,
           // Light cover letter on a quarter of apps so the recruiter
           // dashboard has something to read.
           coverLetter:

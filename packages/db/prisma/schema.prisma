@@ -742,7 +742,13 @@ model Resume {
   uploadedAt       DateTime         @default(now())
   deletedAt        DateTime?
 
-  activeOnCandidate Candidate? @relation("ActiveResume")
+  activeOnCandidate Candidate?    @relation("ActiveResume")
+  // Applications submitted with THIS resume. Load-bearing beyond navigation:
+  // `ResumeService.delete` counts these before removing the stored object, so a
+  // document a recruiter already received survives the candidate withdrawing it
+  // from their profile. Without that, the row would outlive its bytes and the
+  // recruiter endpoint would presign a key that no longer exists.
+  applications      Application[] @relation("ApplicationResume")
 
   @@index([candidateId, deletedAt])
 }
@@ -1108,7 +1114,25 @@ model Application {
   jobId          Int
   job            Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
   status         ApplicationStatus @default(APPLIED)
-  resumeUrl      String?
+  // WHICH resume was submitted with this application (ADR 0002 decision 7).
+  //
+  // Without it, the recruiter's resume view resolved `Candidate.activeResume`
+  // — the candidate's CURRENT CV — so replacing your CV silently rewrote what
+  // recruiters saw for every application you had ever sent, and deleting it
+  // made them all read "no resume on file". A submitted document must not
+  // change after submission.
+  //
+  // NULLABLE, and permanently so: the 373 applications that predate this
+  // column cannot be backfilled, because which CV was actually sent is
+  // genuinely unknown. Those rows keep the old fall-back-to-current behaviour;
+  // every new application carries a snapshot. Replaces the `resumeUrl` string
+  // that was declared here and never written by any code path.
+  //
+  // SetNull rather than Restrict so a hard delete can never wedge account
+  // deletion. In practice resumes are soft-deleted (`Resume.deletedAt`), which
+  // leaves the row — and therefore this snapshot — intact.
+  resumeId       Int?
+  resume         Resume?           @relation("ApplicationResume", fields: [resumeId], references: [id], onDelete: SetNull)
   coverLetter    String?
   statusHistory  Json?
   // SRS §4.9.6 — recruiter-only freeform notes. Single field for MVP; a
@@ -1120,6 +1144,12 @@ model Application {
   @@unique([userId, jobId])
   @@index([userId, status])
   @@index([jobId, status])
+  // Postgres does not index a foreign key automatically. Without this, every
+  // Resume delete has to seq-scan Application to apply the SetNull. That is
+  // already worth avoiding, and the planned account-deletion endpoint (ADR 0002
+  // decision 8 — not yet built) will cascade Candidate → Resume, which would
+  // run that scan once per resume.
+  @@index([resumeId])
 }
 
 model SavedJob {

@@ -105,6 +105,12 @@ export default async function ApplicantsPage({ params, searchParams }: PageProps
         status: true,
         appliedAt: true,
         recruiterNotes: true,
+        // Whether THIS application carries a resume snapshot (ADR 0002
+        // decision 7). The drawer gated its "Open resume" button on the
+        // candidate's CURRENT activeResumeId, so a candidate withdrawing their
+        // CV hid the button for applications whose submitted document is still
+        // perfectly readable — the exact case the snapshot exists to serve.
+        resumeId: true,
         user: {
           select: {
             name: true,
@@ -134,6 +140,7 @@ export default async function ApplicantsPage({ params, searchParams }: PageProps
     status: a.status,
     appliedAt: a.appliedAt.toISOString(),
     recruiterNotes: a.recruiterNotes,
+    resumeId: a.resumeId,
     user: a.user,
   }));
 

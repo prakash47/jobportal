@@ -13,6 +13,22 @@ import { buildHistoryEntry, canTransition, isTerminal } from './state-machine';
 
 const PAGE_SIZE = 20;
 
+/**
+ * Stable error codes on the apply 403s (ADR 0002 decision 7).
+ *
+ * It is the VALUE that is the contract, not the identifier: apps/web compares
+ * against the literal 'RESUME_REQUIRED' and the Flutter app will too, so
+ * changing either string is a breaking API change rather than a rename.
+ *
+ * Exported for readability at the call sites — but note that importing the
+ * constant into a test does NOT protect the wire value, because both sides then
+ * move together and the assertion still passes. `trust-proxy`-style value
+ * pinning is what catches that, so the suite asserts the literal strings
+ * separately; see the "pins the wire values" test.
+ */
+export const RESUME_REQUIRED = 'RESUME_REQUIRED';
+export const RESUME_SCANNING = 'RESUME_SCANNING';
+
 export interface ApplicationListRow {
   id: number;
   status: ApplicationStatus;
@@ -104,6 +120,49 @@ export class ApplicationsService {
       );
     }
 
+    // ADR 0002 decision 7: a CV is required, and the one used is recorded.
+    //
+    // Ordering is deliberate. This sits AFTER the job checks, so someone
+    // applying to a closed job is told about the job rather than sent off to
+    // upload a document that would not have helped. It sits BEFORE the create,
+    // so a rejected apply cannot leave a row behind, and therefore before
+    // quota.consume, so it cannot cost a slot.
+    //
+    // The known consequence: a duplicate apply by a candidate with no CV now
+    // answers "upload a CV" rather than 409, because the duplicate check IS the
+    // create below (P2002). Accepted — after this ships, holding a CV is a
+    // precondition for the whole flow.
+    //
+    // `candidate` may be null: the Candidate profile row is provisioned lazily
+    // on the first /profile read, so a user who registered and never opened
+    // their profile has none. That is "no resume", not an error.
+    const candidate = await prisma.candidate.findUnique({
+      where: { userId },
+      select: {
+        activeResume: { select: { id: true, scanStatus: true, deletedAt: true } },
+      },
+    });
+    // Both carry a machine-readable `code`. Neither client can be asked to
+    // match on English: apps/web needs to route the user to the upload page,
+    // and the Flutter app cannot string-match a message we may reword. The
+    // envelope is additive by design (common/http-error-envelope.ts) and the
+    // quota 429's `upgradeAvailable` is the existing precedent.
+    const resume = candidate?.activeResume;
+    if (!resume || resume.deletedAt !== null) {
+      throw new ForbiddenException({
+        message: 'Upload your resume before applying.',
+        code: RESUME_REQUIRED,
+      });
+    }
+    if (resume.scanStatus !== 'CLEAN') {
+      // Distinct code AND message: this one resolves by waiting, not by
+      // uploading, so sending the user to the upload page would be wrong.
+      throw new ForbiddenException({
+        message: 'Your resume is still being scanned. Try again in a moment.',
+        code: RESUME_SCANNING,
+      });
+    }
+
     // FR-4.2.6: UNIQUE(userId, jobId) — friendly 409, not 500. We check this
     // BEFORE quota.consume so a duplicate-apply attempt does not cost a slot
     // (Day 0 decision (a) per the PR plan).
@@ -114,6 +173,9 @@ export class ApplicationsService {
           userId,
           jobId,
           status: 'APPLIED',
+          // The snapshot. Read inside apply() rather than passed in by the
+          // caller, so a client cannot nominate someone else's document.
+          resumeId: resume.id,
           ...(coverLetter ? { coverLetter } : {}),
         },
       });
