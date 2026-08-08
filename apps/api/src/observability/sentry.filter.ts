@@ -38,11 +38,46 @@ export class SentryGlobalFilter extends BaseExceptionFilter {
   // and it must not also blind the server's own logs.
   private readonly logger = new Logger('ExceptionsHandler');
 
+  // The status this exception should actually answer with.
+  //
+  // Not every client error is an HttpException. Express's body-parser throws
+  // http-errors objects — `entity.too.large` (413, and express.json defaults
+  // to a 100kb limit), `request.aborted` (400), `charset.unsupported` (415) —
+  // which reach this filter because Nest installs its exception layer as
+  // Express error middleware. Nest's own handleUnknownError honoured their
+  // `statusCode` via isHttpError; writing the response ourselves skipped that
+  // and collapsed all of them to 500.
+  //
+  // Checked locally rather than via the inherited isHttpError, for two
+  // reasons: Nest's version is a truthiness test
+  // (`err?.statusCode && err?.message`), so a stray object with a string or
+  // out-of-range statusCode would sail through; and depending on a base-class
+  // method makes the filter untestable wherever BaseExceptionFilter is stubbed.
+  private static isHttpErrorLike(e: unknown): e is { statusCode: number; message: string } {
+    if (typeof e !== 'object' || e === null) return false;
+    const { statusCode, message } = e as { statusCode?: unknown; message?: unknown };
+    return (
+      typeof statusCode === 'number' &&
+      Number.isInteger(statusCode) &&
+      statusCode >= 400 &&
+      statusCode <= 599 &&
+      typeof message === 'string'
+    );
+  }
+
+  private resolveStatus(exception: unknown): number {
+    if (exception instanceof HttpException) return exception.getStatus();
+    if (SentryGlobalFilter.isHttpErrorLike(exception)) return exception.statusCode;
+    return HttpStatus.INTERNAL_SERVER_ERROR;
+  }
+
   override async catch(exception: unknown, host: ArgumentsHost): Promise<void> {
-    // HTTP 4xx is expected user-error path; skip Sentry capture but
-    // still format the response.
-    const isExpected4xx =
-      exception instanceof HttpException && exception.getStatus() < 500;
+    const status = this.resolveStatus(exception);
+    // 4xx is the expected user-error path; skip Sentry capture but still
+    // format the response. Derived from the RESOLVED status, so a 413 from
+    // body-parser is no longer reported as a 5xx — which would inflate exactly
+    // the server-error rate this observability work exists to measure.
+    const isExpected4xx = status < 500;
 
     if (!isExpected4xx && (await isTelemetryEnabled())) {
       Sentry.captureException(exception);
@@ -65,7 +100,6 @@ export class SentryGlobalFilter extends BaseExceptionFilter {
     }
 
     if (exception instanceof HttpException) {
-      const status = exception.getStatus();
       const body = exception.getResponse();
       // Only FILL IN a Retry-After — never overwrite one. ThrottlerGuard sets
       // an accurate `timeToBlockExpire` immediately before it throws
@@ -81,12 +115,21 @@ export class SentryGlobalFilter extends BaseExceptionFilter {
       return;
     }
 
-    // Bare Error / unknown throw. The RESPONSE deliberately does not leak the
-    // message or stack, but the server must still record it — see the logger
-    // comment above. IntrinsicException is Nest's own marker for exceptions it
-    // raises as control flow and expects to stay quiet.
+    // Everything else. Matches develop's logging: handleUnknownError logged
+    // every non-IntrinsicException regardless of whether it carried a status,
+    // and IntrinsicException is Nest's marker for exceptions it raises as
+    // control flow and expects to stay quiet.
     if (!(exception instanceof IntrinsicException)) this.logger.error(exception);
-    const status = HttpStatus.INTERNAL_SERVER_ERROR;
-    res.status(status).json(withEnvelope('Internal server error', status));
+
+    // A recognised http-error (413 payload too large, 400 request aborted…)
+    // keeps its status and its message: those strings come from body-parser,
+    // not from us, so echoing them leaks nothing — and it is exactly what
+    // develop returned. A genuine unknown stays an opaque 500 so no internal
+    // detail or stack reaches the client.
+    const message =
+      status < 500 && SentryGlobalFilter.isHttpErrorLike(exception)
+        ? exception.message
+        : 'Internal server error';
+    res.status(status).json(withEnvelope(message, status));
   }
 }

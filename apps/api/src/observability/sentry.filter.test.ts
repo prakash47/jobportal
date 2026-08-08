@@ -151,4 +151,48 @@ describe('SentryGlobalFilter', () => {
     const host = { getType: () => 'rpc' } as unknown as ArgumentsHost;
     await expect(filter.catch(new Error('boom'), host)).resolves.toBeUndefined();
   });
+
+  // --- http-errors from Express body-parser (not HttpException subclasses) ---
+
+  it('preserves the status of a body-parser http-error instead of collapsing it to 500', async () => {
+    // express.json() defaults to a 100kb limit and throws entity.too.large.
+    // Nest's handleUnknownError honoured `statusCode`; writing the response
+    // ourselves must keep doing so.
+    const { host, res } = makeHost();
+    const err = Object.assign(new Error('request entity too large'), { statusCode: 413 });
+    await filter.catch(err, host);
+    expect(res.statusCode).toBe(413);
+    expect(res.body).toEqual({
+      statusCode: 413,
+      error: 'Payload Too Large',
+      message: 'request entity too large',
+    });
+  });
+
+  it('does NOT report a body-parser 4xx to Sentry as a server error', async () => {
+    const { host } = makeHost();
+    const err = Object.assign(new Error('request aborted'), { statusCode: 400 });
+    await filter.catch(err, host);
+    expect(mockedCapture).not.toHaveBeenCalled();
+  });
+
+  it('still captures an http-error whose status really is 5xx', async () => {
+    const { host, res } = makeHost();
+    const err = Object.assign(new Error('upstream exploded'), { statusCode: 502 });
+    await filter.catch(err, host);
+    expect(mockedCapture).toHaveBeenCalledOnce();
+    // 5xx keeps the opaque body — no internal detail leaks.
+    expect(res.body).toEqual({
+      statusCode: 502,
+      error: 'Bad Gateway',
+      message: 'Internal server error',
+    });
+  });
+
+  it('ignores a bogus statusCode rather than using it as the HTTP status', async () => {
+    const { host, res } = makeHost();
+    const err = Object.assign(new Error('nonsense'), { statusCode: 99 });
+    await filter.catch(err, host);
+    expect(res.statusCode).toBe(500);
+  });
 });
