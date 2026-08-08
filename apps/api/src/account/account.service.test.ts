@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@jobportal/db', () => ({
@@ -64,11 +64,24 @@ describe('AccountService.deleteOwnAccount', () => {
   });
 
   // A bucket failure must not resurrect an account that is already gone, nor
-  // fail a request whose primary effect has already succeeded.
-  it('still succeeds when storage cleanup fails, and says so in the logs', async () => {
+  // fail a request whose primary effect has already succeeded. The error log is
+  // asserted too, because it is not decoration: the keys die with the rows, so
+  // that line is the ONLY remaining way to find an orphaned CV.
+  it('still succeeds when storage cleanup fails, and logs the orphaned key', async () => {
+    const logged: string[] = [];
+    const spy = vi
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation((msg: unknown) => {
+        logged.push(String(msg));
+      });
     fakeStorage.deleteObject.mockRejectedValue(new Error('R2 down'));
+
     await expect(service.deleteOwnAccount(9)).resolves.toEqual({ deleted: true });
     expect(mocked.user.delete).toHaveBeenCalled();
+    expect(logged.join('\n')).toContain('a.pdf');
+    expect(logged.join('\n')).toContain('9');
+
+    spy.mockRestore();
   });
 
   it('scopes the resume lookup to the calling account', async () => {

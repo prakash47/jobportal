@@ -74,18 +74,42 @@ export class AccountService {
       : [];
 
     // The row graph goes in one statement; the cascades handle Candidate,
-    // Resume, Application, SavedJob, JobAlert, Session, audit rows and the rest.
-    // CompanyReview and the contact rows are `SetNull`, so a review the
-    // candidate left survives detached from them rather than vanishing from the
-    // company's page — deliberate, and it carries no personal identifier.
+    // Resume, Application, SavedJob, JobAlert, Session, the candidate's own
+    // Notification rows, audit rows and the rest.
+    //
+    // WHAT DELIBERATELY SURVIVES, stated precisely rather than as "everything
+    // is gone", because two things are not:
+    //
+    // - `CompanyReview.userId` is SetNull, so a review detaches from its author
+    //   instead of vanishing from the company's page. The row has no name or
+    //   email column; what remains is the reviewer's own prose, which is the
+    //   published content itself.
+    // - A recruiter's `Notification` row belongs to the RECRUITER, so it is not
+    //   cascaded, and its body was rendered at write time as
+    //   "<candidate name> applied to <job>". The name therefore survives
+    //   verbatim in the recruiter's feed. That is the same reasoning as the
+    //   resume snapshot: it is a record of something that actually happened and
+    //   was already delivered to that recruiter. It is NOT full erasure, and
+    //   anyone extending this to a formal erasure request needs to scrub it.
+    //
+    // `SupportContactMessage` also holds a name and email behind a SetNull
+    // userId, but only `recruiter-support` writes it, and recruiters cannot
+    // reach this endpoint — so a deleted candidate can never have one.
     await prisma.user.delete({ where: { id: userId } });
 
     // Storage last, and best-effort. The account is already gone by this point,
-    // so a bucket hiccup must not resurrect it or fail the request; it is logged
-    // loudly instead, because an orphaned CV is a real privacy problem someone
-    // has to clean up. Deleting rows first also means a crash here leaves
-    // objects with no rows (recoverable, boring) rather than rows with no
-    // objects (a user who thinks they deleted their data and has not).
+    // so a bucket hiccup must not resurrect it or fail the request.
+    //
+    // Be honest about the trade this ordering makes: a crash here leaves
+    // objects with NO rows — CVs in the bucket that nothing points at, which is
+    // the privacy problem, and it is unrecoverable through the app because the
+    // keys died with the rows. That is why the failure is logged with the key
+    // and the user id: the log line is the only remaining way to find them.
+    //
+    // It is still the right order. Deleting objects first would mean a crash
+    // leaves a live account whose CV has silently vanished — a user who can log
+    // in and finds their data corrupted, with no signal that anything happened.
+    // A loud orphan someone can sweep beats silent corruption of a live account.
     let orphaned = 0;
     for (const key of resumeKeys) {
       try {

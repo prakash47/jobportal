@@ -3,10 +3,11 @@ import { z } from 'zod';
 /**
  * The exact phrase a caller must send to delete their account.
  *
- * Not a password re-prompt: this endpoint is already behind `JwtAuthGuard`, and
- * a native client that holds a valid access token has no password to re-ask for
- * without storing one — which is precisely what mobile token transport exists to
- * avoid (ADR 0002 decision 1).
+ * Not a password re-prompt. The endpoint is already behind `JwtAuthGuard`, and
+ * a re-prompt would push a native client toward holding the password itself,
+ * when the whole point of issuing it tokens is that it does not have to. It
+ * would also exclude Google-signup accounts, which have no local password at
+ * all (`AuthProvider.GOOGLE`).
  *
  * It is here so that deletion cannot happen by accident. A bare `DELETE
  * /v1/me/account` is one mistyped fetch or one over-eager retry away from being
