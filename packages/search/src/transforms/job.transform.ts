@@ -1,4 +1,4 @@
-import type { JobDoc } from '../types';
+import type { EmploymentType, JobDoc, WorkMode } from '../types';
 
 // Inputs the transform needs (we pass them as a flat record so the call sites
 // can pre-fetch the lookups in batches for bulk indexing).
@@ -16,6 +16,8 @@ export type JobInput = {
   industryId: number | null;
   functionalAreaId: number | null;
   status: 'DRAFT' | 'ACTIVE' | 'EXPIRED' | 'CLOSED';
+  employmentType: EmploymentType;
+  workMode: WorkMode;
   experienceMinYears: number | null;
   experienceMaxYears: number | null;
   salaryMinPaise: number | null;
@@ -68,6 +70,10 @@ export function jobToDoc(job: JobInput, lookups: JobLookups): JobDoc {
     industryId: job.industryId,
     functionalAreaSlug: functionalArea?.slug ?? null,
     status: job.status,
+    // Stored verbatim, like `status`. Both columns are NOT NULL with a default
+    // in Postgres, so there is no null branch to model here.
+    employmentType: job.employmentType,
+    workMode: job.workMode,
     minExperienceMonths: job.experienceMinYears !== null ? job.experienceMinYears * 12 : null,
     maxExperienceMonths: job.experienceMaxYears !== null ? job.experienceMaxYears * 12 : null,
     salaryMin: job.salaryMinPaise,

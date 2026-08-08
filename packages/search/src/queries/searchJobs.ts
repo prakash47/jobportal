@@ -17,6 +17,8 @@ export async function searchJobs(params: SearchJobsParams = {}): Promise<SearchJ
     industrySlug,
     functionalAreaSlug,
     status,
+    employmentTypes,
+    workModes,
     minExperienceMonths,
     maxExperienceMonths,
     salaryMin,
@@ -36,6 +38,13 @@ export async function searchJobs(params: SearchJobsParams = {}): Promise<SearchJ
   if (cityIds?.length) filter.push({ terms: { cityIds } });
   if (industrySlug) filter.push({ term: { industrySlug } });
   if (functionalAreaSlug) filter.push({ term: { functionalAreaSlug } });
+
+  // Each doc holds ONE value, so multi-select is `terms` (OR within the facet)
+  // while the two facets AND against each other — the same shape as skillSlugs
+  // and citySlugs above. Empty arrays are skipped: a `terms` clause with no
+  // values matches nothing, which would turn "no selection" into "no results".
+  if (employmentTypes?.length) filter.push({ terms: { employmentType: employmentTypes } });
+  if (workModes?.length) filter.push({ terms: { workMode: workModes } });
 
   if (minExperienceMonths !== undefined) {
     filter.push({ range: { minExperienceMonths: { gte: minExperienceMonths } } });
