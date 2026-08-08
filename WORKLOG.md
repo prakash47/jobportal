@@ -33,7 +33,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-08 after `feature/srp-emp-mode-filters` merged (comment-only edit; no model or migration change). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/apply-resume-snapshot` | 2026-08-08 | **REAL migration** (ADR 0002 decision 7): adds `Application.resumeId` FK → `Resume`, drops the dead `resumeUrl` column (373 rows, all NULL). Expect a new migration on pull. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/apply-resume-snapshot` | **ADR 0002 decision 7 — require a CV to apply, and snapshot which one.** Today `apply()` checks only emailVerified/ACTIVE/duplicate, and the recruiter's resume view resolves `candidate.activeResume`, so **replacing your CV rewrites what recruiters see for every past application** and deleting it makes them all read "no resume on file". Adds `Application.resumeId`, a 403 when the candidate has no usable CV, and a legacy fallback for the 373 pre-existing rows (which genuinely cannot be backfilled). Also seeds CVs for the demo candidates, since exactly ONE candidate in the DB has one today. | `packages/db/prisma/schema.prisma` **(LOCK TAKEN)** + a migration, `apps/api/src/applications/*`, `apps/api/src/recruiter-applicants/*`, `apps/web` ApplyButton, demo seed. |
 
 ---
 
