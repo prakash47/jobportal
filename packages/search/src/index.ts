@@ -5,11 +5,13 @@ export { es, INDEX_ALIAS, type IndexAlias } from './client';
 export type {
   ArticleDoc,
   CompanyDoc,
+  EmploymentType,
   JobDoc,
   JobSortMode,
   SearchJobsParams,
   SearchJobsResult,
   SuggestResult,
+  WorkMode,
 } from './types';
 
 export {
