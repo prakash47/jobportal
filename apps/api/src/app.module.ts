@@ -3,6 +3,7 @@ import { SentryModule } from '@sentry/nestjs/setup';
 import { PublicJobsModule } from './public-jobs/public-jobs.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
 import { PublicCompaniesModule } from './public-companies/public-companies.module';
+import { PublicHomeModule } from './public-home/public-home.module';
 import { AdminJobsModule } from './admin-jobs/admin-jobs.module';
 import { AdminKycModule } from './admin-kyc/admin-kyc.module';
 import { AdminOtpSessionsModule } from './admin-otp-sessions/admin-otp-sessions.module';
@@ -67,6 +68,7 @@ import { StorageModule } from './storage/storage.module';
     PublicJobsModule,
     CatalogsModule,
     PublicCompaniesModule,
+    PublicHomeModule,
     AdminJobsModule,
     AdminKycModule,
     AdminOtpSessionsModule,
