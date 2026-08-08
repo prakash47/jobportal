@@ -12,6 +12,8 @@
 
 ## Snapshot — 2026-08-08
 
+- **Newest merge (2026-08-08)**: `feature/public-home-api` — **the mobile Home tab in one request**, reusing the website's own aggregate so the two cannot show different inventory. Also lands **owner decision 5**: the homepage company count stops including companies with nothing open, **and the labels move with it** (“companies” → “companies hiring”, “hiring teams” → “recruiters”). All 12 seeded companies are hiring, so the live number did not change — a new domain test pins the filter instead. Adversarial review **70/70 agents, 22 raised → 1 confirmed HIGH**: my own new test broke `pnpm typecheck` with 23 errors, because vitest transpiles without typechecking and I had run typecheck before adding the file. **domain 81 → 84 tests.** Full detail in the PR log below.
+
 - **Newest merge (2026-08-08)**: `feature/public-companies-api` — **companies browse + profile for the app**, reusing the SSR's ordering and query shape, with `parseHighlightSections` moved into `@jobportal/domain` so the two surfaces cannot disagree. Adversarial review **46/46 agents, 14 raised → 5 confirmed**, all one defect I introduced: handles were built from the company NAME rather than the stored `slug` column, so a company whose two values differ got a handle that **308'd to itself forever** — and the test fixture used a name where the two happened to match, so it could not fail. Fixed with a `buildCompanyHandle` that pairs with `parseCompanySlug`. **API 919 → 941 tests.** Full detail in the PR log below.
 
 - **Newest merge (2026-08-08)**: `feature/public-catalogs-api` — **the three reference catalogs, and the profile screen unblocked.** `GET /v1/{skills,cities,industries}` with an `?ids=` resolve mode, because `GET /me/profile` returns bare ids with no names and the app cannot render that screen without turning them into labels. Adversarial review **67/67 agents, 21 raised → 1 confirmed HIGH**, whose fix hint turned one instance into **five**: every `id` column is a Prisma `Int`, and a bigger value makes Prisma **throw** rather than match nothing — so an anonymous caller produced 500s and Sentry noise by adding a digit to a URL, including on the already-merged public `/v1/jobs/:slug`. Fixed in `@jobportal/domain`, so the **website** is repaired too. **API 899 → 919, domain 78 → 81 tests.** Full detail in the PR log below.
@@ -518,6 +520,56 @@ build **5/5**.
 **Next per ADR 0002:** the home feed, career advice, the applications extras, then the API contract
 document. **Still owner-blocked:** hosting (deliberately deferred), `RESEND_API_KEY`, and the
 store-compliance surfaces.
+
+
+### PR — `feature/public-home-api` · 2026-08-08 — home feed + the honest company count (ADR 0002 step 8)
+
+**`GET /v1/home`** — a single composite for the mobile Home tab. The one genuinely thin endpoint in
+this programme: `loadHomePageData` already lived in `@jobportal/domain/home-queries` after the
+extraction PR, and it is the same function the website's homepage renders from, so the two cannot
+show different inventory. A composite rather than letting the app assemble it from `/v1/jobs`,
+`/v1/companies` and the catalogs, because this is the cold-start path — the loader already
+`Promise.all`s ~10 queries into one round, and on a mobile connection the cost is latency, not
+bandwidth: one round trip instead of six. `Cache-Control: public, s-maxage=1800,
+stale-while-revalidate=600` mirrors the page's `revalidate = 1800`. The page's
+`if (user?.role === 'CANDIDATE') redirect('/profile')` was deliberately **not** ported — that is web
+routing, not a data gate, and would make the endpoint useless to a signed-in user.
+
+**Owner decision 5 also lands here, and it changes the website.** `counts.companies` was an
+unfiltered `prisma.company.count()` displayed beside a live job count — it read as “employers you
+could apply to” while including companies with nothing open. It now counts only companies with ≥1
+ACTIVE job. Because the loader is shared, the website's hero ribbon changes with it.
+
+**The labels moved with the numbers**, because an honest number under a misleading caption is no
+better: the hero reads **“companies hiring”** (was “companies”) and **“recruiters”** (was “hiring
+teams” — the exact field the mobile spec asked for by name, which does not exist and would
+misdescribe the number: several recruiters routinely share one employer, so accounts are not teams),
+and the companies mega-panel reads **“companies hiring”** (was “companies listed”, accurate only
+against the old unfiltered count).
+
+**Honest note on verification:** all 12 seeded companies happen to be hiring, so the live number did
+**not** change and a browser check cannot tell the filtered query from the unfiltered one. A new
+`packages/domain/src/home-counts.test.ts` is what actually pins the change — it asserts the `where`
+clause reaches `prisma.company.count` and that `counts` carries no `hiringTeams` key. The browser
+check confirmed only the labels.
+
+**Adversarial 4-lens review — 70/70 agents, no errors: 22 raised → 1 confirmed HIGH**, and it was
+mine. That new test cast its Prisma mock to `Record<string, Record<string, …>>`; under
+`noUncheckedIndexedAccess` every property read off a `Record` widens to `| undefined`, so
+`db.job.count` is a compile error even though it always exists — **23 TS18048 errors, turning a green
+monorepo typecheck red**. I missed it because I ran `pnpm typecheck` *before* writing the file and
+only ran vitest afterwards, and **vitest transpiles without typechecking**, so the suite was green
+while the typecheck was red. Fixed with the explicit object-literal idiom already used in
+`apps/api/src/public-companies/public-companies.test.ts`; no assertion changed.
+
+**domain 81 → 84 tests.** Gate green on the integrated state: typecheck **13/13** · tests **10/10** ·
+build **5/5**. (The build failed once mid-gate on `/career-advice/[slug]` — Docker Desktop had
+stopped, so Prisma could not reach Postgres during page-data collection. Environment, not code;
+green after restarting it.)
+
+**Next per ADR 0002:** career advice, the applications extras, then the API contract document.
+**Still owner-blocked:** hosting (deliberately deferred), `RESEND_API_KEY`, and the store-compliance
+surfaces.
 
 ---
 
