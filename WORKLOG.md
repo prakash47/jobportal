@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Jayesh | `feature/public-career-advice-api` | **Career advice for mobile (ADR 0002 step 9)** — `GET /v1/career-advice` + `GET /v1/career-advice/:slug`, both PUBLISHED-only, reusing `parseArticleIndexParams` from `@jobportal/domain`. **Cheap because of owner decision 3**: returns the raw `body` markdown rather than server-rendered HTML, so none of the Shiki/unified ESM-vs-CommonJS problem applies — the branch that would have been 2–4 days is ~2 hours. FAQ JSON is narrowed with the same guard the SSR page uses. | **None of the locked surfaces** — no schema, no migration, no flag, no barrels; `@jobportal/domain` consumed, not modified. `apps/web` untouched. |
 
 ---
 
