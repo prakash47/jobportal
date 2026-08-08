@@ -12,6 +12,8 @@
 
 ## Snapshot — 2026-08-08
 
+- **Newest merge (2026-08-08)**: `feature/public-career-advice-api` — **the article index and reader for the app**, PUBLISHED-only and pinned in SQL rather than inherited from a parser (verified by temporarily drafting a real article, then restoring it byte-identically). **Owner decision 3 turned this from the riskiest branch into the cheapest**: returning raw markdown instead of server-rendered HTML avoided seven ESM-only packages in a CommonJS build — 2–4 days of scoped risk became about two hours. Adversarial review **73/73 agents, 23 raised → 0 confirmed**; no behaviour defect survived, though **two of my own comments were wrong** and were corrected. **API 941 → 959 tests.** Full detail in the PR log below.
+
 - **Newest merge (2026-08-08)**: `feature/public-home-api` — **the mobile Home tab in one request**, reusing the website's own aggregate so the two cannot show different inventory. Also lands **owner decision 5**: the homepage company count stops including companies with nothing open, **and the labels move with it** (“companies” → “companies hiring”, “hiring teams” → “recruiters”). All 12 seeded companies are hiring, so the live number did not change — a new domain test pins the filter instead. Adversarial review **70/70 agents, 22 raised → 1 confirmed HIGH**: my own new test broke `pnpm typecheck` with 23 errors, because vitest transpiles without typechecking and I had run typecheck before adding the file. **domain 81 → 84 tests.** Full detail in the PR log below.
 
 - **Newest merge (2026-08-08)**: `feature/public-companies-api` — **companies browse + profile for the app**, reusing the SSR's ordering and query shape, with `parseHighlightSections` moved into `@jobportal/domain` so the two surfaces cannot disagree. Adversarial review **46/46 agents, 14 raised → 5 confirmed**, all one defect I introduced: handles were built from the company NAME rather than the stored `slug` column, so a company whose two values differ got a handle that **308'd to itself forever** — and the test fixture used a name where the two happened to match, so it could not fail. Fixed with a `buildCompanyHandle` that pairs with `parseCompanySlug`. **API 919 → 941 tests.** Full detail in the PR log below.
@@ -570,6 +572,53 @@ green after restarting it.)
 **Next per ADR 0002:** career advice, the applications extras, then the API contract document.
 **Still owner-blocked:** hosting (deliberately deferred), `RESEND_API_KEY`, and the store-compliance
 surfaces.
+
+
+### PR — `feature/public-career-advice-api` · 2026-08-08 — career advice (ADR 0002 step 9)
+
+`GET /v1/career-advice` and `GET /v1/career-advice/:slug`, both PUBLISHED-only. `apps/api` only — no
+schema, no migration, no flag, no lock; `@jobportal/domain` consumed, not modified.
+
+**This was the branch owner decision 3 rescued.** The mobile spec asked for a sanitized `bodyHtml`,
+which would have meant pulling the website's unified/Shiki pipeline into the API: seven **ESM-only**
+packages into a **CommonJS** Nest build, ~12 MB of grammars, a seconds-long cold start, and a Redis
+layer to replace the SSG. Returning the raw `body` markdown instead made the whole cost disappear —
+**scoped at 2–4 days, took about two hours.** The trade-off, stated rather than buried: sanitisation
+moves to the client, so the app must render this as **markdown and never as HTML**, and syntax
+highlighting is lost on mobile. `apps/web` keeps its own pipeline, untouched.
+
+**The PUBLISHED gate is pinned in the service's `where` clause**, not inherited from the shared
+parser, and `status` is absent from a `.strict()` DTO — so no combination of query params can surface
+a draft. Verified live by temporarily drafting a real article: the detail route **404'd with a body
+byte-identical to an unknown slug**, and the list dropped from 3 to 2 with no leak. The row was
+**restored and verified byte-identical**.
+
+Param mapping goes through `parseArticleIndexParams` from `@jobportal/domain`, so the tag-slug rule,
+the 80-character `q` cap and the page floor stay identical to the website's index.
+
+Two deliberate differences from the sibling endpoints, both recorded: **page size 20** against the web
+index's 12 (owner decision), and **no slug-drift 308** — `Article.slug` is the whole URL key with no
+numeric permalink behind it, so a changed slug is a different article rather than a drifted alias.
+Ordering is `publishedAt desc, id desc`: `publishedAt` is **nullable**, so the tiebreaker is not a
+nicety, it is what makes offset pagination deterministic at all. The list projection deliberately
+excludes `body` — an index shipping every article's full markdown would be a needless payload on a
+mobile connection.
+
+**Adversarial 4-lens review — 73/73 agents, no errors: 23 raised → 0 confirmed.** No behaviour defect
+survived verification. **Two of my comments did not**, and both were corrected:
+
+- `parseFaqs` claimed to apply *“the same guard the SSR detail page applies”*. It does not — the web
+  page's `isFaqArray` is all-or-nothing (`v.every`), so one malformed entry discards the entire FAQ
+  block, while this filters entry by entry and keeps the valid ones. The divergence is intentional
+  (losing four good answers because a fifth is malformed is worse for a reader) but the comment
+  asserted sameness, which was false.
+- The `orderBy` comment was true but incomplete: Postgres `DESC` is **NULLS FIRST**, so a PUBLISHED
+  article with a null `publishedAt` would sort to the *top* of a “newest first” list. The website
+  behaves identically and there are **0 such rows today**, so this inherits the behaviour rather than
+  introducing it — worth stating rather than leaving a reader to find out.
+
+**API 941 → 959 tests.** Gate green on the integrated state: typecheck **13/13** · tests **10/10** ·
+build **5/5**.
 
 ---
 
