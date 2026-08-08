@@ -33,6 +33,7 @@ import { RecruiterPostQuotaModule } from './recruiter-post-quota/quota.module';
 import { RecruiterSupportModule } from './recruiter-support/recruiter-support.module';
 import { RecruiterUsersModule } from './recruiter-users/recruiter-users.module';
 import { RedisModule } from './redis/redis.module';
+import { AccountModule } from './account/account.module';
 import { ResumeModule } from './resume/resume.module';
 import { SavedJobsModule } from './saved-jobs/saved-jobs.module';
 import { StorageModule } from './storage/storage.module';
@@ -55,6 +56,7 @@ import { StorageModule } from './storage/storage.module';
     ClamAVModule,
     ProfileModule,
     ResumeModule,
+    AccountModule,
     AlertsModule,
     RecruiterPostQuotaModule,
     RecruiterJobsModule,
