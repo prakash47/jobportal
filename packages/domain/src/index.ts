@@ -22,5 +22,6 @@ export * from './slug';
 export * from './job-visibility';
 export * from './srp-params';
 export * from './company-params';
+export * from './company-highlights';
 export * from './article-params';
 export * from './home-queries';

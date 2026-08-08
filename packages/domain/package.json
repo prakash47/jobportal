@@ -12,6 +12,7 @@
     "./job-visibility": "./src/job-visibility.ts",
     "./srp-params": "./src/srp-params.ts",
     "./company-params": "./src/company-params.ts",
+    "./company-highlights": "./src/company-highlights.ts",
     "./article-params": "./src/article-params.ts",
     "./home-queries": "./src/home-queries.ts"
   },
