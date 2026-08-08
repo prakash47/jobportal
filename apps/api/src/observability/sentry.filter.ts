@@ -38,36 +38,63 @@ export class SentryGlobalFilter extends BaseExceptionFilter {
   // and it must not also blind the server's own logs.
   private readonly logger = new Logger('ExceptionsHandler');
 
-  // The status this exception should actually answer with.
+  // Recognises a genuine `http-errors` object.
   //
-  // Not every client error is an HttpException. Express's body-parser throws
-  // http-errors objects — `entity.too.large` (413, and express.json defaults
-  // to a 100kb limit), `request.aborted` (400), `charset.unsupported` (415) —
-  // which reach this filter because Nest installs its exception layer as
-  // Express error middleware. Nest's own handleUnknownError honoured their
+  // Not every client error is an HttpException: Express's body-parser throws
+  // http-errors — `entity.too.large` (413, and express.json defaults to a
+  // 100kb limit), `request.aborted` (400), `charset.unsupported` (415) — which
+  // reach this filter because Nest installs its exception layer as Express
+  // error middleware. Nest's own handleUnknownError honoured their
   // `statusCode` via isHttpError; writing the response ourselves skipped that
   // and collapsed all of them to 500.
   //
-  // Checked locally rather than via the inherited isHttpError, for two
-  // reasons: Nest's version is a truthiness test
-  // (`err?.statusCode && err?.message`), so a stray object with a string or
-  // out-of-range statusCode would sail through; and depending on a base-class
-  // method makes the filter untestable wherever BaseExceptionFilter is stubbed.
-  private static isHttpErrorLike(e: unknown): e is { statusCode: number; message: string } {
-    if (typeof e !== 'object' || e === null) return false;
-    const { statusCode, message } = e as { statusCode?: unknown; message?: unknown };
-    return (
-      typeof statusCode === 'number' &&
-      Number.isInteger(statusCode) &&
-      statusCode >= 400 &&
-      statusCode <= 599 &&
-      typeof message === 'string'
-    );
+  // The PRESENCE of a boolean `expose` is what identifies the library, and it
+  // is load-bearing rather than decoration. Duck-typing on `statusCode` +
+  // `message` alone is TOO WIDE: an @elastic/transport ResponseError has
+  // exactly that shape, so an Elasticsearch failure on a public route was
+  // adopting ES's own 4xx status, echoing its raw exception text (naming the
+  // engine and its internal settings) to anonymous callers, and — because the
+  // 4xx branch skips Sentry — going completely unreported.
+  //
+  // Verified against the installed packages: http-errors sets expose=true on
+  // 4xx and expose=false on 5xx; ES's ResponseError leaves it undefined. So
+  // `typeof expose === 'boolean'` means "a real http-errors object" and the
+  // VALUE then says whether its message is safe to return — which is exactly
+  // what the library documents `expose` for.
+  //
+  // Checked locally rather than via the inherited isHttpError for two further
+  // reasons: Nest's version is a bare truthiness test, and depending on a
+  // base-class method makes this filter untestable wherever
+  // BaseExceptionFilter is stubbed — which its own test does.
+  private static asHttpError(
+    e: unknown,
+  ): { statusCode: number; message: string; expose: boolean } | null {
+    if (typeof e !== 'object' || e === null) return null;
+    const { statusCode, message, expose } = e as {
+      statusCode?: unknown;
+      message?: unknown;
+      expose?: unknown;
+    };
+    if (typeof expose !== 'boolean') return null;
+    if (typeof message !== 'string') return null;
+    if (
+      typeof statusCode !== 'number' ||
+      !Number.isInteger(statusCode) ||
+      statusCode < 400 ||
+      statusCode > 599
+    ) {
+      return null;
+    }
+    return { statusCode, message, expose };
   }
 
   private resolveStatus(exception: unknown): number {
     if (exception instanceof HttpException) return exception.getStatus();
-    if (SentryGlobalFilter.isHttpErrorLike(exception)) return exception.statusCode;
+    // A genuine http-error keeps its status whether or not its message is
+    // safe to show — a 502 from the library really is a 502. Only the MESSAGE
+    // is gated on `expose`, further down.
+    const httpErr = SentryGlobalFilter.asHttpError(exception);
+    if (httpErr) return httpErr.statusCode;
     return HttpStatus.INTERNAL_SERVER_ERROR;
   }
 
@@ -122,14 +149,13 @@ export class SentryGlobalFilter extends BaseExceptionFilter {
     if (!(exception instanceof IntrinsicException)) this.logger.error(exception);
 
     // A recognised http-error (413 payload too large, 400 request aborted…)
-    // keeps its status and its message: those strings come from body-parser,
-    // not from us, so echoing them leaks nothing — and it is exactly what
-    // develop returned. A genuine unknown stays an opaque 500 so no internal
-    // detail or stack reaches the client.
-    const message =
-      status < 500 && SentryGlobalFilter.isHttpErrorLike(exception)
-        ? exception.message
-        : 'Internal server error';
+    // keeps its status and its message. Those strings are the library's own
+    // and it flags them `expose: true` to mark them safe to return — which is
+    // exactly what develop returned. Everything else, including any
+    // third-party client error that merely LOOKS like one, stays an opaque 500
+    // so no internal detail or stack reaches the client.
+    const httpErr = SentryGlobalFilter.asHttpError(exception);
+    const message = httpErr?.expose === true ? httpErr.message : 'Internal server error';
     res.status(status).json(withEnvelope(message, status));
   }
 }
