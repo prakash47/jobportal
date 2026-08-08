@@ -12,6 +12,8 @@
 
 ## Snapshot — 2026-08-08
 
+- **Newest merge (2026-08-08)**: `feature/applications-additive-fields` — **the ninth and last mobile endpoint group.** `counts` + `statusHistory` on the existing `GET /me/applications`, purely additive. The counts are deliberately unfiltered so the filter chips do not all show the active filter's count (verified live: total 19→11→5→0 while counts hold). Adversarial review **33/33 agents, 10 raised → 1 confirmed**: the implementation was right but **the test guarding it was vacuous** — `toMatchObject` is a subset match, so it passed for the exact bug it named. Fixed and **proven by injecting the regression and watching the test fail**, then restoring the service byte-identically. **API 959 → 968 tests. All nine endpoint groups are now merged.** Full detail in the PR log below.
+
 - **Newest merge (2026-08-08)**: `feature/public-career-advice-api` — **the article index and reader for the app**, PUBLISHED-only and pinned in SQL rather than inherited from a parser (verified by temporarily drafting a real article, then restoring it byte-identically). **Owner decision 3 turned this from the riskiest branch into the cheapest**: returning raw markdown instead of server-rendered HTML avoided seven ESM-only packages in a CommonJS build — 2–4 days of scoped risk became about two hours. Adversarial review **73/73 agents, 23 raised → 0 confirmed**; no behaviour defect survived, though **two of my own comments were wrong** and were corrected. **API 941 → 959 tests.** Full detail in the PR log below.
 
 - **Newest merge (2026-08-08)**: `feature/public-home-api` — **the mobile Home tab in one request**, reusing the website's own aggregate so the two cannot show different inventory. Also lands **owner decision 5**: the homepage company count stops including companies with nothing open, **and the labels move with it** (“companies” → “companies hiring”, “hiring teams” → “recruiters”). All 12 seeded companies are hiring, so the live number did not change — a new domain test pins the filter instead. Adversarial review **70/70 agents, 22 raised → 1 confirmed HIGH**: my own new test broke `pnpm typecheck` with 23 errors, because vitest transpiles without typechecking and I had run typecheck before adding the file. **domain 81 → 84 tests.** Full detail in the PR log below.
@@ -619,6 +621,65 @@ survived verification. **Two of my comments did not**, and both were corrected:
 
 **API 941 → 959 tests.** Gate green on the integrated state: typecheck **13/13** · tests **10/10** ·
 build **5/5**.
+
+
+### PR — `feature/applications-additive-fields` · 2026-08-08 — the last endpoint (ADR 0002 step 10)
+
+Two purely additive fields on the **existing** authenticated `GET /me/applications`. No new route, no
+query-param change, no removals; both land in `ApplicationsService.list()` so the controller is
+untouched. `apps/api` only — no schema, no migration, no flag, no lock.
+
+**`counts`** — per-status totals across ALL of the caller's applications, **deliberately independent
+of `?status=`**. They drive the filter chips, so deriving them from the filtered page would make every
+chip show the count of whichever filter is already selected. `ALL` is the sum; statuses with zero
+applications are omitted, because `groupBy` returns only non-empty groups and the UI hides empty
+chips. Verified live against the seeded candidate: `total` moves **19 → 11 → 5 → 0** across
+`?status=APPLIED / IN_REVIEW / REJECTED` while `counts` holds steady at
+`{APPLIED:11, IN_REVIEW:5, SHORTLISTED:2, INTERVIEWED:1, ALL:19}`.
+
+**`statusHistory`** — the raw `Json?` column coalesced `null → []` so a client never null-checks
+before iterating, with a non-array value (which the schema permits but nothing writes) treated as no
+history rather than shipped as a shape the client cannot render. Entries come from `buildHistoryEntry`
+as `{from, to, at, by}` — note it is **`to`** that names the status reached at `at`, which is what a
+timeline draws.
+
+**Worth telling the app team:** every seeded row returns `[]`, because those applications predate the
+column being written. A timeline must synthesise the APPLIED step rather than assume history exists.
+
+Backward compatibility re-verified live: every pre-existing key on the hit and its nested job is
+present and unchanged. Three existing `list()` tests failed on the new `groupBy` call — their mock
+predated a third query, not a behaviour change.
+
+**Adversarial 4-lens review — 33/33 agents, no errors: 10 raised → 1 confirmed.** The implementation
+was correct; **the test guarding its central claim was vacuous.** `toMatchObject` is a recursive
+SUBSET match, so asserting `where: { userId: 42 }` was satisfied by a received
+`{ userId: 42, status: 'REJECTED' }` — the one test named after the behaviour would have passed for
+the exact bug it names. The value assertion could not save it either: a fixed `mockResolvedValue`
+returns the same array however it is called, so `out.counts` looked identical under both
+implementations.
+
+Fixed with an exact `toEqual` on the `where` plus an argument-sensitive mock, so the counts assertion
+became a second independent guard rather than a replayed fixture. **Proven rather than asserted:** the
+regression was injected (the filtered `where` passed into `groupBy`), the test confirmed failing with
+*“expected { userId: 42, status: 'REJECTED' } to deeply equal { userId: 42 }”*, and the service then
+restored and verified byte-identical to the committed version. Also dropped a
+`not.toContain('WITHDRAWN')` assertion that restated the mock fixture rather than any property of the
+implementation.
+
+This is the **same class of defect the companies review found** — a test whose fixture made it
+incapable of failing. Twice in one programme is worth recording as a pattern to watch for.
+
+**API 959 → 968 tests.** Gate green on the integrated state: typecheck **13/13** · tests **10/10** ·
+build **5/5**.
+
+---
+
+**All nine mobile endpoint groups are now merged.** What remains of ADR 0002, none of it endpoint
+work: the decided-but-unbuilt items (CV-required-to-apply and its migration, the `emp`/`mode` search
+filters, an account-deletion endpoint, the company-logo URL backfill, and the rate-limiter
+`trust proxy` fix), and the **API contract document** the app team needs to build against while
+hosting is deferred. **Still owner-blocked:** hosting (deliberately deferred), `RESEND_API_KEY`, and
+the store-compliance surfaces.
 
 ---
 
