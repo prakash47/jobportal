@@ -58,9 +58,15 @@ export const ListJobsQueryDto = z
     // moves. Genuine pagination past 10k results would need search_after
     // instead of from/size; nothing needs that today.
     page: z.coerce.number().int().min(1).max(MAX_PAGE).optional(),
-    // Accepted for URL parity with the website and then ignored, exactly as
-    // the website ignores them. Documented as non-functional in the API
-    // contract so the app does not render a filter that silently does nothing.
+    // Functional as of ADR 0002 decision 6. Left as free strings rather than
+    // a Zod enum, matching `skill` and `city` above: the accepted value set
+    // lives in `parseSrpSearchParams` alone, so this route and the website
+    // cannot drift on what `mode=on-site` means. Unrecognised values are
+    // dropped there, so a stale value filters nothing rather than 400-ing.
+    //
+    // Accepted values — `emp`: FULL_TIME | PART_TIME | CONTRACTOR | INTERN.
+    // `mode`: on-site | hybrid | remote (the URL spellings the website has
+    // published, NOT the WorkMode enum spellings).
     emp: oneOrMany.optional(),
     mode: oneOrMany.optional(),
   })

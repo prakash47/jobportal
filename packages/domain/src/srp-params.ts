@@ -1,4 +1,4 @@
-import type { SearchJobsParams } from '@jobportal/search';
+import type { EmploymentType, SearchJobsParams, WorkMode } from '@jobportal/search';
 
 // URL query-param shape for the SRP. Multi-select uses repeated keys
 // (?skill=react&skill=typescript). Cities live in the path segment for
@@ -19,6 +19,59 @@ export type SrpQuerySchema = {
 };
 
 type RawParams = Record<string, string | string[] | undefined>;
+
+// URL spelling → enum value, for the two facets whose URL form is NOT the
+// enum form. `buildSrpHref` echoes these values verbatim and they are already
+// live in indexed links and bookmarks, so the URL side is frozen: `emp` uses
+// the enum spelling, `mode` does not (`on-site` vs `ONSITE`). Normalising
+// here — rather than in any one caller — is what keeps the five SRP surfaces
+// (/jobs, city-jobs, skill-city, skill-jobs, GET /v1/jobs) in agreement.
+//
+// Matching is exact, and unknown values are DROPPED rather than forwarded.
+// A value the UI cannot emit can only come from a hand-edited or stale URL,
+// and forwarding it to Elasticsearch would silently turn today's "200 with
+// unfiltered results" into "0 results". Dropping preserves that behaviour,
+// and mirrors how a non-finite expMin is already discarded below.
+//
+// These are Maps, not object literals, and that is load-bearing rather than
+// stylistic. `table[value]` on an object literal walks the prototype chain, so
+// `?emp=toString` resolves to Object.prototype.toString — a FUNCTION, which is
+// not undefined, so it survives a `!== undefined` guard and lands in a
+// `terms` clause. JSON.stringify then renders it as `null`, Elasticsearch
+// rejects the body with a 400, and because the website's SRP calls searchJobs
+// straight from a server component with no try/catch, an anonymous GET of
+// `/jobs?emp=toString` returns a 500. `?emp=__proto__` is quieter and worse:
+// it serialises to `{}`, which ES accepts, so the page silently reports zero
+// jobs. `Map.get` consults only real entries, so the whole class is impossible
+// by construction — do not "simplify" these back into object literals.
+const EMPLOYMENT_TYPE_BY_PARAM: ReadonlyMap<string, EmploymentType> = new Map([
+  ['FULL_TIME', 'FULL_TIME'],
+  ['PART_TIME', 'PART_TIME'],
+  ['CONTRACTOR', 'CONTRACTOR'],
+  ['INTERN', 'INTERN'],
+]);
+
+const WORK_MODE_BY_PARAM: ReadonlyMap<string, WorkMode> = new Map([
+  ['on-site', 'ONSITE'],
+  ['hybrid', 'HYBRID'],
+  ['remote', 'REMOTE'],
+]);
+
+// Maps each raw value through `table`, drops the unrecognised ones, and
+// de-duplicates — a repeated `?mode=remote&mode=remote` must not widen the
+// `terms` clause with the same value twice.
+function mapFacet<T extends string>(
+  raw: string[] | undefined,
+  table: ReadonlyMap<string, T>,
+): T[] {
+  if (!raw?.length) return [];
+  const out: T[] = [];
+  for (const value of raw) {
+    const mapped = table.get(value);
+    if (mapped !== undefined && !out.includes(mapped)) out.push(mapped);
+  }
+  return out;
+}
 
 function asString(v: string | string[] | undefined): string | undefined {
   if (Array.isArray(v)) return v[0];
@@ -49,10 +102,11 @@ export function parseSrpSearchParams(searchParams: RawParams): SearchJobsParams 
   const industry = asString(searchParams['industry']);
   if (industry) out.industrySlug = industry;
 
-  // employmentType + workMode are accepted at the URL layer but the schema
-  // doesn't have these columns yet (deferred per PR #7 plan). The values
-  // round-trip through the URL but no-op at the index layer.
-  // emp and mode are intentionally NOT mapped onto SearchJobsParams here.
+  const employmentTypes = mapFacet(asArray(searchParams['emp']), EMPLOYMENT_TYPE_BY_PARAM);
+  if (employmentTypes.length) out.employmentTypes = employmentTypes;
+
+  const workModes = mapFacet(asArray(searchParams['mode']), WORK_MODE_BY_PARAM);
+  if (workModes.length) out.workModes = workModes;
 
   const expMin = asString(searchParams['expMin']);
   if (expMin !== undefined) {

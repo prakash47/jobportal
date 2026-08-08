@@ -29,7 +29,7 @@ import {
 
 | Alias | Purpose | Primary searchable fields | Filterable |
 |---|---|---|---|
-| `jobs` | SRP backing store | title, description, shortDescription, companyName, skills | skillSlugs, citySlugs, cityIds, industrySlug, functionalAreaSlug, status, minExperienceMonths, maxExperienceMonths, salaryMin/Max |
+| `jobs` | SRP backing store | title, description, shortDescription, companyName, skills | skillSlugs, citySlugs, cityIds, industrySlug, functionalAreaSlug, status, employmentType, workMode, minExperienceMonths, maxExperienceMonths, salaryMin/Max |
 | `companies` | Company directory + suggester | name, description | industrySlug, headquartersCitySlug |
 | `articles` | Career-advice search | title, body, excerpt | status |
 

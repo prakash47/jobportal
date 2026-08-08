@@ -99,6 +99,26 @@ describe('list', () => {
     expect(arg.citySlugs).toEqual(['pune']);
   });
 
+  // ADR 0002 decision 6. `list()` rebuilds a raw param object by hand, so a
+  // param the DTO accepts is silently lost unless it is copied across —
+  // exactly what happened to these two: the facets round-tripped through the
+  // query string and never reached the parser.
+  it('forwards emp/mode to the shared parser as ENUM values', async () => {
+    await svc.list({ emp: 'INTERN', mode: ['on-site', 'remote'] } as never);
+    const arg = mockedSearch.mock.calls[0]![0];
+    expect(arg.employmentTypes).toEqual(['INTERN']);
+    // `on-site` is the published URL spelling; ONSITE is the enum. The API
+    // must land on the same value the website does.
+    expect(arg.workModes).toEqual(['ONSITE', 'REMOTE']);
+  });
+
+  it('omits the facets entirely when the caller sends unknown values', async () => {
+    await svc.list({ emp: 'BOGUS', mode: 'teleport' } as never);
+    const arg = mockedSearch.mock.calls[0]![0];
+    expect(arg.employmentTypes).toBeUndefined();
+    expect(arg.workModes).toBeUndefined();
+  });
+
   it('echoes the requested page and defaults it to 1', async () => {
     expect((await svc.list({ page: 3 } as never)).page).toBe(3);
     expect((await svc.list({} as never)).page).toBe(1);

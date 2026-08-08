@@ -52,6 +52,8 @@ export const JOBS_INDEX_MAPPING = {
     industryId:       { type: 'long' as const },
     functionalAreaSlug: { type: 'keyword' as const },
     status:           { type: 'keyword' as const },
+    employmentType:   { type: 'keyword' as const },
+    workMode:         { type: 'keyword' as const },
     minExperienceMonths: { type: 'integer' as const },
     maxExperienceMonths: { type: 'integer' as const },
 

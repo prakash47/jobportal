@@ -2,6 +2,16 @@
 // These are denormalized snapshots of the Postgres rows; whenever the source
 // row changes, the indexer rewrites the doc.
 
+// Mirrors of the Prisma `EmploymentType` / `WorkMode` enums
+// (packages/db/prisma/schema.prisma). Hand-written unions rather than imported
+// Prisma types, following this file's existing treatment of `status` — a doc
+// shape describes what is stored in Elasticsearch, which is decoupled from the
+// row it was denormalised from. (`@jobportal/db` IS a dependency here, so this
+// is a consistency choice, not a dependency constraint.) The cost is that
+// these must be updated by hand if the enums gain a member.
+export type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACTOR' | 'INTERN';
+export type WorkMode = 'ONSITE' | 'REMOTE' | 'HYBRID';
+
 export type JobDoc = {
   id: number;
   canonicalSlug: string;
@@ -21,6 +31,8 @@ export type JobDoc = {
   industryId: number | null;
   functionalAreaSlug: string | null;
   status: 'DRAFT' | 'ACTIVE' | 'EXPIRED' | 'CLOSED';
+  employmentType: EmploymentType;
+  workMode: WorkMode;
   minExperienceMonths: number | null;
   maxExperienceMonths: number | null;
   salaryMin: number | null;   // paise
@@ -67,6 +79,12 @@ export type SearchJobsParams = {
   industrySlug?: string;
   functionalAreaSlug?: string;
   status?: 'DRAFT' | 'ACTIVE' | 'EXPIRED' | 'CLOSED';
+  // Multi-select facets: a job matches if its single stored value is any of
+  // the requested ones. Callers pass ENUM values, not the URL spellings —
+  // `parseSrpSearchParams` owns the `mode=on-site` → `ONSITE` normalization
+  // so every SRP surface agrees on it.
+  employmentTypes?: EmploymentType[];
+  workModes?: WorkMode[];
   minExperienceMonths?: number;
   maxExperienceMonths?: number;
   salaryMin?: number;

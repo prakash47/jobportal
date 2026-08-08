@@ -66,9 +66,85 @@ describe('parseSrpSearchParams', () => {
     expect(parseSrpSearchParams({ page: 'abc' })).toEqual({});
   });
 
-  it('does NOT pass emp/mode through to ES params (schema deferred)', () => {
-    const out = parseSrpSearchParams({ emp: 'FULL_TIME', mode: 'remote' });
-    expect(out).toEqual({});
+  // ADR 0002 decision 6. Until this shipped, the assertion here was
+  // `toEqual({})` — the suite pinned the bug in place: both facets rendered on
+  // the live SRP and filtered nothing.
+  it('maps emp onto employmentTypes using the enum spelling', () => {
+    expect(parseSrpSearchParams({ emp: 'FULL_TIME' })).toEqual({
+      employmentTypes: ['FULL_TIME'],
+    });
+    expect(parseSrpSearchParams({ emp: ['FULL_TIME', 'INTERN'] })).toEqual({
+      employmentTypes: ['FULL_TIME', 'INTERN'],
+    });
+  });
+
+  // The URL spelling is NOT the enum spelling for this facet, and the URL side
+  // is frozen (buildSrpHref echoes it verbatim into links Google has indexed).
+  // If this mapping is ever dropped, `mode=on-site` silently returns zero
+  // results instead of the 17 onsite jobs.
+  it('normalises mode URL spellings onto the WorkMode enum', () => {
+    expect(parseSrpSearchParams({ mode: 'on-site' })).toEqual({ workModes: ['ONSITE'] });
+    expect(parseSrpSearchParams({ mode: 'hybrid' })).toEqual({ workModes: ['HYBRID'] });
+    expect(parseSrpSearchParams({ mode: 'remote' })).toEqual({ workModes: ['REMOTE'] });
+  });
+
+  it('combines the two facets', () => {
+    expect(parseSrpSearchParams({ emp: 'INTERN', mode: ['remote', 'hybrid'] })).toEqual({
+      employmentTypes: ['INTERN'],
+      workModes: ['REMOTE', 'HYBRID'],
+    });
+  });
+
+  // Forwarding an unknown value would turn today's "200 with unfiltered
+  // results" into "0 results" for any stale or hand-edited URL.
+  it('drops unknown facet values instead of forwarding them', () => {
+    expect(parseSrpSearchParams({ emp: 'BOGUS', mode: 'teleport' })).toEqual({});
+    // A partially-valid selection keeps only the values that exist.
+    expect(parseSrpSearchParams({ emp: ['FULL_TIME', 'BOGUS'] })).toEqual({
+      employmentTypes: ['FULL_TIME'],
+    });
+    // Casing is not normalised — these are exact-match tables, and accepting
+    // variants would mint duplicate URLs for one result set.
+    expect(parseSrpSearchParams({ emp: 'full_time', mode: 'ONSITE' })).toEqual({});
+  });
+
+  // Regression: the first cut of this used object literals, so `table[value]`
+  // walked the prototype chain. `emp=toString` resolved to a FUNCTION, passed
+  // the `!== undefined` guard, reached Elasticsearch as `null` inside a
+  // `terms` clause and 500'd the public SRP; `emp=__proto__` serialised to
+  // `{}` and silently reported zero jobs. The fixtures above cannot catch it,
+  // because BOGUS and teleport really are absent from the tables — only a key
+  // that Object.prototype actually defines exercises the hole.
+  it('drops Object.prototype keys instead of resolving them', () => {
+    for (const key of [
+      'toString',
+      'constructor',
+      'valueOf',
+      'hasOwnProperty',
+      'isPrototypeOf',
+      'propertyIsEnumerable',
+      'toLocaleString',
+      '__proto__',
+    ]) {
+      expect(parseSrpSearchParams({ emp: key })).toEqual({});
+      expect(parseSrpSearchParams({ mode: key })).toEqual({});
+    }
+  });
+
+  // The type says EmploymentType[]; the prototype bug put a Function there and
+  // tsc could not see it, so assert the runtime type too.
+  it('only ever emits primitive strings as facet values', () => {
+    const out = parseSrpSearchParams({ emp: ['FULL_TIME', 'toString'], mode: ['remote', '__proto__'] });
+    for (const v of [...(out.employmentTypes ?? []), ...(out.workModes ?? [])]) {
+      expect(typeof v).toBe('string');
+    }
+    expect(out).toEqual({ employmentTypes: ['FULL_TIME'], workModes: ['REMOTE'] });
+  });
+
+  it('de-duplicates repeated facet values', () => {
+    expect(parseSrpSearchParams({ mode: ['remote', 'remote'] })).toEqual({
+      workModes: ['REMOTE'],
+    });
   });
 });
 
@@ -115,6 +191,11 @@ describe('buildSrpHref', () => {
     const built = buildSrpHref('/python-jobs', {
       skillSlugs: ['react'],
       industrySlug: 'it-software',
+      // The href side carries URL spellings; the parsed side carries enum
+      // values. This is the one facet pair where those two differ, so the
+      // roundtrip is what proves the boundary is wired in both directions.
+      emp: ['FULL_TIME'],
+      mode: ['on-site'],
       minExperienceMonths: 36,
       salaryMin: 1_200_000,
       postedWithinDays: 7,
@@ -132,6 +213,8 @@ describe('buildSrpHref', () => {
     expect(parseSrpSearchParams(sp)).toEqual({
       skillSlugs: ['react'],
       industrySlug: 'it-software',
+      employmentTypes: ['FULL_TIME'],
+      workModes: ['ONSITE'],
       minExperienceMonths: 36,
       salaryMin: 1_200_000,
       postedWithinDays: 7,
