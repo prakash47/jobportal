@@ -9,6 +9,7 @@ vi.mock('@jobportal/db', () => ({
       create: vi.fn(),
       findUnique: vi.fn(),
       findMany: vi.fn(),
+      groupBy: vi.fn(),
       count: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -26,6 +27,7 @@ const mockedPrisma = prisma as unknown as {
     create: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
+    groupBy: ReturnType<typeof vi.fn>;
     count: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
@@ -276,6 +278,7 @@ describe('ApplicationsService.list', () => {
   it('paginates with default page=1, status=ALL', async () => {
     mockedPrisma.application.findMany.mockResolvedValue([]);
     mockedPrisma.application.count.mockResolvedValue(0);
+    mockedPrisma.application.groupBy.mockResolvedValue([]);
     const out = await service.list(42, {});
     expect(out.page).toBe(1);
     expect(out.pageSize).toBe(20);
@@ -290,6 +293,7 @@ describe('ApplicationsService.list', () => {
   it('narrows by status when filter is supplied', async () => {
     mockedPrisma.application.findMany.mockResolvedValue([]);
     mockedPrisma.application.count.mockResolvedValue(0);
+    mockedPrisma.application.groupBy.mockResolvedValue([]);
     await service.list(42, { status: 'OFFERED', page: 2 });
     expect(mockedPrisma.application.findMany.mock.calls[0]?.[0]).toMatchObject({
       where: { userId: 42, status: 'OFFERED' },
@@ -300,6 +304,7 @@ describe('ApplicationsService.list', () => {
   it('treats status=ALL as no narrowing', async () => {
     mockedPrisma.application.findMany.mockResolvedValue([]);
     mockedPrisma.application.count.mockResolvedValue(0);
+    mockedPrisma.application.groupBy.mockResolvedValue([]);
     await service.list(42, { status: 'ALL' });
     const callArgs = mockedPrisma.application.findMany.mock.calls[0]?.[0] as { where: Record<string, unknown> };
     expect(callArgs.where).toEqual({ userId: 42 });
@@ -396,4 +401,123 @@ describe('ApplicationsService.withdraw', () => {
       await expect(service.withdraw(42, 99)).rejects.toBeInstanceOf(ForbiddenException);
     },
   );
+});
+
+describe('ApplicationsService.list — additive fields (ADR 0002 step 10)', () => {
+  let service: ApplicationsService;
+
+  function row(over: Record<string, unknown> = {}) {
+    return {
+      id: 1,
+      status: 'APPLIED',
+      appliedAt: new Date('2026-07-30T09:15:00Z'),
+      updatedAt: new Date('2026-08-04T11:02:00Z'),
+      statusHistory: null,
+      job: {
+        id: 88,
+        title: 'T',
+        canonicalSlug: 't-88',
+        status: 'ACTIVE',
+        company: { id: 5, name: 'Acme', slug: 'acme' },
+      },
+      ...over,
+    };
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    service = new ApplicationsService(
+      fakeEmail as unknown as never,
+      fakeQuota as unknown as never,
+      fakeNotifications as unknown as never,
+    );
+    mockedPrisma.application.findMany.mockResolvedValue([]);
+    mockedPrisma.application.count.mockResolvedValue(0);
+    mockedPrisma.application.groupBy.mockResolvedValue([]);
+  });
+
+  it('counts are UNFILTERED even when the page is narrowed by status', async () => {
+    // They drive the filter chips. Deriving them from the filtered page would
+    // make every chip show the count of whichever filter is already active.
+    mockedPrisma.application.groupBy.mockResolvedValue([
+      { status: 'APPLIED', _count: { _all: 3 } },
+      { status: 'REJECTED', _count: { _all: 2 } },
+    ]);
+    const out = await service.list(42, { status: 'REJECTED' });
+    expect(mockedPrisma.application.groupBy.mock.calls[0]?.[0]).toMatchObject({
+      by: ['status'],
+      where: { userId: 42 },
+    });
+    // the page IS narrowed...
+    expect(mockedPrisma.application.findMany.mock.calls[0]?.[0]).toMatchObject({
+      where: { userId: 42, status: 'REJECTED' },
+    });
+    // ...while the counts are not
+    expect(out.counts).toEqual({ APPLIED: 3, REJECTED: 2, ALL: 5 });
+  });
+
+  it('ALL is the sum, and zero-count statuses are omitted', async () => {
+    mockedPrisma.application.groupBy.mockResolvedValue([
+      { status: 'APPLIED', _count: { _all: 1 } },
+      { status: 'HIRED', _count: { _all: 2 } },
+    ]);
+    const out = await service.list(42, {});
+    expect(out.counts).toEqual({ APPLIED: 1, HIRED: 2, ALL: 3 });
+    expect(Object.keys(out.counts)).not.toContain('WITHDRAWN');
+  });
+
+  it('reports ALL: 0 for a user with no applications', async () => {
+    const out = await service.list(42, {});
+    expect(out.counts).toEqual({ ALL: 0 });
+  });
+
+  it('scopes the counts query to the caller — never another user', async () => {
+    await service.list(7, {});
+    expect(mockedPrisma.application.groupBy.mock.calls[0]?.[0].where).toEqual({ userId: 7 });
+  });
+
+  it('coalesces a null statusHistory to [] so the client never null-checks', async () => {
+    mockedPrisma.application.findMany.mockResolvedValue([row({ statusHistory: null })]);
+    mockedPrisma.application.count.mockResolvedValue(1);
+    expect((await service.list(42, {})).hits[0]?.statusHistory).toEqual([]);
+  });
+
+  it('passes a real history through untouched, oldest first', async () => {
+    const history = [
+      { from: 'APPLIED', to: 'IN_REVIEW', at: '2026-08-01T08:00:00.000Z', by: 'RECRUITER' },
+      { from: 'IN_REVIEW', to: 'SHORTLISTED', at: '2026-08-04T11:02:00.000Z', by: 'RECRUITER' },
+    ];
+    mockedPrisma.application.findMany.mockResolvedValue([row({ statusHistory: history })]);
+    mockedPrisma.application.count.mockResolvedValue(1);
+    expect((await service.list(42, {})).hits[0]?.statusHistory).toEqual(history);
+  });
+
+  it('treats a non-array statusHistory as no history rather than shipping it', async () => {
+    // The column is Json?, so the schema permits shapes nothing writes.
+    mockedPrisma.application.findMany.mockResolvedValue([row({ statusHistory: { bad: true } })]);
+    mockedPrisma.application.count.mockResolvedValue(1);
+    expect((await service.list(42, {})).hits[0]?.statusHistory).toEqual([]);
+  });
+
+  it('selects statusHistory without disturbing the existing projection', async () => {
+    await service.list(42, {});
+    const select = mockedPrisma.application.findMany.mock.calls[0]?.[0].select;
+    expect(select.statusHistory).toBe(true);
+    // the pre-existing fields are all still there
+    expect(select.id).toBe(true);
+    expect(select.status).toBe(true);
+    expect(select.appliedAt).toBe(true);
+    expect(select.updatedAt).toBe(true);
+    expect(select.job).toBeDefined();
+  });
+
+  it('leaves total as the FILTERED count — counts and total mean different things', async () => {
+    mockedPrisma.application.count.mockResolvedValue(1);
+    mockedPrisma.application.groupBy.mockResolvedValue([
+      { status: 'APPLIED', _count: { _all: 7 } },
+    ]);
+    const out = await service.list(42, { status: 'APPLIED' });
+    expect(out.total).toBe(1);
+    expect(out.counts.ALL).toBe(7);
+  });
 });

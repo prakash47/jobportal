@@ -18,6 +18,19 @@ export interface ApplicationListRow {
   status: ApplicationStatus;
   appliedAt: Date;
   updatedAt: Date;
+  /**
+   * The transitions this application has been through, oldest first.
+   *
+   * Raw `Application.statusHistory`, coalesced from `null` to `[]` so a client
+   * never has to null-check before iterating. Entries are authored by
+   * `buildHistoryEntry` as `{ from, to, at, by }` — note it is `to` that names
+   * the status REACHED at `at`, which is what a timeline renders.
+   *
+   * Legacy and seeded rows can be empty: applications created before the
+   * column existed never recorded one, so a timeline should synthesise the
+   * APPLIED step rather than assume this is populated.
+   */
+  statusHistory: unknown[];
   job: {
     id: number;
     title: string;
@@ -29,6 +42,16 @@ export interface ApplicationListRow {
 
 export interface ApplicationListPage {
   hits: ApplicationListRow[];
+  /**
+   * Per-status totals across ALL of this user's applications.
+   *
+   * Deliberately INDEPENDENT of `?status=`: these drive the filter chips, so
+   * deriving them from the filtered page would make every chip read the count
+   * of whichever filter is already active. `ALL` is always present and is the
+   * sum; statuses with zero applications are OMITTED, because groupBy only
+   * returns non-empty groups and the UI hides empty chips anyway.
+   */
+  counts: Record<string, number>;
   total: number;
   page: number;
   pageSize: number;
@@ -170,7 +193,7 @@ export class ApplicationsService {
       where.status = filter.status;
     }
 
-    const [hits, total] = await Promise.all([
+    const [rows, total, statusGroups] = await Promise.all([
       prisma.application.findMany({
         where,
         orderBy: { appliedAt: 'desc' },
@@ -181,6 +204,7 @@ export class ApplicationsService {
           status: true,
           appliedAt: true,
           updatedAt: true,
+          statusHistory: true,
           job: {
             select: {
               id: true,
@@ -193,9 +217,32 @@ export class ApplicationsService {
         },
       }),
       prisma.application.count({ where }),
+      // NOT filtered by `where` — see the `counts` doc above. Scoped to the
+      // caller either way, so this can never count another user's rows.
+      prisma.application.groupBy({
+        by: ['status'],
+        where: { userId },
+        _count: { _all: true },
+      }),
     ]);
 
-    return { hits, total, page, pageSize: PAGE_SIZE };
+    const counts: Record<string, number> = {};
+    let all = 0;
+    for (const g of statusGroups) {
+      counts[g.status] = g._count._all;
+      all += g._count._all;
+    }
+    counts['ALL'] = all;
+
+    const hits: ApplicationListRow[] = rows.map((r) => ({
+      ...r,
+      // The column is `Json?`. A null becomes [], and a non-array value (which
+      // the schema permits but nothing writes) is treated as no history rather
+      // than shipped as a shape the client cannot iterate.
+      statusHistory: Array.isArray(r.statusHistory) ? r.statusHistory : [],
+    }));
+
+    return { hits, counts, total, page, pageSize: PAGE_SIZE };
   }
 
   // SRS §4.6.2 — candidate-driven WITHDRAW transition. State machine enforces
