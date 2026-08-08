@@ -7,8 +7,15 @@ import './instrument';
 import 'reflect-metadata';
 import { VERSION_NEUTRAL, VersioningType } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+// Typed as the Express application specifically, so `app.set('trust proxy', …)`
+// is a checked call rather than a cast. This only NAMES the platform Nest was
+// already using — cookie-parser below is Express middleware, and platform-express
+// is Nest's default. (`rawBody` is not evidence either way; Fastify supports it
+// too.)
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { parseTrustProxy, trustProxyWarning } from './common/trust-proxy';
 import { SentryGlobalFilter } from './observability/sentry.filter';
 
 async function bootstrap(): Promise<void> {
@@ -16,9 +23,21 @@ async function bootstrap(): Promise<void> {
   // the parsed-then-restringified JSON never matches. Nest keeps req.rawBody
   // alongside the parsed body only when asked at boot (used solely by
   // recruiter-billing's webhook controller).
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.use(cookieParser());
+
+  // How far to trust X-Forwarded-For when deriving req.ip. Everything that
+  // identifies a caller depends on this: the global 100/min ThrottlerGuard, the
+  // per-IP login throttle, and the Session/OtpChallenge ipAddress columns.
+  // Defaults to Express's `false`, i.e. exactly today's behaviour, so local
+  // development is unchanged and no environment silently gains a spoofable
+  // limiter. See common/trust-proxy.ts for why this is configuration and not a
+  // constant.
+  const trustProxy = parseTrustProxy(process.env.TRUST_PROXY);
+  app.set('trust proxy', trustProxy);
+  const proxyWarning = trustProxyWarning(trustProxy, process.env.NODE_ENV);
+  if (proxyWarning) console.warn(`[trust-proxy] ${proxyWarning}`);
 
   // URI versioning for the public/mobile surface (ADR 0002 decision 2).
   //
