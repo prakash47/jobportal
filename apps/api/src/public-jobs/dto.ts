@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_INT32 } from '../common/int32';
 
 // Query contract for GET /v1/jobs.
 //
@@ -75,7 +76,11 @@ export type ListJobsQuery = z.infer<typeof ListJobsQueryDto>;
 // index.
 export const JobStateQueryDto = z
   .object({
-    jobIds: z.array(z.coerce.number().int().positive()).min(1).max(100),
+    // `.max(MAX_INT32)` is not cosmetic: Job.id is a Prisma `Int`, and a larger
+    // value makes findMany THROW rather than match nothing — a 500 instead of
+    // an empty result. Auth-gated here, but the same omission was a public 5xx
+    // on the catalogs route.
+    jobIds: z.array(z.coerce.number().int().positive().max(MAX_INT32)).min(1).max(100),
   })
   .strict();
 

@@ -107,6 +107,13 @@ describe('JobStateQueryDto', () => {
     expect(JobStateQueryDto.safeParse({ jobIds: [1.5] }).success).toBe(false);
   });
 
+  it('rejects ids beyond the int4 ceiling — Job.id is a Prisma Int', () => {
+    // A larger value makes findMany THROW rather than match nothing, which is
+    // a 500 instead of an empty result.
+    expect(JobStateQueryDto.safeParse({ jobIds: [2147483647] }).success).toBe(true);
+    expect(JobStateQueryDto.safeParse({ jobIds: [2147483648] }).success).toBe(false);
+  });
+
   it('rejects unknown keys', () => {
     expect(JobStateQueryDto.safeParse({ jobIds: [1], userId: 9 }).success).toBe(false);
   });

@@ -59,6 +59,18 @@ describe('CatalogQueryDto', () => {
     expect(CatalogQueryDto.safeParse({ nope: '1' }).success).toBe(false);
   });
 
+  it('rejects ids beyond the int4 ceiling — they made Prisma throw a public 500', () => {
+    // These id columns are Prisma `Int`. A larger value does not match zero
+    // rows, it THROWS inside findMany, so one extra digit in a URL produced a
+    // 500 and a Sentry event on an unauthenticated route.
+    expect(CatalogQueryDto.safeParse({ ids: '2147483647' }).success).toBe(true);
+    expect(CatalogQueryDto.safeParse({ ids: '2147483648' }).success).toBe(false);
+    expect(CatalogQueryDto.safeParse({ ids: '1,3000000000' }).success).toBe(false);
+    // Number.isInteger(1e10) is true, so the exponent form slipped through the
+    // old digit check.
+    expect(CatalogQueryDto.safeParse({ ids: '1e10' }).success).toBe(false);
+  });
+
   it('trims q and rejects a blank one', () => {
     const r = CatalogQueryDto.safeParse({ q: '  react  ' });
     expect(r.success).toBe(true);

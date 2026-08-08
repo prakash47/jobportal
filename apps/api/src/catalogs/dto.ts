@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isInt32Id } from '../common/int32';
 
 /** Default page size, matching the other list endpoints. */
 export const DEFAULT_PAGE_SIZE = 20;
@@ -57,7 +58,13 @@ export const CatalogQueryDto = z
         const out: number[] = [];
         for (const p of parts) {
           const n = Number(p);
-          if (!Number.isInteger(n) || n < 1) {
+          // The int4 ceiling is load-bearing, not tidiness: these id columns
+          // are Prisma `Int`, and a larger value makes findMany THROW rather
+          // than return no rows — which escaped as a 500 from an
+          // unauthenticated route, so one extra digit in a URL produced a 5xx
+          // and a Sentry event. It also closes `?ids=1e10`, which
+          // Number.isInteger accepts.
+          if (!isInt32Id(n)) {
             ctx.addIssue({ code: 'custom', message: `ids must be positive integers: "${p}"` });
             return z.NEVER;
           }

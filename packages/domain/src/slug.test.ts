@@ -123,3 +123,25 @@ describe('parseSkillJobsInCitySlug', () => {
     expect(parseSkillJobsInCitySlug('python-jobs')).toBeNull();
   });
 });
+
+describe('id overflow — every id column is a Prisma Int (int4)', () => {
+  // A slug carrying a larger number is unparseable, not a far-future row: no
+  // row can ever have that id. Before this guard the regex matched, Number()
+  // succeeded, and Prisma THREW — turning /job/x-2147483648 into a 500 on a
+  // public route rather than a 404.
+  it('accepts the int4 ceiling exactly', () => {
+    expect(parseJobSlug('a-2147483647')).toEqual({ slug: 'a', id: 2147483647 });
+    expect(parseCompanySlug('a-overview-2147483647')).toEqual({ slug: 'a', id: 2147483647 });
+    expect(parseWorkingAtSlug('working-at-a-2147483647')).toEqual({ slug: 'a', id: 2147483647 });
+  });
+
+  it('rejects one past it, on all three parsers', () => {
+    expect(parseJobSlug('a-2147483648')).toBeNull();
+    expect(parseCompanySlug('a-overview-2147483648')).toBeNull();
+    expect(parseWorkingAtSlug('working-at-a-2147483648')).toBeNull();
+  });
+
+  it('rejects an absurdly long digit run rather than overflowing to a float', () => {
+    expect(parseJobSlug('a-99999999999999999999')).toBeNull();
+  });
+});
