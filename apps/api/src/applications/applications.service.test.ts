@@ -439,15 +439,28 @@ describe('ApplicationsService.list — additive fields (ADR 0002 step 10)', () =
   it('counts are UNFILTERED even when the page is narrowed by status', async () => {
     // They drive the filter chips. Deriving them from the filtered page would
     // make every chip show the count of whichever filter is already active.
-    mockedPrisma.application.groupBy.mockResolvedValue([
-      { status: 'APPLIED', _count: { _all: 3 } },
-      { status: 'REJECTED', _count: { _all: 2 } },
-    ]);
+    // ARGUMENT-SENSITIVE on purpose. A fixed mockResolvedValue returns the
+    // same array however it is called, so `out.counts` would look identical
+    // whether or not the implementation leaked the filter into groupBy — the
+    // value assertion below would prove nothing.
+    mockedPrisma.application.groupBy.mockImplementation((args: { where: { status?: string } }) =>
+      Promise.resolve(
+        args.where.status
+          ? [{ status: 'REJECTED', _count: { _all: 2 } }]
+          : [
+              { status: 'APPLIED', _count: { _all: 3 } },
+              { status: 'REJECTED', _count: { _all: 2 } },
+            ],
+      ),
+    );
     const out = await service.list(42, { status: 'REJECTED' });
-    expect(mockedPrisma.application.groupBy.mock.calls[0]?.[0]).toMatchObject({
-      by: ['status'],
-      where: { userId: 42 },
-    });
+
+    const groupByArgs = mockedPrisma.application.groupBy.mock.calls[0]?.[0];
+    expect(groupByArgs.by).toEqual(['status']);
+    // EXACT, not toMatchObject: that is a recursive SUBSET match, so
+    // `{ userId: 42, status: 'REJECTED' }` would satisfy `{ userId: 42 }` and
+    // this test would pass for the very bug it is named after.
+    expect(groupByArgs.where).toEqual({ userId: 42 });
     // the page IS narrowed...
     expect(mockedPrisma.application.findMany.mock.calls[0]?.[0]).toMatchObject({
       where: { userId: 42, status: 'REJECTED' },
@@ -462,8 +475,9 @@ describe('ApplicationsService.list — additive fields (ADR 0002 step 10)', () =
       { status: 'HIRED', _count: { _all: 2 } },
     ]);
     const out = await service.list(42, {});
+    // The exact toEqual above already pins the key set; asserting the absence
+    // of WITHDRAWN separately would only restate the fixture.
     expect(out.counts).toEqual({ APPLIED: 1, HIRED: 2, ALL: 3 });
-    expect(Object.keys(out.counts)).not.toContain('WITHDRAWN');
   });
 
   it('reports ALL: 0 for a user with no applications', async () => {
