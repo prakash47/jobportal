@@ -28,6 +28,16 @@ export class PerEmailThrottleGuard implements CanActivate {
       const count = await redis().incr(key);
       if (count === 1) await redis().expire(key, WINDOW_SECONDS);
       if (count > MAX_ATTEMPTS) {
+        // Tell the client how long the lockout ACTUALLY has left, from the
+        // key's own TTL. This guard blocks for an hour, and it is the only
+        // 429 in the app that neither ThrottlerGuard nor the budget quotas
+        // annotate — without this a client backing off on a generic guess
+        // retries dozens of times across the window and re-trips it each
+        // time. TTL can come back -1/-2 on a race with expiry; fall back to
+        // the full window rather than advertising a negative wait.
+        const ttl = await redis().ttl(key);
+        const res = context.switchToHttp().getResponse<{ setHeader?: (k: string, v: string) => void }>();
+        res.setHeader?.('Retry-After', String(ttl > 0 ? ttl : WINDOW_SECONDS));
         throw new HttpException(
           'Too many login attempts for this email — try again later',
           HttpStatus.TOO_MANY_REQUESTS,

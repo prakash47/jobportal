@@ -70,15 +70,22 @@ export function withEnvelope(body: unknown, status: number): ErrorEnvelope {
 }
 
 /**
- * Seconds a client should wait before retrying, for the two 429 paths.
+ * Seconds until a BUDGET-style 429 window reopens, or null when this code
+ * cannot know.
  *
- * A mobile client cannot back off correctly without this — and unlike a
- * browser tab, a phone that retries blindly will burn the user's battery and
- * trip the limiter again. Returns null when the status is not a 429.
+ * Returning null is a deliberate answer, not a gap. A wrong Retry-After is
+ * strictly worse than none: a client that honours "60" against a one-hour
+ * lockout retries sixty times and re-trips the limiter every time — exactly
+ * the battery-burn loop the header exists to prevent. So this only speaks when
+ * the body tells it something definite, and the caller leaves any header an
+ * upstream guard already set alone (ThrottlerGuard emits its own accurate
+ * `timeToBlockExpire`, which must win over anything guessed here).
  *
- * `resetSeconds` comes from the throttler when available; the apply-quota
- * limit is a *daily* budget, so it falls back to the seconds remaining until
- * the next UTC midnight rather than a fixed guess.
+ * Recognised bodies:
+ *  - `window: 'daily' | 'monthly'` — the recruiter post quota's explicit
+ *    discriminator (recruiter-post-quota/quota.service.ts `over()`).
+ *  - a top-level numeric `limit` with no `window` — the apply quota
+ *    (applications/quota.service.ts), which is a per-DAY budget.
  */
 export function retryAfterSeconds(
   status: number,
@@ -86,26 +93,25 @@ export function retryAfterSeconds(
   now: Date = new Date(),
 ): number | null {
   if (status !== HttpStatus.TOO_MANY_REQUESTS) return null;
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
 
-  if (body !== null && typeof body === 'object' && !Array.isArray(body)) {
-    const own = body as Record<string, unknown>;
-    // The apply-quota body is the daily-budget one; it carries `limit`.
-    if (typeof own.limit === 'number') {
-      const nextMidnight = Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate() + 1,
-        0,
-        0,
-        0,
-        0,
-      );
-      return Math.max(1, Math.ceil((nextMidnight - now.getTime()) / 1000));
-    }
+  const own = body as Record<string, unknown>;
+
+  // Date.UTC normalises overflow, so day+1 rolls the month and month+1 rolls
+  // the year — no special-casing for 31 Dec or a leap day.
+  const secondsUntil = (utcMs: number): number =>
+    Math.max(1, Math.ceil((utcMs - now.getTime()) / 1000));
+
+  const nextMidnight = () =>
+    secondsUntil(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0),
+    );
+
+  if (own.window === 'monthly') {
+    return secondsUntil(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
   }
+  if (own.window === 'daily') return nextMidnight();
+  if (typeof own.limit === 'number') return nextMidnight();
 
-  // ThrottlerGuard's window is 60s across every @Throttle in this app
-  // (auth.module.ts default plus the per-route overrides), so a fresh window
-  // is at most a minute away.
-  return 60;
+  return null;
 }
