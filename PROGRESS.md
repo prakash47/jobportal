@@ -12,6 +12,8 @@
 
 ## Snapshot — 2026-08-08
 
+- **Newest merge (2026-08-08)**: `feature/public-catalogs-api` — **the three reference catalogs, and the profile screen unblocked.** `GET /v1/{skills,cities,industries}` with an `?ids=` resolve mode, because `GET /me/profile` returns bare ids with no names and the app cannot render that screen without turning them into labels. Adversarial review **67/67 agents, 21 raised → 1 confirmed HIGH**, whose fix hint turned one instance into **five**: every `id` column is a Prisma `Int`, and a bigger value makes Prisma **throw** rather than match nothing — so an anonymous caller produced 500s and Sentry noise by adding a digit to a URL, including on the already-merged public `/v1/jobs/:slug`. Fixed in `@jobportal/domain`, so the **website** is repaired too. **API 899 → 919, domain 78 → 81 tests.** Full detail in the PR log below.
+
 - **Newest merge (2026-08-08)**: `feature/public-jobs-api` — **the app can browse jobs.** `GET /v1/jobs`, `GET /v1/jobs/:slug` and the bulk `POST /v1/me/job-state`, all reusing the website's own `searchJobs` + `@jobportal/domain` rules so the two surfaces cannot disagree. Visibility is checked BEFORE the canonical 308 (the redirect's `Location` carries the title-bearing slug), and all three not-found paths are byte-identical. Adversarial review **86/86 agents, 27 raised → 5 confirmed**, all one root defect: an unhandled Elasticsearch error **answered with ES's own status, echoed its raw exception text to anonymous callers, and was skipped by Sentry as an expected 4xx** — the second facet living in the error envelope from the previous PR. Now a clean 503, a derived page bound, and an `expose`-gated http-error check; **verified by actually stopping the Elasticsearch container**. **API 858 → 899 tests.** Full detail in the PR log below.
 
 - **Newest merge (2026-08-08)**: `feature/domain-package-extraction` — **the shared-code prerequisite the mobile spec had no phase for.** Six of its nine endpoints need rules that lived in `apps/web/lib`, which `apps/api` structurally cannot import — so six modules (slug parsing, job visibility, the SRP / directory / article param codecs, and the home aggregate) moved into a new **`@jobportal/domain`** package, with their tests. **Behaviour-preserving, and the invariant proves it: web 216 → 138 + domain 78 = exactly 216.** Two things worth remembering: React's `cache()` could not come along (RSC-only, inert in Nest), so the package exports the *uncached* home loader while `apps/web` keeps a `cache()` wrapper; and subpath imports **typechecked but failed at runtime** until an explicit `exports` map was added — a green typecheck does not prove a new package resolves. Adversarial review **65/65 agents, 20 raised → 1 confirmed**. **On pull run `pnpm install`.** Full detail in the PR log below.
@@ -410,6 +412,58 @@ home, career advice, and the applications extras — followed by the API contrac
 team needs to build against while hosting is deferred. **Still owner-blocked:** nothing is deployed
 (the owner has deferred hosting deliberately), `RESEND_API_KEY` is blank, and the store-compliance
 surfaces do not exist.
+
+
+### PR — `feature/public-catalogs-api` · 2026-08-08 — reference catalogs (ADR 0002 step 6)
+
+`GET /v1/skills`, `GET /v1/cities`, `GET /v1/industries`. Public, unauthenticated, one controller
+over the three seed tables. **Promoted ahead of companies**, and the reason matters: the mobile spec
+framed these as filter pickers, but they are a hard blocker for the app's **profile screen**.
+`GET /me/profile` returns bare ids with no names — verified against the seeded candidate, it really
+does answer `skillIds [7,110,62,47,80]` and `preferredCityIds [1,4]` and nothing else — so the app
+cannot draw that screen at all without resolving them.
+
+Hence an **`?ids=` resolve mode** alongside the usual search and paging:
+`?ids=7,110,62,47,80` → *Distributed Systems, Go, Kafka, Kubernetes, PostgreSQL*; `?ids=1,4` →
+*Bangalore (Karnataka), Hyderabad (Telangana)*. Without it the client would download the whole
+catalogue or issue one request per id. Resolve mode **ignores `q` and `page`** deliberately —
+paginating a lookup would silently drop ids the caller asked about, leaving a profile with missing
+chips and no signal anything was lost — de-duplicates, caps at 100, and **omits an id that no longer
+exists rather than 404ing**, so a stale skill id on an old profile cannot make the profile
+unrenderable.
+
+Three judgment calls, all recorded rather than assumed: **`?q=`** adds server-side case-insensitive
+name search, a *superset* of the website (whose pickers download the entire table and filter
+client-side — fine on a desktop, wrong on Indian mobile data); **`pageSize` is client-settable here
+and only here** (default 20, cap 100), a deliberate divergence from the fixed 20 the feed endpoints
+use, because a picker wants the small table in one round trip; and **custom skills are not filtered
+out**, matching the SSR pickers, because hiding them here would silently diverge from the site —
+worth a product conversation if junk accumulates, not a call to take unilaterally inside an API meant
+to mirror the website.
+
+**Adversarial 4-lens review with three skeptics per finding — 67/67 agents, no errors: 21 raised →
+1 confirmed HIGH.** Following its fix hint turned one instance into **five**.
+
+Every `id` column in this schema is a Prisma `Int` (Postgres int4). Handing Prisma a larger number
+does **not** match zero rows — it **throws**, escaping as an unhandled 500. On an unauthenticated
+route that means an anonymous caller generates 5xx responses and Sentry events by adding one digit to
+a URL. Reproduced before the fix: `?ids=2147483648`, `?ids=1e10` (Number.isInteger(1e10) is true, so
+the exponent form slipped past the digit check), `?ids=3000000000`, the authenticated `jobIds` batch,
+**and the already-merged public `GET /v1/jobs/x-2147483648`** — all 500. All now answer 400, or 404
+for the slug, with the boundary value 2147483647 behaving exactly as before.
+
+The slug guard lives in **`@jobportal/domain`**, so it repairs the **website and the API together**:
+the SSR job/company pages and `GET /v1/jobs/:slug` funnel through the same parsers, and
+`parseCompanySlug`/`parseWorkingAtSlug` had the identical hole. `apps/api` gets a small shared
+`int32` helper rather than a magic number repeated per DTO. Rejecting beats clamping — a caller
+asking about id 3000000000 has asked a malformed question, not one whose answer is 2147483647.
+
+**domain 78 → 81, API 899 → 919 tests.** Gate green on the integrated state: typecheck **13/13** ·
+tests **10/10** · build **5/5**.
+
+**Next per ADR 0002:** companies, home, career advice, the applications extras, then the API contract
+document the app team needs while hosting is deferred. **Still owner-blocked:** hosting (deliberately
+deferred), `RESEND_API_KEY`, and the store-compliance surfaces.
 
 ---
 
