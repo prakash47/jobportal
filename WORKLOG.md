@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Jayesh | `feature/public-home-api` | **Home feed for mobile (ADR 0002 step 8)** — `GET /v1/home`, one composite aggregate collapsing ~10 queries into a single cold-start request. Genuinely thin: `loadHomePageData` already lives in `@jobportal/domain/home-queries` (uncached) after the extraction PR. Also lands **owner decision 5**: `counts.companies` stops being an unfiltered table count and counts only companies with ≥1 ACTIVE job — which **changes the website's hero ribbon number too** (it will go DOWN, deliberately, because the current one is not true). | `packages/domain/src/home-queries.ts` (**shared** — the counts change is intentionally visible on `apps/web`). No schema, no migration, no flag, no `theme.css`, no `keys.ts`. |
 
 ---
 
