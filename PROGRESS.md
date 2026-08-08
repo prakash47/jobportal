@@ -12,6 +12,8 @@
 
 ## Snapshot — 2026-08-08
 
+- **Newest merge (2026-08-08)**: `feature/public-jobs-api` — **the app can browse jobs.** `GET /v1/jobs`, `GET /v1/jobs/:slug` and the bulk `POST /v1/me/job-state`, all reusing the website's own `searchJobs` + `@jobportal/domain` rules so the two surfaces cannot disagree. Visibility is checked BEFORE the canonical 308 (the redirect's `Location` carries the title-bearing slug), and all three not-found paths are byte-identical. Adversarial review **86/86 agents, 27 raised → 5 confirmed**, all one root defect: an unhandled Elasticsearch error **answered with ES's own status, echoed its raw exception text to anonymous callers, and was skipped by Sentry as an expected 4xx** — the second facet living in the error envelope from the previous PR. Now a clean 503, a derived page bound, and an `expose`-gated http-error check; **verified by actually stopping the Elasticsearch container**. **API 858 → 899 tests.** Full detail in the PR log below.
+
 - **Newest merge (2026-08-08)**: `feature/domain-package-extraction` — **the shared-code prerequisite the mobile spec had no phase for.** Six of its nine endpoints need rules that lived in `apps/web/lib`, which `apps/api` structurally cannot import — so six modules (slug parsing, job visibility, the SRP / directory / article param codecs, and the home aggregate) moved into a new **`@jobportal/domain`** package, with their tests. **Behaviour-preserving, and the invariant proves it: web 216 → 138 + domain 78 = exactly 216.** Two things worth remembering: React's `cache()` could not come along (RSC-only, inert in Nest), so the package exports the *uncached* home loader while `apps/web` keeps a `cache()` wrapper; and subpath imports **typechecked but failed at runtime** until an explicit `exports` map was added — a green typecheck does not prove a new package resolves. Adversarial review **65/65 agents, 20 raised → 1 confirmed**. **On pull run `pnpm install`.** Full detail in the PR log below.
 
 - **Newest merge (2026-08-08)**: `feature/api-contract-and-mobile-auth` — **the mobile app can finally log in.** The CQ mobile team's spec asked for nine public endpoints and never mentioned the one thing blocking all of them: `JwtAuthGuard` **already accepted `Authorization: Bearer`**, so the entire authenticated API worked for a phone the instant it held a token — but nothing ever handed it one. Ships URI versioning (`VERSION_NEUTRAL`, so **every existing route keeps its path** and only opted-in controllers get `/v1`), one documented error envelope (Nest's own shape, so no existing web caller changes), and `/v1/auth/mobile/{register,login,refresh,logout}` returning tokens in the body — a **deliberate owner-approved divergence from CLAUDE.md §9**, recorded in ADR 0002. **Adversarial review run TWICE** because the first had 7 dead agents including the whole route-drift lens: **51 raised → 9 confirmed (5 distinct), all fixed**, headed by a HIGH where the rewrite left a pre-existing test red, and a MED where the new `Retry-After` **overwrote the throttler's accurate countdown with a flat 60**, making mobile back-off worse than develop. **API 812 → 858 tests.** `apps/api` only — no schema, no migration, no new flag key, no lock. Full detail in the PR log below.
@@ -322,6 +324,92 @@ workspace package.
 **Next per ADR 0002:** `GET /jobs` + `GET /jobs/:slug`, now unblocked — the biggest single win for the
 app. **Still owner-blocked and unchanged:** nothing is deployed (no host, no CI, no managed
 Elasticsearch), `RESEND_API_KEY` is blank, and the store-compliance surfaces do not exist.
+
+
+### PR — `feature/public-jobs-api` · 2026-08-08 — public job browse (ADR 0002 step 5)
+
+The endpoint pair the mobile spec called the core of the app, plus the bulk lookup that had to ship
+with it. `apps/api` only — no schema, no migration, no new flag key, no shared-surface lock.
+
+**What shipped**
+- **`GET /v1/jobs`** — paginated, ACTIVE-only search with the full SRP filter set.
+- **`GET /v1/jobs/:slug`** — detail with optional auth and a 308 on slug drift.
+- **`POST /v1/me/job-state`** — authenticated bulk saved/applied lookup. Deliberately in the same PR:
+  without it a 20-card page needs 20 extra round trips to draw its save icons, and adding it later
+  would have changed the list response shape after clients were written against it.
+
+**Reuse, not reimplementation — the extraction PR paying off.** The Elasticsearch query is
+`searchJobs` from `@jobportal/search`, the same function the website's SRP calls. Param mapping goes
+through `@jobportal/domain/srp-params`, slug parsing through `/slug`, and the visibility decision
+through `/job-visibility`. "expMin=2" and "is this job public" now mean the identical thing on both
+surfaces by construction, not by discipline.
+
+**Security, in two layers.** `status` is absent from the `.strict()` DTO (so it 400s) *and* pinned to
+ACTIVE after the spread in the service — `searchJobs` only DEFAULTS to ACTIVE and the param is
+caller-overridable, so forwarding raw query params would have served DRAFT documents out of the index.
+
+**Ordering is load-bearing on the detail route.** The visibility check runs BEFORE the canonical 308,
+because the redirect's `Location` header carries the real title-bearing slug — redirecting first
+would disclose an unapproved job's title to anyone who guessed its id. Verified against a
+temporarily-`PENDING_MODERATION` job: anonymous gets a **404 with no Location header**, byte-identical
+to the 404 an unknown id gets, while an admin Bearer token gets 200. **The row was restored and
+verified byte-identically afterwards.**
+
+**New `OptionalJwtAuthGuard`** — the non-throwing sibling of `JwtAuthGuard`, so a public route can
+recognise an owner/collaborator/admin previewing an unpublished job while a missing *or malformed*
+token simply means anonymous. Reusing the strict guard would have turned a bad token into a 401 on a
+public page. Verified: a garbage Bearer gets 404 on a hidden job and 200 on the public list.
+
+**Adversarial 5-lens review with three skeptics per finding — 86/86 agents, no errors: 27 raised →
+5 confirmed.** All five describe one root defect, and its second facet was in the error envelope
+shipped in the *previous* PR — this branch is what made it reachable.
+
+`searchJobs` was awaited with no error handling, and `@elastic/transport`'s `ResponseError` carries
+`statusCode: number` + `message: string`: precisely the duck-type the global filter used to recognise
+an http-error. So an Elasticsearch failure on the API's **first unauthenticated route** (a) answered
+with Elasticsearch's own status, (b) echoed its raw exception text — naming the engine and its
+internal index settings — to anyone, and (c) was classified as an "expected 4xx" and therefore
+**never captured by Sentry**, so a real outage would have been invisible in monitoring. The trigger
+was baked into this branch's own DTO: `page` was capped at 1000 with a comment rationalising it, but
+with `PAGE_SIZE` 20 and ES's default `index.max_result_window` of 10000 the last servable page is
+**500** — pages 501–1000 were inside the advertised contract and always failed, loudly.
+
+Fixed three ways: the page bound is now **derived** (`MAX_PAGE = ES_MAX_RESULT_WINDOW / PAGE_SIZE`)
+so it cannot drift if either constant moves; ES failures become a clean **503** carrying the original
+as `cause`, so the detail reaches our logs and Sentry without reaching the client, and 503 being
+≥ 500 means it *is* captured; and the filter now requires a **boolean `expose`** to recognise an
+http-error — verified against the installed packages that http-errors sets it true on 4xx and false
+on 5xx while ES's ResponseError leaves it undefined. The status is still adopted for any genuine
+http-error (a 502 really is a 502); only the **message** is gated on `expose`, which is exactly what
+the library documents the flag for.
+
+Worth recording: fixing this broke three filter tests from the previous PR whose fixtures built
+http-errors **without** `expose` — unrealistic fixtures rather than a behaviour regression — and
+repairing them surfaced that the first attempt also dropped the status of genuine 5xx http-errors.
+The final split (status always, message only when exposed) preserves develop's behaviour on every
+path that was already correct.
+
+**Verified live**, including by actually stopping the `jp-elasticsearch` container: a real outage
+returns `503 {"message":"Job search is temporarily unavailable"}` with no internals, and the ES
+client recovers on its own once the container returns — no API restart needed. Filters (sort, city,
+multi-city, skill, experience range, postedWithin, salaryMin, page), the full detail shape, slug
+drift 308 with the canonical slug in the body so a client that does not follow redirects can
+self-correct, and the job-state lookup returning real applications for a seeded candidate.
+
+**Found while verifying, NOT introduced here:** the local Elasticsearch index was stale — an EXPIRED
+job was still indexed as ACTIVE and so appeared in search. The **website shows the identical row**,
+confirming a pre-existing dev-data artifact rather than a regression; the expiry sweep does call
+`syncJob`. `pnpm --filter @jobportal/search search:reindex` fixed it locally (43 jobs indexed,
+matching the ACTIVE count exactly). **Teammates may see the same thing on their machines.**
+
+**API 858 → 899 tests** (+41). Gate green on the integrated state: typecheck **13/13** · tests
+**10/10** · build **5/5**.
+
+**Next per ADR 0002:** the reference catalogs (`/skills`, `/cities`, `/industries`), then companies,
+home, career advice, and the applications extras — followed by the API contract document the app
+team needs to build against while hosting is deferred. **Still owner-blocked:** nothing is deployed
+(the owner has deferred hosting deliberately), `RESEND_API_KEY` is blank, and the store-compliance
+surfaces do not exist.
 
 ---
 
