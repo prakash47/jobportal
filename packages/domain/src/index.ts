@@ -25,3 +25,4 @@ export * from './company-params';
 export * from './company-highlights';
 export * from './article-params';
 export * from './home-queries';
+export * from './asset-url';

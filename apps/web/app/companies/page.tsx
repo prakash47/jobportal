@@ -12,6 +12,7 @@ import { SiteShell } from '../../components/shell/SiteShell';
 import { buildDirectoryQuery, parseDirectoryParams, type DirectorySort } from '@jobportal/domain/company-params';
 import { JsonLd } from '../../lib/seo';
 import { breadcrumbList } from '../../lib/seo/json-ld';
+import { publicAssetUrl } from '../../lib/assets';
 
 const PAGE_SIZE = 24;
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
@@ -223,7 +224,7 @@ export default async function CompaniesDirectoryPage({ searchParams }: PageProps
                       id={c.id}
                       name={c.name}
                       slug={c.slug}
-                      logoUrl={c.logoUrl}
+                      logoUrl={publicAssetUrl(c.logoUrl)}
                       industryName={c.industry?.name ?? null}
                       hqCityName={c.headquartersCity?.name ?? null}
                       averageRating={c.averageRating}

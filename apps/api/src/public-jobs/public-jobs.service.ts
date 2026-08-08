@@ -6,6 +6,7 @@ import { parseJobSlug } from '@jobportal/domain/slug';
 import { canViewJob } from '@jobportal/domain/job-visibility';
 import type { AccessClaims } from '@jobportal/auth';
 import { PAGE_SIZE, type ListJobsQuery } from './dto';
+import { publicAssetUrl } from '../common/asset-url';
 
 export { PAGE_SIZE };
 
@@ -177,7 +178,7 @@ export class PublicJobsService {
         id: j.companyId,
         name: j.companyName,
         slug: j.companySlug,
-        logoUrl: logoByCompanyId.get(j.companyId) ?? null,
+        logoUrl: publicAssetUrl(logoByCompanyId.get(j.companyId) ?? null),
       },
       // Same fallback the web card uses: de-slugify when the lookup misses,
       // so a city removed between index and read still reads as a place name

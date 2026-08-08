@@ -23,6 +23,7 @@ import { readApplyQuota } from '../../../lib/applications/quota-state';
 import { classifyQuota } from '../../../lib/applications/quota-ui-state';
 import { jobPosting } from '../../../lib/seo/json-ld';
 import { parseJobSlug } from '@jobportal/domain/slug';
+import { publicAssetUrl } from '../../../lib/assets';
 
 const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
@@ -147,7 +148,7 @@ export default async function JobDetailPage({ params }: PageProps) {
     hiringOrganization: {
       name: job.company.name,
       ...(job.company.websiteUrl ? { sameAs: job.company.websiteUrl } : {}),
-      ...(job.company.logoUrl ? { logo: job.company.logoUrl } : {}),
+      ...(publicAssetUrl(job.company.logoUrl) ? { logo: publicAssetUrl(job.company.logoUrl)! } : {}),
     },
     ...(cityNames.length > 0
       ? {
@@ -227,7 +228,7 @@ export default async function JobDetailPage({ params }: PageProps) {
           companyName={job.company.name}
           companySlug={job.company.slug}
           companyId={job.companyId}
-          logoUrl={job.company.logoUrl}
+          logoUrl={publicAssetUrl(job.company.logoUrl)}
           postedAt={job.postedAt.toISOString()}
           cityNames={cityNames}
           salaryMinPaise={job.salaryMinPaise}
@@ -257,7 +258,7 @@ export default async function JobDetailPage({ params }: PageProps) {
               companyId={job.companyId}
               companyName={job.company.name}
               companySlug={job.company.slug}
-              logoUrl={job.company.logoUrl}
+              logoUrl={publicAssetUrl(job.company.logoUrl)}
               websiteUrl={job.company.websiteUrl}
               industryName={job.industry?.name ?? null}
             />

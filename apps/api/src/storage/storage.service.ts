@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GetObjectCommand, PutObjectCommand, DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { resolveStoredAssetUrl } from '@jobportal/domain/asset-url';
 
 // SRS §4.3.4 — uploads land in Cloudflare R2 (S3-compatible). When R2 env vars
 // are blank (local dev without R2 keys) we fall back to an in-memory map so
@@ -92,6 +93,25 @@ export class StorageService {
   getPublicUrl(key: string): string {
     if (this.r2PublicBase) return `${this.r2PublicBase}/${key}`;
     return `${this.apiBase}/media/${key}`;
+  }
+
+  /**
+   * Re-derive a STORED asset URL against the bases configured right now.
+   *
+   * `getPublicUrl`'s absolute result is written into the database
+   * (`Company.logoUrl`), so a logo uploaded while `R2_PUBLIC_URL` was blank
+   * keeps a `http://localhost:4000` origin permanently — provisioning R2 later
+   * does not rewrite those rows. Serialising through this makes them self-heal.
+   *
+   * External URLs (a seeded logo, a Google avatar) are returned untouched; the
+   * shared implementation in `@jobportal/domain` is the same one `apps/web`
+   * uses, so the two surfaces cannot disagree about what a stored URL means.
+   */
+  resolveStoredUrl(stored: string | null | undefined): string | null {
+    return resolveStoredAssetUrl(stored, {
+      publicBase: this.r2PublicBase,
+      apiBase: this.apiBase,
+    });
   }
 
   // Reverse of getPublicUrl — extracts the storage key from a public URL we

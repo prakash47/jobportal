@@ -6,6 +6,7 @@ import {
   type HighlightSection,
 } from '@jobportal/domain/company-highlights';
 import type { DirectoryParams } from '@jobportal/domain/company-params';
+import { publicAssetUrl } from '../common/asset-url';
 
 /**
  * 20, matching every other API list endpoint (owner decision, ADR 0002 §4).
@@ -152,7 +153,7 @@ export class PublicCompaniesService {
         name: r.name,
         slug: r.slug,
         handle: buildCompanyHandle({ slug: r.slug, id: r.id }),
-        logoUrl: r.logoUrl,
+        logoUrl: publicAssetUrl(r.logoUrl),
         industryName: r.industry?.name ?? null,
         hqCityName: r.headquartersCity?.name ?? null,
         averageRating: r.averageRating,
@@ -239,7 +240,7 @@ export class PublicCompaniesService {
       name: company.name,
       slug: company.slug,
       handle: canonical,
-      logoUrl: company.logoUrl,
+      logoUrl: publicAssetUrl(company.logoUrl),
       description: company.description,
       websiteUrl: company.websiteUrl,
       companyType: company.companyType,
