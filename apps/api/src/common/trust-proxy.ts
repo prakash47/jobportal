@@ -37,9 +37,9 @@ export type TrustProxySetting = boolean | number | string;
  *   `X-Forwarded-For` and use the socket peer)
  * - `"false"` / `"0"` / `"off"` / `"no"` → `false`
  * - `"true"` / `"on"` / `"yes"` → `true` — trusts the ENTIRE chain and is
- *   therefore spoofable. Supported because it is genuinely what you want behind
- *   a proxy you fully control on a private network, but `warnIfUnsafe` below
- *   exists to make sure nobody reaches for it by accident.
+ *   therefore spoofable by any client that can reach this process. Supported
+ *   only because Express supports it; `trustProxyWarning` below flags it on
+ *   every boot so nobody reaches for it by accident.
  * - a non-negative integer → trust that many hops closest to this server. This
  *   is the right answer for almost every hosted deployment.
  * - anything else → passed through verbatim, which is how Express's own
@@ -71,8 +71,8 @@ export function parseTrustProxy(raw: string | undefined): TrustProxySetting {
  * Two failure modes are worth a line in the logs, and both are silent
  * otherwise:
  *
- * 1. Running in production with no setting — the throttler is keyed on the
- *    proxy, so it is effectively global and one noisy client locks out
+ * 1. Running in production while trusting no proxy — the throttler is keyed on
+ *    the proxy, so it is effectively global and one noisy client locks out
  *    everyone. This is the state this module was written to prevent shipping.
  * 2. `true` anywhere — the chain is attacker-controlled.
  */
@@ -87,12 +87,21 @@ export function trustProxyWarning(
       'Prefer the number of proxies actually in front of this process (e.g. 1).'
     );
   }
-  if (setting === false && nodeEnv === 'production') {
+  // `0` is checked alongside `false` because Express treats "trust zero hops"
+  // as trusting nothing — the identical, equally silent state. The parser maps
+  // "0" to `false`, but "00" reaches the integer branch and yields the NUMBER
+  // 0, so testing only `=== false` would let one spelling of the same
+  // misconfiguration boot without a word.
+  if ((setting === false || setting === 0) && nodeEnv === 'production') {
+    // Deliberately NOT "TRUST_PROXY is not set": it may well be set, to an
+    // explicit false/0/off/no. The problem is the resulting behaviour, which is
+    // identical either way, so the message describes that instead of guessing
+    // how the value was spelled.
     return (
-      'TRUST_PROXY is not set. Behind a reverse proxy every request appears to ' +
-      'come from the proxy, so the 100/min throttle becomes one shared bucket for ' +
-      'all callers and Session.ipAddress records the proxy. Set it to the number ' +
-      'of proxies in front of this process.'
+      'TRUST_PROXY trusts no proxy. Behind a reverse proxy every request appears ' +
+      'to come from the proxy, so the 100/min throttle becomes one shared bucket ' +
+      'for all callers and Session.ipAddress records the proxy. Set it to the ' +
+      'number of proxies in front of this process.'
     );
   }
   return null;

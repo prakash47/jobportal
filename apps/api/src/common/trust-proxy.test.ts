@@ -63,8 +63,25 @@ describe('trustProxyWarning', () => {
     expect(trustProxyWarning(true, undefined)).toMatch(/spoof/i);
   });
 
-  it('warns when production runs with no setting at all', () => {
-    expect(trustProxyWarning(false, 'production')).toMatch(/not set/i);
+  it('warns when production ends up trusting no proxy', () => {
+    expect(trustProxyWarning(false, 'production')).toMatch(/trusts no proxy/i);
+  });
+
+  // "00" survives the falsey-keyword branch and reaches the integer branch, so
+  // it arrives here as the NUMBER 0 rather than false. Express treats 0 hops as
+  // trusting nothing, so it is the same misconfiguration — and testing only
+  // `=== false` would let that spelling boot in production without a word.
+  it('warns for a numeric zero, not just false', () => {
+    expect(parseTrustProxy('00')).toBe(0);
+    expect(trustProxyWarning(0, 'production')).toMatch(/trusts no proxy/i);
+    expect(trustProxyWarning(0, 'development')).toBeNull();
+  });
+
+  // The message must not claim the var is unset — it may be set explicitly to a
+  // falsey keyword, and saying otherwise sends whoever reads the log looking for
+  // a missing entry that is in fact present.
+  it('does not claim the variable is unset', () => {
+    expect(trustProxyWarning(false, 'production')).not.toMatch(/not set/i);
   });
 
   it('stays quiet in development with no setting — that is the correct local state', () => {

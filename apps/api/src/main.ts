@@ -8,8 +8,10 @@ import 'reflect-metadata';
 import { VERSION_NEUTRAL, VersioningType } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 // Typed as the Express application specifically, so `app.set('trust proxy', …)`
-// is a checked call rather than a cast. Nest already runs on platform-express
-// here (rawBody + cookie-parser below both depend on it); this only names it.
+// is a checked call rather than a cast. This only NAMES the platform Nest was
+// already using — cookie-parser below is Express middleware, and platform-express
+// is Nest's default. (`rawBody` is not evidence either way; Fastify supports it
+// too.)
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
