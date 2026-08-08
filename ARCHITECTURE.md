@@ -92,7 +92,8 @@ jobportal/
 │   ├── auth/         # JWT (HS256) + Argon2id helpers
 │   ├── feature-flags/# Backend-controlled feature-flag system
 │   ├── types/        # Shared TypeScript types + Zod schemas
-│   └── observability/# Sentry + PostHog scrubbers + helpers
+│   ├── observability/# Sentry + PostHog scrubbers + helpers
+│   └── domain/       # Framework-free domain rules (slugs, job visibility, URL params)
 ├── infra/
 │   └── docker-compose.yml   # Local Postgres 18 + Redis 8 + Elasticsearch 9.4
 ├── docs/             # LOCAL-ONLY (gitignored) — SRS.pdf + research notes
@@ -155,6 +156,12 @@ Every package is consumed via its `@jobportal/<name>` alias. Put logic here when
 | `feature-flags` | `@jobportal/feature-flags` | The flag evaluator (pure, no I/O), flag keys, and the five flag types. |
 | `types` | `@jobportal/types` | Shared TypeScript types + Zod schemas used at every API boundary. |
 | `observability` | `@jobportal/observability` | App-agnostic Sentry/PostHog scrubbers + a `isTelemetryEnabled` check. |
+| `domain` | `@jobportal/domain` | Framework-free domain rules the website and the API must agree on: canonical slug build/parse, job visibility (`canViewJob`), the SRP / company-directory / article param codecs, and the home-page aggregate. **No React, no Next** — importable from NestJS, which is the point: it all used to live in `apps/web/lib`, where `apps/api` cannot reach it. |
+
+> **The one gotcha in `domain`**: it exports the **uncached** `loadHomePageData`. React's `cache()` is
+> RSC-only and inert outside a React request, so it cannot live in a package shared with NestJS —
+> `apps/web/lib/home/queries.ts` keeps a thin `cache()` wrapper at the original path for request-scoped
+> dedup. A server that wants caching adds its own.
 
 ---
 
