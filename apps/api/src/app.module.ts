@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { PublicJobsModule } from './public-jobs/public-jobs.module';
+import { CatalogsModule } from './catalogs/catalogs.module';
 import { AdminJobsModule } from './admin-jobs/admin-jobs.module';
 import { AdminKycModule } from './admin-kyc/admin-kyc.module';
 import { AdminOtpSessionsModule } from './admin-otp-sessions/admin-otp-sessions.module';
@@ -63,6 +64,7 @@ import { StorageModule } from './storage/storage.module';
     RecruiterBillingModule,
     RecruiterSupportModule,
     PublicJobsModule,
+    CatalogsModule,
     AdminJobsModule,
     AdminKycModule,
     AdminOtpSessionsModule,

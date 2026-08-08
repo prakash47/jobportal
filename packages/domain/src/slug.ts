@@ -17,12 +17,28 @@ export function slugify(s: string): string {
     .replace(/-{2,}/g, '-');
 }
 
+// Every `id` column in this schema is a Prisma `Int` (Postgres int4). A slug
+// carrying a larger number is not a slug for some far-future row — it is
+// unparseable, because no row can ever have that id. Rejecting it HERE rather
+// than downstream is what keeps `/job/x-2147483648` a 404 instead of a 500:
+// the regex happily matches any run of digits, and handing the result to
+// Prisma makes findUnique THROW rather than return null.
+//
+// Shared, so it fixes the website and the API together — the SSR pages and
+// GET /v1/jobs/:slug both funnel through these parsers. All three parsers use
+// it; company and working-at slugs had the identical hole.
+const MAX_INT32 = 2_147_483_647;
+
+function isUsableId(id: number): boolean {
+  return Number.isInteger(id) && id > 0 && id <= MAX_INT32;
+}
+
 // "sales-executive-acme-12345" → { slug: "sales-executive-acme", id: 12345 }
 export function parseJobSlug(input: string): ParsedJobSlug | null {
   const m = input.match(/^([a-z0-9]+(?:-[a-z0-9]+)*)-(\d+)$/);
   if (!m) return null;
   const id = Number(m[2]);
-  if (!Number.isFinite(id) || id <= 0) return null;
+  if (!isUsableId(id)) return null;
   return { slug: m[1]!, id };
 }
 
@@ -36,7 +52,7 @@ export function parseCompanySlug(input: string): ParsedJobSlug | null {
   const m = input.match(/^([a-z0-9]+(?:-[a-z0-9]+)*)-overview-(\d+)$/);
   if (!m) return null;
   const id = Number(m[2]);
-  if (!Number.isFinite(id) || id <= 0) return null;
+  if (!isUsableId(id)) return null;
   return { slug: m[1]!, id };
 }
 
@@ -49,7 +65,7 @@ export function parseWorkingAtSlug(input: string): ParsedJobSlug | null {
   const m = input.match(/^working-at-([a-z0-9]+(?:-[a-z0-9]+)*)-(\d+)$/);
   if (!m) return null;
   const id = Number(m[2]);
-  if (!Number.isFinite(id) || id <= 0) return null;
+  if (!isUsableId(id)) return null;
   return { slug: m[1]!, id };
 }
 
