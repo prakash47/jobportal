@@ -27,8 +27,13 @@ const QUICK_FILTERS: ReadonlyArray<{ label: string; href: string }> = [
 export function Hero({ cities, counts }: HeroProps) {
   const stats: ReadonlyArray<{ value: number; label: string }> = [
     { value: counts.activeJobs, label: 'active jobs' },
-    { value: counts.companies, label: 'companies' },
-    { value: counts.recruiters, label: 'hiring teams' },
+    // Both labels moved with the numbers behind them (ADR 0002 §5).
+    // `companies` now counts only employers with a live role, so "companies"
+    // beside a live job count would still imply the wrong thing; and
+    // `recruiters` counts recruiter ACCOUNTS, which is not the same as teams —
+    // several recruiters routinely share one employer.
+    { value: counts.companies, label: 'companies hiring' },
+    { value: counts.recruiters, label: 'recruiters' },
   ];
 
   return (

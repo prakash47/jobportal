@@ -149,7 +149,14 @@ export async function loadHomePageData(): Promise<HomePageData> {
     heroJobsRaw,
   ] = await Promise.all([
       prisma.job.count({ where: { status: 'ACTIVE' } }),
-      prisma.company.count(),
+      // Companies that are actually HIRING, not every row in the table.
+      //
+      // This was an unfiltered `company.count()` shown beside a live job count,
+      // which read as "this many employers you could apply to" when it included
+      // companies with nothing open. Owner decision (ADR 0002 §5): the number
+      // goes DOWN and becomes true. The label moved with it — an honest number
+      // under a misleading caption would be no better.
+      prisma.company.count({ where: { jobs: { some: { status: 'ACTIVE' } } } }),
       prisma.user.count({ where: { role: 'RECRUITER' } }),
 
       prisma.job.groupBy({

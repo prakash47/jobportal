@@ -109,7 +109,9 @@ export function CompaniesMegaPanel({ data }: { data: NavMenuData }) {
       tabs={tabs}
       footer={
         <>
-          <FooterCount value={data.counts.companies} label="companies listed" />
+          {/* "listed" was accurate against the old unfiltered count; the number
+              now means employers with a live role (ADR 0002 §5). */}
+          <FooterCount value={data.counts.companies} label="companies hiring" />
           <span className="flex-1" />
           <FooterCta href="/companies" label="Browse all companies" />
         </>
