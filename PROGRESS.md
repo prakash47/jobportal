@@ -10,6 +10,12 @@
 
 ---
 
+## Snapshot — 2026-08-08
+
+- **Newest merge (2026-08-08)**: `feature/api-contract-and-mobile-auth` — **the mobile app can finally log in.** The CQ mobile team's spec asked for nine public endpoints and never mentioned the one thing blocking all of them: `JwtAuthGuard` **already accepted `Authorization: Bearer`**, so the entire authenticated API worked for a phone the instant it held a token — but nothing ever handed it one. Ships URI versioning (`VERSION_NEUTRAL`, so **every existing route keeps its path** and only opted-in controllers get `/v1`), one documented error envelope (Nest's own shape, so no existing web caller changes), and `/v1/auth/mobile/{register,login,refresh,logout}` returning tokens in the body — a **deliberate owner-approved divergence from CLAUDE.md §9**, recorded in ADR 0002. **Adversarial review run TWICE** because the first had 7 dead agents including the whole route-drift lens: **51 raised → 9 confirmed (5 distinct), all fixed**, headed by a HIGH where the rewrite left a pre-existing test red, and a MED where the new `Retry-After` **overwrote the throttler's accurate countdown with a flat 60**, making mobile back-off worse than develop. **API 812 → 858 tests.** `apps/api` only — no schema, no migration, no new flag key, no lock. Full detail in the PR log below.
+
+---
+
 ## Snapshot — 2026-08-03
 
 - **Newest merge (2026-08-03)**: `feature/sadmin-candidate-management` — **the Super Admin portal can finally see its job seekers: a Candidate Management master list, and a new rail item directly below Employer management.** Columns are name + avatar, headline, email + phone, location, registered date and an Actions column whose View / Suspend / Delete **render but do nothing** — scoped to a later PR by the owner. **The single most important decision is that the list queries `User where role=CANDIDATE` and NOT `prisma.candidate`**: the `Candidate` profile row is provisioned lazily on the first `/profile` read, email+password registration creates only the `User`, and the Google signup path swallows a failed `Candidate` create — so driving off `Candidate` would have silently omitted real registered seekers from a list whose entire job is to be complete, with no error to notice. **No schema change, no migration, no feature flag, no lock** — flags are scoped by CLAUDE.md §4 to *paid* features, and the two structurally identical sadmin lists carry none either. The profile-picture column has no candidate-owned backing field (`User.image` is populated only by Google signup, so it is null for all 20 demo rows); the owner chose to ship the initials monogram as the norm rather than invent a migration. **Adversarial 5-lens review with 3 skeptics per finding: 11 raised → 6 confirmed (4 distinct), 5 refuted, all fixed** — headed by a **HIGH** where search results changed *silently* for screen readers, because the search island was copied from recruiter `JobsFilterBar` without the `role="status"` region that page deliberately pairs with it, and a **MED** where a repeated `?q=a&q=b` genuinely 500-ed the route. A fifth defect was caught by browser verification before the review even ran: `title` beat the button content in the accessible-name computation, so all sixty action controls were named "Not available yet". Full detail in the PR log below.
@@ -152,6 +158,97 @@ cross-page navigation still shows it).
 **Known gap, stated:** recruiter/sadmin `/login` sit outside the authed shell and have no loader.
 They are static sub-250ms routes, below the show threshold, so nothing would ever paint.
 **Follow-up:** a `RESEND_API_KEY` is still unprovisioned (unrelated, unchanged).
+
+
+### PR — `feature/api-contract-and-mobile-auth` · 2026-08-08 — mobile API foundation (ADR 0002, steps 1–2)
+
+**Context.** The CQ mobile team (Flutter, separate repo) sent `API_SPEC_FOR_MOBILE.md` asking for nine
+public REST endpoints, framing each as *“a thin REST wrapper over the exact same query/loader the SSR
+page already runs”*. Verified claim-by-claim against this codebase by 8 parallel agents, that framing
+is **wrong about this repo**: `apps/web` is server-rendered and calls `@jobportal/search` and Prisma
+**in-process**, so there is no HTTP layer to wrap, and `apps/api` cannot import `apps/web` at all.
+Seven of the nine are net-new Nest modules. Full analysis in **`docs/adr/0002-public-rest-api-for-mobile.md`**
+(local-only — `/docs/` is gitignored; the owner distributes it manually).
+
+**The blocker the spec never mentioned.** `JwtAuthGuard` **already accepts `Authorization: Bearer`**
+(`jwt-auth.guard.ts:13-16`) and every job-seeker controller sits behind it — so the whole authenticated
+API works for a phone the instant it holds a token. It had no way to get one: register, login, refresh
+and reset-password all return `{user}` and emit tokens **only** via `Set-Cookie`, and `/auth/refresh`
+reads the refresh token **exclusively** from the cookie (`auth.controller.ts:183`). The app could
+present a credential it could not acquire. That gated all nine endpoints and was not on the spec's
+critical path. (The spec was also wrong in the app's favour: **applying already works** —
+`POST /me/applications` is complete and `apps/web` itself uses it over plain HTTP, so mobile apply is
+zero backend work.)
+
+**What shipped.**
+- **URI versioning** (`main.ts`) with `defaultVersion: VERSION_NEUTRAL`. The load-bearing choice: every
+  existing controller keeps its exact current path, and only a controller opting in with
+  `version: '1'` moves to `/v1`. A plain `setGlobalPrefix('v1')` would have relocated all 36
+  controllers and broken `apps/web`, `apps/recruiter` and `apps/sadmin` in a single commit. An
+  installed binary cannot be rolled forward, and a version prefix cannot be retrofitted after v1.0
+  without breaking every phone that has not updated — it costs nothing today and is unbuyable later.
+- **One documented error envelope** (`common/http-error-envelope.ts` + the global filter). It codifies
+  **Nest's own** `{statusCode, error, message}` rather than inventing one, because
+  `HttpException.createBody` already produced exactly that for both the ~121 Zod
+  `throw new BadRequestException(parsed.error.issues)` sites and the plain-string throws — so no
+  existing web caller changes. The one off-contract path was a thrown **object** body (the apply-quota
+  429, returned verbatim with no `statusCode`), fixed **additively** so `ApplyButton`'s reads of
+  `upgradeAvailable`/`message` keep working. The Zod issue **array** is deliberately preserved:
+  flattening it into one string would break field-level form validation in all three web apps.
+- **`/v1/auth/mobile/{register,login,refresh,logout}`** returning tokens in the response body, with the
+  refresh token accepted in the request body. A **separate controller** rather than a client-sniffing
+  branch on `/auth/*`, so three shipped products are not one bad condition away from a broken login;
+  every token decision still lives in `AuthService`, and the same throttles apply — including
+  `PerEmailThrottleGuard`, which is not global and would otherwise have left this the one unthrottled
+  password endpoint in the app. **Deliberate, owner-approved divergence from CLAUDE.md §9** (HttpOnly
+  cookies): a native client has no cookie jar. Mitigations unchanged — HS256, 15-min access, 30-day
+  refresh, rotation on every use, `assertSessionAllowed` inside `issueSession`. `expiresIn` is a
+  **duration**, never an absolute timestamp: a wrong device clock would otherwise refresh on every call
+  or never refresh at all.
+
+**Browser-verified end to end** against real seeded data: mobile login returns a real pair; that Bearer
+token answers **200** on `/me/profile`, `/me/saved-jobs`, `/me/applications` and `/me/alerts` (401
+without it); refresh rotates and the old token is dead (401 on reuse); logout is idempotent across
+valid/repeat/garbage; the envelope holds for the Zod-array, string and 404 shapes.
+
+**Adversarial 5-lens review with three independent skeptics per finding — RUN TWICE.** The first run
+reported 23/8, but **7 agents had died on API errors, including the entire route-drift lens** — the
+highest-stakes one. Per the standing rule that a run with dead agents is not a pass, it was re-run;
+route drift came back **clean**. Across both runs: **51 raised → 9 confirmed (5 distinct), all fixed.**
+- **HIGH** — the filter rewrite left the **pre-existing `sentry.filter.test.ts` red**: the new
+  `catch()` calls `host.getType()` and that test builds its host as `{} as ArgumentsHost`. Three tests
+  threw. The earlier “25/25 pass” was true only of the two new files; the suite had not been run.
+- **MED** — the new `Retry-After` was **clobbering ThrottlerGuard's accurate value**. The throttler
+  already sets `timeToBlockExpire` before throwing; an unconditional `setHeader` replaced a real
+  decaying countdown with a flat 60 on every throttler 429 in the API, making the exact signal this
+  branch advertises for mobile back-off *less* accurate than develop. Now fills gaps only — measured
+  live decaying **47 → 41 → 35**.
+- **MED** — unhandled 500s were **logged nowhere**. `BaseExceptionFilter.handleUnknownError` logs every
+  bare Error; writing the response ourselves skipped it. With `SENTRY_DSN` blank (the documented
+  local-dev setup) a 500 became completely silent — no stack, nothing in Sentry, and a body
+  deliberately stripped of the message; in prod, flipping `killswitch.telemetry` would also have
+  blinded the logs. Restored, deliberately **not** gated on the killswitch.
+- **MED** — `retryAfterSeconds` **lied about two other 429s**, guessing 60s for a **1-hour**
+  `PerEmailThrottleGuard` lockout and a possibly **monthly** recruiter post quota; a client honouring
+  that retries across the whole window and re-trips it. It now answers only when the body says
+  something definite (the recruiter quota's explicit `window` discriminator, or the apply quota's
+  top-level `limit`) and returns **null** otherwise, because a wrong `Retry-After` is worse than none.
+  `PerEmailThrottleGuard` now emits its own accurate header from the Redis key's TTL.
+- **MED** — body-parser **http-errors collapsed to 500**. `entity.too.large` (413 — `express.json`
+  defaults to 100kb), `request.aborted` (400) and `charset.unsupported` (415) reach this filter as
+  Express error middleware and used to keep their status via `isHttpError`. They were answering 500,
+  *and* being captured to Sentry as 5xx — inflating precisely the server-error rate the observability
+  work exists to measure. Verified live: a 200KB POST now returns a real **413**.
+
+**API 812 → 858 tests** (+46). Gate green on the integrated state: typecheck **12/12** · tests **9/9**
+· build **5/5**. Note: the gate initially failed on `packages/db/src/sequence.test.ts` — a teammate's
+file, not this branch — because `vitest` was declared in `packages/db/package.json` but missing from
+its `node_modules` (the OneDrive de-materialization hazard). `pnpm install` restored it.
+
+**Next per ADR 0002:** the shared-domain extraction PR (step 4), then `GET /jobs` + `/jobs/:slug`.
+**Still owner-blocked and unchanged:** nothing is deployed anywhere (no host, no CI, no managed
+Elasticsearch), `RESEND_API_KEY` is blank, and the store-compliance surfaces (privacy policy page,
+account-deletion endpoint) do not exist.
 
 ---
 
