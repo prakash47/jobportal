@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Jayesh | `feature/api-contract-and-mobile-auth` | **Mobile API foundation (ADR 0002, steps 1–2).** (a) URI versioning turned on in `apps/api/src/main.ts` with `defaultVersion: VERSION_NEUTRAL` so **every existing route keeps its current path** and only new public/mobile routes get `/v1`; (b) one documented error envelope + `Retry-After` on both 429 paths (fixes the off-contract apply-quota body in `applications/quota.service.ts`, **additively** — `apps/web`'s `ApplyButton` reads `upgradeAvailable`/`message` off the top level and must keep working); (c) new **`/v1/auth/mobile/{register,login,refresh,logout}`** returning tokens in the response body, reusing `AuthService.issueSession()`/`refresh()`. Existing `/auth/*` byte-untouched. | **None of the locked surfaces** — no schema, no `theme.css`, no `packages/types`, no `keys.ts`, no barrels. `apps/web`/`recruiter`/`sadmin` untouched. |
 
 ---
 
