@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@jobportal/db', () => ({
@@ -145,6 +145,26 @@ describe('list', () => {
     expect(page.hits).toEqual([]);
     expect(db.company.findMany).not.toHaveBeenCalled();
     expect(db.city.findMany).not.toHaveBeenCalled();
+  });
+
+  it('converts an Elasticsearch failure into a clean 503, never leaking its message', async () => {
+    // An unwrapped @elastic/transport ResponseError carries statusCode +
+    // message, which the global filter would have duck-typed as an http-error:
+    // the caller would get ES's own status and raw exception text, and the
+    // 4xx branch would skip Sentry, hiding a real outage.
+    const esErr = Object.assign(new Error('search_phase_execution_exception: index missing'), {
+      statusCode: 400,
+    });
+    mockedSearch.mockRejectedValue(esErr);
+
+    const err = await svc.list({} as never).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    const thrown = err as ServiceUnavailableException;
+    expect(thrown.getStatus()).toBe(503);
+    expect(JSON.stringify(thrown.getResponse())).not.toContain('search_phase_execution_exception');
+    // The original survives as `cause`, so the detail reaches our logs and
+    // Sentry without reaching the client.
+    expect((thrown.cause as Error | undefined)?.message).toContain('search_phase_execution_exception');
   });
 
   it('returns salary in paise and experience in months, unformatted', async () => {

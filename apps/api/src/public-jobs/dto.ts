@@ -20,6 +20,18 @@ import { z } from 'zod';
 
 const oneOrMany = z.union([z.string(), z.array(z.string())]);
 
+/** Server-fixed page size. Matches the SSR's PAGE_SIZE and /me/saved-jobs. */
+export const PAGE_SIZE = 20;
+
+/**
+ * Elasticsearch's default `index.max_result_window`. `from + size` may not
+ * exceed it, and we do not override the index setting.
+ */
+export const ES_MAX_RESULT_WINDOW = 10_000;
+
+/** Last page the index can actually serve: 10000 / 20 = 500. */
+export const MAX_PAGE = Math.floor(ES_MAX_RESULT_WINDOW / PAGE_SIZE);
+
 export const ListJobsQueryDto = z
   .object({
     q: z.string().trim().min(1).max(200).optional(),
@@ -34,9 +46,17 @@ export const ListJobsQueryDto = z
     salaryMin: z.coerce.number().min(0).optional(),
     postedWithin: z.enum(['1', '7', '30']).optional(),
     sort: z.enum(['relevance', 'recent', 'salary_desc']).optional(),
-    // 1-indexed. Bounded because Elasticsearch's `from` is an i64 and a huge
-    // page would be an expensive way to ask for nothing.
-    page: z.coerce.number().int().min(1).max(1000).optional(),
+    // 1-indexed, bounded by what Elasticsearch can actually SERVE, not by a
+    // guess. searchJobs computes `from = (page-1)*pageSize`, and ES rejects
+    // `from + size > index.max_result_window` (default 10000) — so with a
+    // fixed pageSize of 20 the last servable page is 500. The previous bound
+    // of 1000 admitted 500 pages the index always refused, which surfaced as a
+    // raw ES exception instead of this DTO's clean 400.
+    //
+    // Derived rather than hardcoded so it cannot drift if either constant
+    // moves. Genuine pagination past 10k results would need search_after
+    // instead of from/size; nothing needs that today.
+    page: z.coerce.number().int().min(1).max(MAX_PAGE).optional(),
     // Accepted for URL parity with the website and then ignored, exactly as
     // the website ignores them. Documented as non-functional in the API
     // contract so the app does not render a filter that silently does nothing.

@@ -159,7 +159,7 @@ describe('SentryGlobalFilter', () => {
     // Nest's handleUnknownError honoured `statusCode`; writing the response
     // ourselves must keep doing so.
     const { host, res } = makeHost();
-    const err = Object.assign(new Error('request entity too large'), { statusCode: 413 });
+    const err = Object.assign(new Error('request entity too large'), { statusCode: 413, expose: true });
     await filter.catch(err, host);
     expect(res.statusCode).toBe(413);
     expect(res.body).toEqual({
@@ -171,17 +171,18 @@ describe('SentryGlobalFilter', () => {
 
   it('does NOT report a body-parser 4xx to Sentry as a server error', async () => {
     const { host } = makeHost();
-    const err = Object.assign(new Error('request aborted'), { statusCode: 400 });
+    const err = Object.assign(new Error('request aborted'), { statusCode: 400, expose: true });
     await filter.catch(err, host);
     expect(mockedCapture).not.toHaveBeenCalled();
   });
 
   it('still captures an http-error whose status really is 5xx', async () => {
     const { host, res } = makeHost();
-    const err = Object.assign(new Error('upstream exploded'), { statusCode: 502 });
+    // http-errors sets expose=false on 5xx precisely because the message is
+    // NOT safe to return. The status is still the library's own.
+    const err = Object.assign(new Error('upstream exploded'), { statusCode: 502, expose: false });
     await filter.catch(err, host);
     expect(mockedCapture).toHaveBeenCalledOnce();
-    // 5xx keeps the opaque body — no internal detail leaks.
     expect(res.body).toEqual({
       statusCode: 502,
       error: 'Bad Gateway',
@@ -191,8 +192,47 @@ describe('SentryGlobalFilter', () => {
 
   it('ignores a bogus statusCode rather than using it as the HTTP status', async () => {
     const { host, res } = makeHost();
-    const err = Object.assign(new Error('nonsense'), { statusCode: 99 });
+    const err = Object.assign(new Error('nonsense'), { statusCode: 99, expose: true });
     await filter.catch(err, host);
     expect(res.statusCode).toBe(500);
+  });
+
+  // --- a third-party client error must NOT be mistaken for an http-error ---
+
+  it('does NOT adopt the status or echo the message of an Elasticsearch-shaped error', async () => {
+    // @elastic/transport's ResponseError carries statusCode:number +
+    // message:string — the same duck-type as an http-error — but no `expose`.
+    // Adopting it meant a public route answered with ES's own 4xx and echoed
+    // its raw exception text, naming the engine and its internal settings.
+    const { host, res } = makeHost();
+    const esErr = Object.assign(new Error('search_phase_execution_exception: Result window is too large'), {
+      statusCode: 400,
+    });
+    await filter.catch(esErr, host);
+    expect(res.statusCode).toBe(500);
+    expect(JSON.stringify(res.body)).not.toContain('search_phase_execution_exception');
+    expect(res.body).toEqual({
+      statusCode: 500,
+      error: 'Internal Server Error',
+      message: 'Internal server error',
+    });
+  });
+
+  it('DOES report that error to Sentry — a 4xx passthrough would have hidden an outage', async () => {
+    const { host } = makeHost();
+    const esErr = Object.assign(new Error('connection refused'), { statusCode: 400 });
+    await filter.catch(esErr, host);
+    expect(mockedCapture).toHaveBeenCalledOnce();
+  });
+
+  it('still honours a real http-error, which flags itself expose:true', async () => {
+    const { host, res } = makeHost();
+    const bodyParserErr = Object.assign(new Error('request entity too large'), {
+      statusCode: 413,
+      expose: true,
+    });
+    await filter.catch(bodyParserErr, host);
+    expect(res.statusCode).toBe(413);
+    expect(res.body).toMatchObject({ message: 'request entity too large' });
   });
 });

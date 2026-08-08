@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { JobStateQueryDto, ListJobsQueryDto } from './dto';
+import {
+  ES_MAX_RESULT_WINDOW,
+  JobStateQueryDto,
+  ListJobsQueryDto,
+  MAX_PAGE,
+  PAGE_SIZE,
+} from './dto';
 
 describe('ListJobsQueryDto', () => {
   it('accepts an empty query — /v1/jobs with no filters is the default feed', () => {
@@ -42,11 +48,21 @@ describe('ListJobsQueryDto', () => {
     }
   });
 
-  it('rejects a page below 1 and above the bound', () => {
+  it('rejects a page below 1 and a non-integer page', () => {
     expect(ListJobsQueryDto.safeParse({ page: '0' }).success).toBe(false);
     expect(ListJobsQueryDto.safeParse({ page: '-1' }).success).toBe(false);
-    expect(ListJobsQueryDto.safeParse({ page: '1001' }).success).toBe(false);
     expect(ListJobsQueryDto.safeParse({ page: '1.5' }).success).toBe(false);
+  });
+
+  it('bounds page at what Elasticsearch can actually SERVE, not at a guess', () => {
+    // from + size must be <= index.max_result_window (10000), and pageSize is
+    // fixed at 20, so page 500 is the last servable one. The previous bound of
+    // 1000 admitted 500 pages the index always refused — which surfaced as a
+    // raw ES exception echoed to anonymous callers instead of this clean 400.
+    expect(MAX_PAGE).toBe(500);
+    expect(MAX_PAGE).toBe(Math.floor(ES_MAX_RESULT_WINDOW / PAGE_SIZE));
+    expect(ListJobsQueryDto.safeParse({ page: String(MAX_PAGE) }).success).toBe(true);
+    expect(ListJobsQueryDto.safeParse({ page: String(MAX_PAGE + 1) }).success).toBe(false);
   });
 
   it('rejects negative experience and salary', () => {

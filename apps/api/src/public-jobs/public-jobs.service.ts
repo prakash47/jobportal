@@ -1,15 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { prisma } from '@jobportal/db';
 import { searchJobs } from '@jobportal/search';
 import { parseSrpSearchParams } from '@jobportal/domain/srp-params';
 import { parseJobSlug } from '@jobportal/domain/slug';
 import { canViewJob } from '@jobportal/domain/job-visibility';
 import type { AccessClaims } from '@jobportal/auth';
-import type { ListJobsQuery } from './dto';
+import { PAGE_SIZE, type ListJobsQuery } from './dto';
 
-// Fixed server-side, matching the SSR's PAGE_SIZE and /me/saved-jobs. Not
-// client-settable — see dto.ts.
-export const PAGE_SIZE = 20;
+export { PAGE_SIZE };
 
 export interface JobListItem {
   id: number;
@@ -99,14 +97,34 @@ export class PublicJobsService {
 
     const params = parseSrpSearchParams(raw);
 
-    const results = await searchJobs({
-      ...params,
-      // Pinned AFTER the spread so a future parser change (or a crafted param
-      // that slipped through) can never surface DRAFT or PENDING_MODERATION
-      // documents on a public endpoint. searchJobs only DEFAULTS to ACTIVE.
-      status: 'ACTIVE',
-      pageSize: PAGE_SIZE,
-    });
+    let results: Awaited<ReturnType<typeof searchJobs>>;
+    try {
+      results = await searchJobs({
+        ...params,
+        // Pinned AFTER the spread so a future parser change (or a crafted
+        // param that slipped through) can never surface DRAFT or
+        // PENDING_MODERATION documents on a public endpoint. searchJobs only
+        // DEFAULTS to ACTIVE.
+        status: 'ACTIVE',
+        pageSize: PAGE_SIZE,
+      });
+    } catch (err) {
+      // Elasticsearch failures must NOT reach the global filter unwrapped.
+      // @elastic/transport's ResponseError carries `statusCode: number` and
+      // `message: string` — the exact duck-type the filter uses to recognise
+      // an http-error — so an unwrapped ES error would (a) answer with
+      // Elasticsearch's own status, (b) echo its raw exception text, naming
+      // the engine and its internal settings, to an anonymous caller, and
+      // (c) be classified as an "expected 4xx" and therefore NEVER reach
+      // Sentry, so a real outage would be invisible in monitoring.
+      //
+      // 503 is the honest status for "the search backend is not answering",
+      // it is >= 500 so it IS captured, and the original travels as `cause`
+      // so the ES detail is preserved for us without being sent to the client.
+      throw new ServiceUnavailableException('Job search is temporarily unavailable', {
+        cause: err,
+      });
+    }
 
     return {
       hits: await this.hydrate(results.hits),
