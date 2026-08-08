@@ -88,6 +88,8 @@ export class PublicJobsService {
     if (query.skill !== undefined) raw['skill'] = query.skill;
     if (query.city !== undefined) raw['city'] = query.city;
     if (query.industry !== undefined) raw['industry'] = query.industry;
+    if (query.emp !== undefined) raw['emp'] = query.emp;
+    if (query.mode !== undefined) raw['mode'] = query.mode;
     if (query.expMin !== undefined) raw['expMin'] = String(query.expMin);
     if (query.expMax !== undefined) raw['expMax'] = String(query.expMax);
     if (query.salaryMin !== undefined) raw['salaryMin'] = String(query.salaryMin);

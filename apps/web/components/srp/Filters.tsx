@@ -232,9 +232,6 @@ export function EmploymentTypeFilter({ basePath }: { basePath: string }) {
           );
         })}
       </div>
-      <p className="mt-2 text-xs text-[var(--color-fg-subtle)]">
-        UI accepts the choice; schema columns land with the recruiter feature.
-      </p>
     </FilterSection>
   );
 }
