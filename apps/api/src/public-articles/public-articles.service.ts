@@ -58,9 +58,18 @@ const LIST_SELECT = {
 } as const;
 
 /**
- * `Article.faqs` is a loose `Json?` column. Same guard the SSR detail page
- * applies: anything that is not an array of `{question, answer}` strings
- * becomes `[]` rather than reaching the client as malformed shapes.
+ * `Article.faqs` is a loose `Json?` column, so it is narrowed before it can
+ * reach a client as a shape they cannot render.
+ *
+ * DELIBERATELY NOT identical to the SSR guard, and worth stating precisely
+ * because an earlier comment here claimed it was: the web page's `isFaqArray`
+ * is all-or-nothing (`v.every(...)`), so ONE malformed entry discards the
+ * whole FAQ block. This filters entry by entry and keeps the valid ones.
+ *
+ * The divergence is intentional — losing four good answers because a fifth is
+ * malformed is worse for a reader than showing the four — but it does mean a
+ * partially-malformed `faqs` column renders differently on the two surfaces.
+ * The website is the one that should change if they are ever unified.
  */
 function parseFaqs(v: unknown): FaqEntry[] {
   if (!Array.isArray(v)) return [];
@@ -105,6 +114,14 @@ export class PublicArticlesService {
         select: LIST_SELECT,
         // publishedAt is nullable, so `id` is not just a tiebreaker for equal
         // timestamps — it is what keeps offset pagination deterministic at all.
+        // (The website orders on publishedAt alone, so this is strictly more
+        // stable, not a divergence.)
+        //
+        // Known and inherited: Postgres DESC is NULLS FIRST, so a PUBLISHED
+        // article with a null publishedAt would sort to the TOP of a
+        // "newest first" list. The website behaves identically, and no such row
+        // exists today (0 in the database), so this matches rather than fixes
+        // it — unifying would mean changing both surfaces together.
         orderBy: [{ publishedAt: 'desc' }, { id: 'desc' }],
         skip: (params.page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
