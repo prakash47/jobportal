@@ -88,6 +88,9 @@ export class RecruiterApplicantsService {
         status: true,
         statusHistory: true,
         recruiterNotes: true,
+        // The resume snapshot (ADR 0002 decision 7). Null on applications that
+        // predate the column; getResumeUrl falls back for those.
+        resumeId: true,
         job: {
           select: {
             id: true,
@@ -171,28 +174,54 @@ export class RecruiterApplicantsService {
     return { recruiterNotes: updated.recruiterNotes ?? '' };
   }
 
-  // SRS §4.9.6 — open the candidate's resume. Returns a 15-min signed URL
-  // for the candidate's activeResume; 404 when the candidate has none.
+  // SRS §4.9.6 — open the resume that was SUBMITTED with this application.
+  // Returns a 15-min signed URL; 404 when there is nothing to serve.
+  //
+  // ADR 0002 decision 7. This used to resolve `Candidate.activeResume` — the
+  // candidate's CURRENT CV — which meant a candidate replacing their CV
+  // silently rewrote what every recruiter saw for every application already
+  // sent, and soft-deleting it turned them all into "no resume on file". A
+  // submitted document must not change after submission.
+  //
+  // The fallback is not defensive coding, it is the permanent state of the
+  // rows that predate the column: which CV was actually sent is genuinely
+  // unknown for them, so they keep the old behaviour rather than 404-ing an
+  // application a recruiter could read yesterday. New applications always
+  // carry a snapshot, so they never take this path.
+  //
+  // A soft-deleted resume IS still served when it is the snapshot: the
+  // recruiter already received that document, and withdrawing it retroactively
+  // would break a review in progress. The deleted-check therefore only guards
+  // the legacy fallback, where "current CV" is the only meaning available.
   async getResumeUrl(
     userId: number,
     applicationId: number,
   ): Promise<{ url: string; expiresInSeconds: number; filename: string }> {
     const app = await this.manageableApplicationOrThrow(userId, applicationId);
-    const candidate = await prisma.candidate.findUnique({
-      where: { userId: app.userId },
-      select: { activeResume: true },
-    });
-    if (!candidate?.activeResume || candidate.activeResume.deletedAt !== null) {
-      throw new NotFoundException('Candidate has no resume on file');
+
+    const snapshot = app.resumeId
+      ? await prisma.resume.findUnique({
+          where: { id: app.resumeId },
+          select: { r2Key: true, originalFilename: true, scanStatus: true },
+        })
+      : null;
+
+    let resume: { r2Key: string; originalFilename: string; scanStatus: string } | null = snapshot;
+    if (!resume) {
+      const candidate = await prisma.candidate.findUnique({
+        where: { userId: app.userId },
+        select: { activeResume: true },
+      });
+      const active = candidate?.activeResume;
+      resume = active && active.deletedAt === null ? active : null;
     }
-    if (candidate.activeResume.scanStatus !== 'CLEAN') {
+
+    if (!resume) throw new NotFoundException('Candidate has no resume on file');
+    if (resume.scanStatus !== 'CLEAN') {
       throw new ForbiddenException('Resume is still being scanned');
     }
-    const url = await this.storage.getSignedDownloadUrl(candidate.activeResume.r2Key, 15 * 60);
-    return {
-      url,
-      expiresInSeconds: 15 * 60,
-      filename: candidate.activeResume.originalFilename,
-    };
+
+    const url = await this.storage.getSignedDownloadUrl(resume.r2Key, 15 * 60);
+    return { url, expiresInSeconds: 15 * 60, filename: resume.originalFilename };
   }
 }

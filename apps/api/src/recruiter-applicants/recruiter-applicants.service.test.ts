@@ -6,6 +6,7 @@ vi.mock('@jobportal/db', () => ({
     job: { findUnique: vi.fn(), findFirst: vi.fn() },
     application: { findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn() },
     candidate: { findUnique: vi.fn() },
+    resume: { findUnique: vi.fn() },
   },
 }));
 
@@ -21,6 +22,7 @@ const mocked = prisma as unknown as {
     update: ReturnType<typeof vi.fn>;
   };
   candidate: { findUnique: ReturnType<typeof vi.fn> };
+  resume: { findUnique: ReturnType<typeof vi.fn> };
 };
 
 const fakeEmail = {
@@ -257,5 +259,109 @@ describe('RecruiterApplicantsService.getResumeUrl', () => {
     expect(out.filename).toBe('cv.pdf');
     expect(out.expiresInSeconds).toBe(900);
     expect(fakeStorage.getSignedDownloadUrl).toHaveBeenCalledWith('k', 900);
+  });
+});
+
+// ADR 0002 decision 7 — serve the resume that was SUBMITTED, not whatever the
+// candidate happens to have on their profile today.
+describe('RecruiterApplicantsService.getResumeUrl — snapshot vs legacy', () => {
+  let service: RecruiterApplicantsService;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    fakeStorage.getSignedDownloadUrl.mockResolvedValue('https://signed.example/x');
+    service = new RecruiterApplicantsService(
+      fakeEmail as unknown as never,
+      fakeStorage as unknown as never,
+    );
+  });
+
+  // The whole point. If this ever falls through to the candidate's CURRENT CV,
+  // a candidate replacing their file silently rewrites what the recruiter is
+  // reading for an application already under review.
+  it('serves the snapshot and never consults the candidate profile', async () => {
+    mocked.application.findUnique.mockResolvedValueOnce({ ...ownedApp, resumeId: 555 });
+    mocked.resume.findUnique.mockResolvedValue({
+      r2Key: 'submitted-key',
+      originalFilename: 'submitted.pdf',
+      scanStatus: 'CLEAN',
+    });
+    // Deliberately arm the fallback with a DIFFERENT document, so a regression
+    // that reaches for it produces the wrong file rather than the same one.
+    mocked.candidate.findUnique.mockResolvedValue({
+      activeResume: {
+        r2Key: 'current-key',
+        originalFilename: 'current.pdf',
+        scanStatus: 'CLEAN',
+        deletedAt: null,
+      },
+    });
+
+    const out = await service.getResumeUrl(42, 99);
+    expect(out.filename).toBe('submitted.pdf');
+    expect(fakeStorage.getSignedDownloadUrl).toHaveBeenCalledWith('submitted-key', 900);
+    expect(mocked.candidate.findUnique).not.toHaveBeenCalled();
+  });
+
+  // A soft-deleted snapshot is still served: the recruiter already received
+  // that document, and withdrawing it mid-review would be a worse outcome than
+  // showing a file the candidate has since replaced.
+  it('still serves a snapshot whose resume was later soft-deleted', async () => {
+    mocked.application.findUnique.mockResolvedValueOnce({ ...ownedApp, resumeId: 555 });
+    mocked.resume.findUnique.mockResolvedValue({
+      r2Key: 'submitted-key',
+      originalFilename: 'submitted.pdf',
+      scanStatus: 'CLEAN',
+    });
+    const out = await service.getResumeUrl(42, 99);
+    expect(out.filename).toBe('submitted.pdf');
+  });
+
+  // Rows that predate the column. Which CV was sent is genuinely unknown, so
+  // they keep the old behaviour rather than 404-ing an application a recruiter
+  // could open yesterday.
+  it('falls back to the current CV for a legacy application', async () => {
+    mocked.application.findUnique.mockResolvedValueOnce({ ...ownedApp, resumeId: null });
+    mocked.candidate.findUnique.mockResolvedValue({
+      activeResume: {
+        r2Key: 'current-key',
+        originalFilename: 'current.pdf',
+        scanStatus: 'CLEAN',
+        deletedAt: null,
+      },
+    });
+    const out = await service.getResumeUrl(42, 99);
+    expect(out.filename).toBe('current.pdf');
+    expect(mocked.resume.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('404s a legacy application whose current CV is soft-deleted', async () => {
+    mocked.application.findUnique.mockResolvedValueOnce({ ...ownedApp, resumeId: null });
+    mocked.candidate.findUnique.mockResolvedValue({
+      activeResume: {
+        r2Key: 'k',
+        originalFilename: 'cv.pdf',
+        scanStatus: 'CLEAN',
+        deletedAt: new Date(),
+      },
+    });
+    await expect(service.getResumeUrl(42, 99)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  // A snapshot row that has vanished entirely (hard delete → SetNull is the
+  // normal path, but a stale id must not 500).
+  it('falls back rather than throwing when the snapshot row is gone', async () => {
+    mocked.application.findUnique.mockResolvedValueOnce({ ...ownedApp, resumeId: 555 });
+    mocked.resume.findUnique.mockResolvedValue(null);
+    mocked.candidate.findUnique.mockResolvedValue({
+      activeResume: {
+        r2Key: 'current-key',
+        originalFilename: 'current.pdf',
+        scanStatus: 'CLEAN',
+        deletedAt: null,
+      },
+    });
+    const out = await service.getResumeUrl(42, 99);
+    expect(out.filename).toBe('current.pdf');
   });
 });

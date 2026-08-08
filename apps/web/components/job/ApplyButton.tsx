@@ -46,6 +46,7 @@ export function ApplyButton({
   const [applied, setApplied] = useState(initialApplied);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsResume, setNeedsResume] = useState(false);
   const [exhausted, setExhausted] = useState(
     quota && !quota.unlimited && quota.count >= quota.limit,
   );
@@ -103,6 +104,7 @@ export function ApplyButton({
 
     setBusy(true);
     setError(null);
+    setNeedsResume(false);
     try {
       const res = await fetch(`${API_URL}/me/applications`, {
         method: 'POST',
@@ -128,7 +130,13 @@ export function ApplyButton({
         setExhausted(true);
         return;
       }
-      const body = (await res.json().catch(() => ({}))) as { message?: string };
+      const body = (await res.json().catch(() => ({}))) as { message?: string; code?: string };
+      // ADR 0002 decision 7 — a CV is now required to apply. Branch on the
+      // stable `code`, never the message: the copy is server-side and may be
+      // reworded, and this same contract is what the mobile client reads.
+      // Only RESUME_REQUIRED gets the upload link; RESUME_SCANNING resolves by
+      // waiting, so sending the user to the upload page would be wrong advice.
+      setNeedsResume(body.code === 'RESUME_REQUIRED');
       setError(body.message ?? `Apply failed (${res.status})`);
     } catch {
       setError('Network error — please try again.');
@@ -143,8 +151,26 @@ export function ApplyButton({
         Apply now
       </Button>
       {error && (
-        <p role="alert" className="text-xs text-[var(--color-danger)]">
+        // Raw --color-danger measures 4.41:1, which fails AA for body text.
+        // This is the repo's theme-aware color-mix recipe (FormError.tsx),
+        // which measures 6.39:1. Pre-existing on this element; corrected here
+        // because the block is being extended anyway.
+        <p
+          role="alert"
+          className="text-xs text-[color-mix(in_oklch,var(--color-danger),var(--color-fg)_30%)]"
+        >
           {error}
+          {needsResume && (
+            <>
+              {' '}
+              <Link
+                href="/profile/resume"
+                className="font-medium underline underline-offset-2 hover:no-underline"
+              >
+                Upload a resume
+              </Link>
+            </>
+          )}
         </p>
       )}
     </div>
