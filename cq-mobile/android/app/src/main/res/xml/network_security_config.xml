@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEV: permit plain-HTTP (cleartext) so a *release* build can reach the local
+  API over `adb reverse` (http://localhost:4000) or the emulator
+  (http://10.0.2.2:4000). Android blocks cleartext in release by default, which
+  is why the app couldn't reach the dev server.
+
+  TODO before Play Store release: tighten this to a <domain-config> that permits
+  cleartext ONLY for localhost / 127.0.0.1 / 10.0.2.2 — the production API is
+  served over HTTPS and must never accept cleartext.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
