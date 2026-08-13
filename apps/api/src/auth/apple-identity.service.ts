@@ -40,17 +40,32 @@ export class AppleIdentityService {
   async findOrCreateUser(
     claims: OidcClaims,
     clientName: string | undefined,
-  ): Promise<{ user: User; isNew: boolean } | { user: null; reason: 'email-required' }> {
+  ): Promise<
+    { user: User; isNew: boolean } | { user: null; reason: 'email-required' | 'email-unverified' }
+  > {
     const byApple = await prisma.user.findUnique({ where: { appleId: claims.sub } });
+    // The `sub` is proof of ownership on its own, so a known Apple user needs
+    // no email at all — which is what makes repeat sign-ins work when Apple
+    // omits the claim.
     if (byApple) return { user: byApple, isNew: false };
 
     const email = claims.email;
+    if (!email) return { user: null, reason: 'email-required' };
 
-    // Linking by email requires a VERIFIED email, exactly as the Google path
-    // does. Without that check, a provider that returned an unverified address
-    // would let a stranger attach themselves to an existing account and take
-    // it over.
-    if (email && claims.emailVerified) {
+    // REFUSE OUTRIGHT on an unverified address, before anything touches the
+    // database. This used to be a condition wrapped around the link branch
+    // only, which was not enough and was an account-takeover hole: an
+    // unverified claim skipped linking, fell through to `create`, collided on
+    // `User.email @unique`, and the P2002 recovery below re-matched that very
+    // account BY EMAIL and returned it as the signed-in identity — handing out
+    // a session on an account the token never proved ownership of.
+    //
+    // Refusing here means every path past this point has a verified address,
+    // so the recovery is safe by construction rather than by a second check
+    // someone could later forget to keep in sync.
+    if (!claims.emailVerified) return { user: null, reason: 'email-unverified' };
+
+    {
       const byEmail = await prisma.user.findUnique({ where: { email } });
       if (byEmail) {
         const user = await prisma.user.update({
@@ -67,8 +82,6 @@ export class AppleIdentityService {
       }
     }
 
-    if (!email) return { user: null, reason: 'email-required' };
-
     try {
       const user = await prisma.user.create({
         data: {
@@ -78,9 +91,9 @@ export class AppleIdentityService {
           name: clientName?.trim() || (email.split('@')[0] ?? email),
           provider: 'APPLE',
           appleId: claims.sub,
-          // Apple verifies the address it gives us, including relay addresses,
-          // which satisfies the FR-4.12.8 apply gate.
-          emailVerified: claims.emailVerified,
+          // Provably true by the guard above, written as a literal so this
+          // cannot silently become `false` if the guard is ever relaxed.
+          emailVerified: true,
           role: 'CANDIDATE',
           // passwordHash stays null — OAuth-only account.
         },
@@ -92,6 +105,11 @@ export class AppleIdentityService {
     } catch (err) {
       // A concurrent duplicate request won the create race (appleId and email
       // are both @unique). Converge on the row it created.
+      //
+      // Matching by email here is only sound because an unverified address was
+      // refused above and can never reach this point. If that guard is ever
+      // moved or weakened, THIS becomes an account-takeover path again — it
+      // was exactly that before the guard was hoisted.
       if (isUniqueViolation(err)) {
         const existing = await prisma.user.findFirst({
           where: { OR: [{ appleId: claims.sub }, { email }] },

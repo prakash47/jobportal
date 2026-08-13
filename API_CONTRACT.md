@@ -127,9 +127,11 @@ Apple on the same address lands on one account. The exception is Apple's **Hide 
 Email**: that mints a `@privaterelay.appleid.com` address, which is a different address,
 so it creates a separate account. That is inherent to Apple's design.
 
-Both providers are **off until configured** — if `GOOGLE_MOBILE_CLIENT_IDS` /
-`APPLE_CLIENT_IDS` are unset server-side, every token is rejected. You will need to give
-us your Android and iOS OAuth client IDs and your iOS bundle ID.
+**Apple is off until configured** — with `APPLE_CLIENT_IDS` unset server-side every
+Apple token is rejected. **Google is not quite**: the existing web client ID is accepted
+automatically, so a token minted for the *web* client works even before
+`GOOGLE_MOBILE_CLIENT_IDS` is set. Tokens minted for your Android/iOS clients will not,
+so send us those client IDs and your iOS bundle ID before you test on device.
 
 ---
 

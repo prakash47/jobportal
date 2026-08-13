@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ServiceUnavailableException,
   UnauthorizedException,
   Body,
   Controller,
@@ -20,6 +21,7 @@ import { GoogleOAuthService } from './google-oauth.service';
 import {
   APPLE_OIDC,
   GOOGLE_OIDC,
+  OidcProviderUnavailableError,
   OidcVerificationError,
   OidcVerifierService,
 } from './oidc-verifier.service';
@@ -249,6 +251,12 @@ export class MobileAuthController {
 
     const outcome = await this.apple.findOrCreateUser(claims, parsed.data.name);
     if (outcome.user === null) {
+      if (outcome.reason === 'email-unverified') {
+        // Apple signed the token but did not vouch for the address, so it
+        // cannot be used to reach or create an account. 401 to match the
+        // Google route, which refuses the same condition.
+        throw new UnauthorizedException('Apple account email is not verified.');
+      }
       // Apple omits the email claim on repeat sign-ins. Harmless once we know
       // the `sub`, fatal when creating, since User.email is required and
       // unique. A 401 would be misleading — the token was perfectly valid —
@@ -271,6 +279,16 @@ export class MobileAuthController {
     try {
       return await this.oidc.verify(idToken, opts);
     } catch (err) {
+      // An outage is NOT a rejected credential. Answering 401 would tell a user
+      // with a perfectly good token that their sign-in failed, and would hide
+      // the outage from monitoring behind an expected-looking 4xx. 503 is >=500
+      // so Sentry captures it, and it tells the client to retry rather than
+      // re-authenticate.
+      if (err instanceof OidcProviderUnavailableError) {
+        throw new ServiceUnavailableException('Sign-in is temporarily unavailable.', {
+          cause: err,
+        });
+      }
       if (err instanceof OidcVerificationError) {
         throw new UnauthorizedException('Could not verify that sign-in.');
       }

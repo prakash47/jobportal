@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GOOGLE_OIDC,
+  OidcProviderUnavailableError,
   OidcVerificationError,
   OidcVerifierService,
 } from './oidc-verifier.service';
@@ -79,7 +80,11 @@ describe('OidcVerifierService — the signature is actually checked', () => {
     await expect(service.verify(forged, OPTS)).rejects.toBeInstanceOf(OidcVerificationError);
   });
 
-  // `alg: none` is the oldest JWT attack there is.
+  // `alg: none` is the oldest JWT attack there is. Measured caveat, stated so
+  // nobody mistakes this for proof that our `algorithms` pin is what stops it:
+  // jsonwebtoken 9.0.3 rejects this on its own, because it derives the allowed
+  // algorithms from the RSA public key it is handed. The test asserts the
+  // OUTCOME we require, not the mechanism.
   it('rejects an unsigned alg:none token', async () => {
     const header = Buffer.from(JSON.stringify({ alg: 'none', kid: KID })).toString('base64url');
     const body = Buffer.from(JSON.stringify(claims())).toString('base64url');
@@ -89,7 +94,10 @@ describe('OidcVerifierService — the signature is actually checked', () => {
   });
 
   // Algorithm confusion: sign with HMAC using the provider's PUBLIC key as the
-  // shared secret. A verifier that does not pin RS256 accepts this.
+  // shared secret. Same caveat as above — jsonwebtoken rejects this by key type
+  // even with the pin removed, so this guards the outcome rather than proving
+  // the pin. The genuinely load-bearing guard is the wrong-key test above,
+  // which DOES go red when signature verification is removed.
   it('rejects an HS256 token signed with the public key as secret', async () => {
     const pub = provider.publicKey.export({ type: 'spki', format: 'pem' }).toString();
     const confused = jwt.sign(claims(), pub, { algorithm: 'HS256', keyid: KID });
@@ -115,8 +123,10 @@ describe('OidcVerifierService — claim checks', () => {
     await expect(service.verify(old, OPTS)).rejects.toBeInstanceOf(OidcVerificationError);
   });
 
-  // An unconfigured provider must fail CLOSED. An empty audience list passed to
-  // jwt.verify would disable the aud check entirely and accept anyone's token.
+  // An unconfigured provider must fail CLOSED, and must do so BEFORE any
+  // network call. (jsonwebtoken would also reject an empty audience list on its
+  // own — it matches nothing — but relying on that would make a missing env var
+  // surface as a confusing "audience invalid" instead of what it is.)
   it('rejects everything when no audiences are configured', async () => {
     await expect(
       service.verify(sign(claims()), { ...OPTS, audiences: [] }),
@@ -236,10 +246,21 @@ describe('OidcVerifierService — JWKS handling', () => {
     );
   });
 
-  it('rejects when the JWKS endpoint errors', async () => {
+  // An outage with a COLD cache is not a rejected credential. If this threw the
+  // verification error, the controller would answer 401 and tell a user with a
+  // perfectly good token that their sign-in failed — while hiding the outage
+  // from monitoring behind an expected-looking 4xx.
+  it('reports an unreachable provider distinctly from a bad token', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
+    const err = await service.verify(sign(claims()), OPTS).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(OidcProviderUnavailableError);
+    expect(err).not.toBeInstanceOf(OidcVerificationError);
+  });
+
+  it('reports a network failure as unreachable too', async () => {
+    fetchMock.mockRejectedValue(new Error('ECONNREFUSED'));
     await expect(service.verify(sign(claims()), OPTS)).rejects.toBeInstanceOf(
-      OidcVerificationError,
+      OidcProviderUnavailableError,
     );
   });
 });

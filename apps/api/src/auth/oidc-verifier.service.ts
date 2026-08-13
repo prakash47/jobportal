@@ -71,11 +71,25 @@ export interface OidcClaims {
 export class OidcVerificationError extends Error {}
 
 /**
+ * Thrown when we could not REACH the provider to make a decision.
+ *
+ * Distinct from `OidcVerificationError` on purpose: "Google is unreachable" is
+ * not "your token is forged". Collapsing both into a 401 tells a user with a
+ * perfectly good credential that their sign-in was rejected, and hides an
+ * outage from monitoring behind an expected-looking 4xx. The caller maps this
+ * to 503 instead.
+ */
+export class OidcProviderUnavailableError extends Error {}
+
+/**
  * Narrow a list to the non-empty tuple `jsonwebtoken` requires.
  *
- * Not ceremony: passing an empty array to `jwt.verify`'s `issuer`/`audience`
- * disables that check entirely, so "no configured audiences" would silently
- * become "accept a token minted for anyone". Failing loudly is the point.
+ * Measured against the installed jsonwebtoken 9.0.3: an EMPTY array does not
+ * disable the check — it matches nothing and rejects with "jwt audience
+ * invalid". So the unconfigured case already fails closed, and this is about
+ * WHERE it fails: a named error here says "no audiences configured", whereas
+ * letting `[]` through produces a confusing audience-mismatch message for what
+ * is really a missing env var.
  */
 function toNonEmpty(values: readonly string[], label: string): [string, ...string[]] {
   const [first, ...rest] = values;
@@ -125,9 +139,14 @@ export class OidcVerifierService {
     let payload: jwt.JwtPayload;
     try {
       const verified = jwt.verify(rawToken, key, {
-        // Pinned. Without this, a token with `alg: "none"`, or one signed with
-        // HMAC using the public key as the secret, could be accepted — the
-        // classic JWT confusion attacks.
+        // Defence in depth, and stated honestly: measured against
+        // jsonwebtoken 9.0.3, `alg:none` and the HMAC-with-the-public-key
+        // confusion attack are BOTH rejected without this option, because the
+        // library derives the permitted algorithm set from the key it is given
+        // and an RSA public KeyObject only admits RS*/PS*. The pin is kept
+        // because that protection is a property of the key type rather than of
+        // this call, and it would evaporate if the key ever became a string or
+        // a symmetric secret.
         algorithms: ['RS256'],
         issuer: issuers,
         audience: audiences,
@@ -212,7 +231,9 @@ export class OidcVerifierService {
         );
         return previous;
       }
-      throw new OidcVerificationError(
+      // No cached keys, so we cannot decide anything. This is an outage, not a
+      // bad credential — surfaced as its own type so the caller answers 503.
+      throw new OidcProviderUnavailableError(
         `JWKS fetch failed: ${err instanceof Error ? err.message : 'unknown'}`,
       );
     }

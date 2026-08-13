@@ -64,19 +64,43 @@ describe('AppleIdentityService.findOrCreateUser', () => {
     );
   });
 
-  // ACCOUNT TAKEOVER GUARD. If a provider ever hands us an unverified address,
-  // linking on it would let a stranger attach themselves to somebody else's
-  // account and sign in as them.
-  it('NEVER links by an unverified email', async () => {
+  // ACCOUNT TAKEOVER GUARD. If a provider hands us an unverified address,
+  // resolving on it would let a stranger reach somebody else's account.
+  //
+  // The first version of this test mocked `user.create` to SUCCEED, so it never
+  // exercised the path that actually mattered and passed while the code was
+  // vulnerable. The real hole was downstream: an unverified claim skipped
+  // linking, fell through to create, collided on `User.email @unique`, and the
+  // P2002 recovery re-matched the victim BY EMAIL and returned their account.
+  // These now drive that collision.
+  it('refuses an unverified email outright, before touching the database', async () => {
     mocked.user.findUnique.mockResolvedValueOnce(null); // by appleId
-    mocked.user.create.mockResolvedValue({ id: 9 });
 
-    await service.findOrCreateUser(claims({ emailVerified: false }), 'New Person');
+    const out = await service.findOrCreateUser(claims({ emailVerified: false }), 'New Person');
 
-    // Only the appleId lookup happened — no lookup by email, so no link.
+    expect(out).toEqual({ user: null, reason: 'email-unverified' });
+    // Only the appleId lookup happened — no email lookup, no create, no link.
     expect(mocked.user.findUnique).toHaveBeenCalledTimes(1);
     expect(mocked.user.update).not.toHaveBeenCalled();
-    expect(mocked.user.create).toHaveBeenCalled();
+    expect(mocked.user.create).not.toHaveBeenCalled();
+  });
+
+  // THE regression test. With the guard applied only to the link branch, this
+  // returned the victim's account and the controller minted a session for it.
+  it('does NOT resolve a victim account through the unique-violation recovery', async () => {
+    mocked.user.findUnique.mockResolvedValueOnce(null); // by appleId
+    // Arm the collision + recovery exactly as the vulnerable path did.
+    mocked.user.create.mockRejectedValue(Object.assign(new Error('dup'), { code: 'P2002' }));
+    mocked.user.findFirst.mockResolvedValue({ id: 999, email: 'victim@example.com' });
+
+    const out = await service.findOrCreateUser(
+      claims({ email: 'victim@example.com', emailVerified: false }),
+      'Attacker',
+    );
+
+    expect(out).toEqual({ user: null, reason: 'email-unverified' });
+    // The recovery must never even be reached.
+    expect(mocked.user.findFirst).not.toHaveBeenCalled();
   });
 
   // Apple hands the display name to the CLIENT once and never again, so the
