@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  UnauthorizedException,
   Body,
   Controller,
   HttpCode,
@@ -13,7 +14,16 @@ import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
 import { EmailService } from '../email/email.service';
-import { LoginDto, MobileRefreshDto, RegisterDto } from './dto';
+import { LoginDto, MobileAppleDto, MobileGoogleDto, MobileRefreshDto, RegisterDto } from './dto';
+import { AppleIdentityService } from './apple-identity.service';
+import { GoogleOAuthService } from './google-oauth.service';
+import {
+  APPLE_OIDC,
+  GOOGLE_OIDC,
+  OidcVerificationError,
+  OidcVerifierService,
+} from './oidc-verifier.service';
+import { appleAudiences, googleAudiences } from './social-client-ids';
 import { PerEmailThrottleGuard } from './per-email-throttle.guard';
 
 // ADR 0002 decision 1 — the mobile token surface.
@@ -87,6 +97,9 @@ export class MobileAuthController {
     private readonly auth: AuthService,
     private readonly emailVerify: EmailVerificationService,
     private readonly email: EmailService,
+    private readonly oidc: OidcVerifierService,
+    private readonly google: GoogleOAuthService,
+    private readonly apple: AppleIdentityService,
   ) {}
 
   @Post('register')
@@ -176,4 +189,110 @@ export class MobileAuthController {
     const parsed = MobileRefreshDto.safeParse(body);
     if (parsed.success) await this.auth.logout(parsed.data.refreshToken);
   }
+
+  // ---- Social sign-in ------------------------------------------------------
+  //
+  // The browser flow at /auth/google cannot serve a native client: its PKCE
+  // handshake is carried in an HttpOnly cookie, the session comes back as
+  // Set-Cookie, and it finishes by redirecting to the WEBSITE — so an app gets
+  // an error page and no tokens. These routes take the opposite shape: the
+  // client does the provider dance on-device and posts the resulting ID token,
+  // and we return body tokens exactly like /login.
+  //
+  // EVERY failure answers the same generic 401. The verifier distinguishes a
+  // bad signature from a wrong audience from an expired token, and the caller
+  // gets none of that — the distinctions are free reconnaissance for someone
+  // probing which of their forged tokens got closest.
+
+  @Post('google')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  async googleSignIn(@Body() body: unknown, @Req() req: Request) {
+    const parsed = MobileGoogleDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+
+    const claims = await this.verifyOrUnauthorized(parsed.data.idToken, {
+      jwksUri: GOOGLE_OIDC.jwksUri,
+      issuers: GOOGLE_OIDC.issuers,
+      audiences: googleAudiences(),
+    });
+
+    // The browser path enforces this inside parseIdToken; enforce it here too
+    // rather than inheriting it, because linking by email below is only safe
+    // when the provider actually vouched for the address.
+    if (!claims.email || !claims.emailVerified) {
+      throw new UnauthorizedException('Google account email is not verified.');
+    }
+
+    const { user } = await this.google.findOrCreateUser({
+      sub: claims.sub,
+      email: claims.email,
+      name: claims.name?.trim() || (claims.email.split('@')[0] ?? claims.email),
+      picture: claims.picture ?? null,
+    });
+
+    return session(await this.issueFor(user, req));
+  }
+
+  @Post('apple')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  async appleSignIn(@Body() body: unknown, @Req() req: Request) {
+    const parsed = MobileAppleDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+
+    const claims = await this.verifyOrUnauthorized(parsed.data.idToken, {
+      jwksUri: APPLE_OIDC.jwksUri,
+      issuers: APPLE_OIDC.issuers,
+      audiences: appleAudiences(),
+    });
+
+    const outcome = await this.apple.findOrCreateUser(claims, parsed.data.name);
+    if (outcome.user === null) {
+      // Apple omits the email claim on repeat sign-ins. Harmless once we know
+      // the `sub`, fatal when creating, since User.email is required and
+      // unique. A 401 would be misleading — the token was perfectly valid —
+      // so this is a 400 telling the client to send the user through Apple's
+      // first-time consent again.
+      throw new BadRequestException(
+        'Apple did not provide an email address for this account. ' +
+          'Remove Career Queue from your Apple ID and sign in again.',
+      );
+    }
+
+    return session(await this.issueFor(outcome.user, req));
+  }
+
+  /** Verify an ID token, collapsing every rejection into one opaque 401. */
+  private async verifyOrUnauthorized(
+    idToken: string,
+    opts: Parameters<OidcVerifierService['verify']>[1],
+  ) {
+    try {
+      return await this.oidc.verify(idToken, opts);
+    } catch (err) {
+      if (err instanceof OidcVerificationError) {
+        throw new UnauthorizedException('Could not verify that sign-in.');
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Mint our session for a resolved user.
+   *
+   * Goes through `AuthService.issueSession` rather than signing tokens here, so
+   * these routes inherit the deactivated-recruiter check that lives inside it —
+   * the gap that once let a removed recruiter regain a session through a path
+   * that bypassed login.
+   */
+  private async issueFor(user: Parameters<AuthService['issueSession']>[0], req: Request) {
+    const result = await this.auth.issueSession(
+      user,
+      req.headers['user-agent'] ? String(req.headers['user-agent']) : undefined,
+      req.ip,
+    );
+    return { user, accessToken: result.accessToken, refreshToken: result.refreshToken };
+  }
+
 }

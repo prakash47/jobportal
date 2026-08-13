@@ -58,3 +58,30 @@ export const UpdateNameDto = z.object({
   name: z.string().min(1).max(120),
 });
 export type UpdateNameInput = z.infer<typeof UpdateNameDto>;
+
+// Mobile social sign-in (ADR 0002). The client obtains an ID token on-device —
+// Google via google_sign_in, Apple via Sign in with Apple — and posts it here.
+//
+// The token is the ONLY credential: nothing else in these bodies is trusted.
+// In particular there is deliberately no `email` field, because accepting one
+// would invite a caller to claim an address the provider never vouched for.
+const idToken = z
+  .string()
+  .min(1)
+  // A JWT this large is already far past anything Google or Apple issues;
+  // the cap stops an unbounded body reaching the verifier.
+  .max(8192);
+
+export const MobileGoogleDto = z.object({ idToken }).strict();
+export type MobileGoogleInput = z.infer<typeof MobileGoogleDto>;
+
+export const MobileAppleDto = z
+  .object({
+    idToken,
+    // Apple returns the display name exactly ONCE, on first authorisation, to
+    // the client and never inside the token — so the client has to relay it.
+    // Used only when CREATING a user; it can never rename an existing account.
+    name: z.string().trim().min(1).max(120).optional(),
+  })
+  .strict();
+export type MobileAppleInput = z.infer<typeof MobileAppleDto>;

@@ -94,9 +94,42 @@ Authorization: Bearer <accessToken>
 Every authenticated route accepts this. Access tokens last **15 minutes** (`expiresIn: 900`);
 refresh tokens last 30 days and rotate on use.
 
-**Google sign-in does not work from a native client as-is.** The OAuth callback
-redirects to the *website*, not to an app deep link. Email + password is the only
-mobile auth path today.
+### Social sign-in
+
+Obtain an ID token **on-device** (Google via `google_sign_in`, Apple via Sign in with
+Apple) and post it here. Do **not** open `/auth/google` in a webview — that flow is
+browser-only: its PKCE handshake lives in an HttpOnly cookie, the session comes back as
+`Set-Cookie`, and it finishes by redirecting to the website, so the app gets an error
+page and no tokens.
+
+| Route | Body |
+|---|---|
+| `POST /v1/auth/mobile/google` | `{ idToken }` |
+| `POST /v1/auth/mobile/apple` | `{ idToken, name? }` |
+
+Both return the **same shape as login** — user + `accessToken` + `refreshToken` +
+`tokenType` + `expiresIn`.
+
+`name` on the Apple route matters: Apple hands you the display name **exactly once**, on
+the very first authorisation, and never puts it in the token. Send it on that first call
+or the account is named after the email's local part. It is ignored for accounts that
+already exist, so replaying it cannot rename anyone.
+
+**Every verification failure is one opaque `401`** — bad signature, wrong audience,
+expired, unknown issuer all look identical, deliberately. There is one exception worth
+handling separately: Apple omits the email claim on repeat sign-ins, and if we have never
+seen that Apple user before we cannot create an account without it. That answers **400**,
+not 401, and the fix is for the user to remove the app from their Apple ID and sign in
+again.
+
+Accounts link across providers by **verified email**, so signing in with Google and then
+Apple on the same address lands on one account. The exception is Apple's **Hide My
+Email**: that mints a `@privaterelay.appleid.com` address, which is a different address,
+so it creates a separate account. That is inherent to Apple's design.
+
+Both providers are **off until configured** — if `GOOGLE_MOBILE_CLIENT_IDS` /
+`APPLE_CLIENT_IDS` are unset server-side, every token is rejected. You will need to give
+us your Android and iOS OAuth client IDs and your iOS bundle ID.
 
 ---
 
@@ -346,7 +379,7 @@ accounts only. **Both app stores require you to expose this**, so wire it into s
 5. **503 from `/v1/jobs` means the search backend is down**, not "no jobs".
 6. **Refresh tokens rotate.** Persist the new one on every refresh or you will log users out.
 7. **Applying needs a verified email *and* a CV.** Both are 403s; only the CV ones carry a `code`.
-8. **Google sign-in is web-only** right now.
+8. **Social sign-in is `POST /v1/auth/mobile/{google,apple}`** with an on-device ID token — never a webview against `/auth/google`.
 9. **No push notifications.** No device-token registration exists in any layer.
 10. **No client-readable feature flags.** The only flag route is admin-guarded, so the
     app cannot discover what the web can turn off. Note `feature.resume_download_pdf`

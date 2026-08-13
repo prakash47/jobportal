@@ -32,6 +32,9 @@ enum UserRole {
 enum AuthProvider {
   LOCAL
   GOOGLE
+  // Sign in with Apple. Mandatory on iOS once any third-party social login
+  // ships, per App Store Review Guideline 4.8 — not an optional extra.
+  APPLE
 }
 
 // Delivery channel for a recruiter-signup one-time code (SRS §4.9 / §4.12).
@@ -395,6 +398,11 @@ model User {
   role          UserRole     @default(CANDIDATE)
   provider      AuthProvider @default(LOCAL) // auth method — SRS §4.12.6
   googleId      String?      @unique // Google "sub" claim; null for non-Google
+  // Apple "sub" claim. Separate column rather than a shared providerId
+  // because a single account can legitimately carry both — someone who
+  // signed up with Google on the web and later used Apple on their phone
+  // must land on the SAME account, not a duplicate.
+  appleId       String?      @unique
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
