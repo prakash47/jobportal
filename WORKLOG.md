@@ -33,7 +33,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-08 after `feature/apply-resume-snapshot` merged (`20260808140000_add_application_resume_snapshot`). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/mobile-social-auth` | 2026-08-08 | Adds `AuthProvider.APPLE` + `User.appleId` (@unique). One migration; additive only. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/mobile-social-auth` | **`POST /v1/auth/mobile/{google,apple}`** — social sign-in for the app. The existing `/auth/google` flow is browser-only: the PKCE handshake is carried in an HttpOnly cookie, the session comes back as `Set-Cookie`, and it redirects to the WEBSITE — so a native client gets an error and no tokens. These accept an ID token obtained on-device and return body tokens. **Security-critical**: `GoogleOAuthService.parseIdToken` does NOT verify the signature (safe today because the token comes server-to-server from Google over TLS) and must NOT be reused for a client-supplied token — a new JWKS-backed verifier does real RS256 verification. Apple is required by App Store policy once any third-party social login ships on iOS. | `packages/db/prisma/schema.prisma` **(LOCK TAKEN)** + migration, `apps/api/src/auth/*`, `.env.example`. No new npm dependency — Node 24 converts a JWK to a public key natively. |
 
 ---
 
