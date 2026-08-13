@@ -33,7 +33,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-08 after `feature/apply-resume-snapshot` merged (`20260808140000_add_application_resume_snapshot`). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-08 after `feature/mobile-social-auth` merged (`20260808180000_add_apple_auth_provider`). |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
@@ -67,6 +67,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Date | Branch | What shipped |
 |---|---|---|
+| 2026-08-08 | `feature/mobile-social-auth` | **`POST /v1/auth/mobile/{google,apple}`** — social sign-in for the app, with a JWKS-backed verifier that does REAL RS256 verification (the existing `parseIdToken` does not verify signatures and must never be used on a client-supplied token). Review caught a **HIGH account takeover** via the P2002 recovery bypassing the verified-email guard — fixed, with a regression test that actually drives the collision. ⚠️ **On pull: `pnpm db:migrate && pnpm db:generate`.** ⚠️ **Needs owner config**: Android/iOS Google client IDs + iOS bundle ID. |
 | 2026-08-08 | `bugfix/asset-url-followup` | **Completes the asset-URL sweep.** Post-merge review found `GET /v1/jobs/:slug` and `relatedCompanies` still emitting raw stored URLs while their sibling list endpoints resolved them, plus six unconverted `apps/web` loaders. Also fixes an uncaught `decodeURIComponent` throw (a stray `%` would 500 a public route) and a missing re-encode that emitted URLs containing literal spaces. |
 | 2026-08-08 | `chore/api-contract-doc` | **`API_CONTRACT.md` at the repo root** — the mobile team's contract. Every endpoint with example JSON **captured live**, the `/v1`-vs-no-`/v1` route split (verified in both directions), units (paise / months / years), the frozen `mode=on-site` spelling, the apply-403 `code`s, and what is NOT built. Docs only. |
 | 2026-08-08 | `bugfix/asset-url-origin` | **Stored asset URLs re-derive their origin at read time.** `Company.logoUrl` holds an absolute URL minted at upload, so a logo added before R2 is provisioned would keep a `localhost` origin forever — including inside the JSON-LD Google indexes. **No backfill was needed** (0 of 12 rows non-null, measured); the mechanism is fixed instead, via a shared resolver in `@jobportal/domain`. No migration. |
