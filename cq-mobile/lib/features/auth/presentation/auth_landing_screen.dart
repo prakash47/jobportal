@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -8,6 +10,7 @@ import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/network_background.dart';
 import '../../../shared/widgets/theme_toggle_button.dart';
 import 'widgets/auth_alternatives.dart';
+import '../application/auth_controller.dart';
 
 /// The first screen an unauthenticated user sees.
 ///
@@ -149,6 +152,22 @@ class _Hero extends StatelessWidget {
   }
 }
 
+/// Demo-only: signs into the app with sample data (no server). Shown on the
+/// welcome sheet when [AppConfig.demoMode] is on.
+class _DemoButton extends ConsumerWidget {
+  const _DemoButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return CqPrimaryButton(
+      label: 'Enter demo mode',
+      icon: Icons.play_circle_outline_rounded,
+      showArrow: true,
+      onPressed: () => ref.read(authControllerProvider.notifier).demoLogin(),
+    );
+  }
+}
+
 /// The action sheet: primary Email (opens the email-first flow), then Google +
 /// Phone. Content-sized and bottom-safe-area padded.
 class _AuthSheet extends StatelessWidget {
@@ -197,6 +216,10 @@ class _AuthSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.xl2),
 
+                  if (AppConfig.demoMode) ...[
+                    const _DemoButton(),
+                    const SizedBox(height: AppSpacing.lg),
+                  ],
                   CqPrimaryButton(
                     label: 'Continue with Email',
                     icon: Icons.mail_outline_rounded,

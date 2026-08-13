@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/config/demo_data.dart';
 import '../../../core/network/api_error.dart';
 import '../../../core/network/network_providers.dart';
 import 'notification_preferences.dart';
@@ -21,6 +23,9 @@ class SettingsRepository {
   final Dio _dio;
 
   Future<NotificationPreferences> load() async {
+    if (AppConfig.useMockData) {
+      return NotificationPreferences.fromJson(DemoData.notificationPreferences);
+    }
     try {
       final res = await _dio.get<Map<String, dynamic>>('/me/notifications');
       return NotificationPreferences.fromJson(res.data ?? const {});
@@ -31,6 +36,7 @@ class SettingsRepository {
 
   /// PATCH the full set; the endpoint returns the server's updated view.
   Future<NotificationPreferences> save(NotificationPreferences prefs) async {
+    if (AppConfig.useMockData) return prefs;
     try {
       final res = await _dio.patch<Map<String, dynamic>>(
         '/me/notifications',
@@ -46,6 +52,7 @@ class SettingsRepository {
   /// (`DELETE /v1/me/account`). Irreversible — the server requires the literal
   /// confirmation string "DELETE". App stores require this to exist.
   Future<void> deleteAccount() async {
+    if (AppConfig.useMockData) return;
     try {
       await _dio.delete<void>('/v1/me/account', data: {'confirm': 'DELETE'});
     } on DioException catch (e) {

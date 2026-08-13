@@ -11,6 +11,7 @@ import '../../../shared/widgets/company_avatar.dart';
 import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../../../shared/widgets/simple_markdown.dart';
+import '../../resume/presentation/resume_section.dart';
 import '../data/job_models.dart';
 import '../data/jobs_repository.dart';
 
@@ -93,10 +94,51 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
       _toast('Application submitted');
     } catch (e) {
       if (!mounted) return;
+      // No resume on file → offer to upload one, then retry the application.
+      if (e is JobsException && e.code == 'RESUME_REQUIRED') {
+        final uploaded = await _promptResumeUpload();
+        if (!mounted) return;
+        if (uploaded) {
+          await _apply(); // retry now that a resume exists
+          return;
+        }
+        setState(() => _applying = false);
+        return;
+      }
       setState(() => _applying = false);
       _toast(e is JobsException ? e.message : 'Could not apply. Please try again.',
           error: true);
     }
+  }
+
+  /// Ask the seeker to add a resume (required to apply), then upload it.
+  /// Returns true if a resume was uploaded.
+  Future<bool> _promptResumeUpload() async {
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add a resume to apply'),
+        content: const Text(
+          'Employers need your resume to consider your application. '
+          'Upload a PDF or Word file (up to 5 MB).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Choose file'),
+          ),
+        ],
+      ),
+    );
+    if (proceed != true || !mounted) return false;
+    final resume = await pickAndUploadResume(context, ref);
+    if (resume == null) return false;
+    if (mounted) _toast('Resume added');
+    return true;
   }
 
   Future<void> _toggleSave() async {

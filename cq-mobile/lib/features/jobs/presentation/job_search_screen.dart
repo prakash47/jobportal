@@ -9,8 +9,10 @@ import '../../shell/presentation/app_drawer.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/company_avatar.dart';
 import '../../../shared/widgets/cq_loader.dart';
+import '../data/job_filters.dart';
 import '../data/job_models.dart';
 import '../data/jobs_repository.dart';
+import 'job_filters_sheet.dart';
 
 /// Jobs tab — search + browse the job feed. Reads the public `/jobs` endpoint
 /// (static sample data until the backend ships it). Each result taps through to
@@ -31,6 +33,7 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
   final _controller = TextEditingController();
   String _query = '';
   String _sort = 'relevance';
+  JobFilters _filters = const JobFilters();
   JobsPage? _page;
   bool _loading = true;
   String? _error;
@@ -68,7 +71,12 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
     });
     try {
       final repo = await _repository();
-      final data = await repo.search(q: _query, page: page, sort: _sort);
+      final data = await repo.search(
+        q: _query,
+        page: page,
+        sort: _sort,
+        filters: _filters,
+      );
       if (!mounted) return;
       setState(() {
         _page = data;
@@ -122,6 +130,14 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
     _load(1);
   }
 
+  Future<void> _openFilters() async {
+    final r = await showJobFilters(context, _filters);
+    if (r != null) {
+      setState(() => _filters = r);
+      _load(1);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cq = context.cq;
@@ -165,6 +181,7 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
                     spacing: AppSpacing.sm,
                     runSpacing: AppSpacing.sm,
                     children: [
+                      _FilterButton(count: _filters.activeCount, onTap: _openFilters),
                       _SortChip(
                         label: 'Relevant',
                         selected: _sort == 'relevance',
@@ -366,6 +383,48 @@ Widget _skillChip(BuildContext context, String label) {
       style: Theme.of(context).textTheme.labelSmall?.copyWith(color: cq.fgMuted),
     ),
   );
+}
+
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({required this.count, required this.onTap});
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    final active = count > 0;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: active ? cq.accent.withValues(alpha: 0.14) : cq.surfaceMuted,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(
+            color: active ? cq.accent.withValues(alpha: 0.5) : cq.border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.tune_rounded, size: 15, color: active ? cq.accent : cq.fgMuted),
+            const SizedBox(width: 5),
+            Text(
+              active ? 'Filters · $count' : 'Filters',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: active ? cq.accent : cq.fgMuted,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _SortChip extends StatelessWidget {

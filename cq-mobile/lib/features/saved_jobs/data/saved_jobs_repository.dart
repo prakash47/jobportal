@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/config/demo_data.dart';
 import '../../../core/network/api_error.dart';
 import '../../../core/network/network_providers.dart';
 import 'saved_job.dart';
@@ -19,6 +21,7 @@ class SavedJobsRepository {
   final Dio _dio;
 
   Future<SavedJobsPage> list({int page = 1}) async {
+    if (AppConfig.useMockData) return SavedJobsPage.fromJson(DemoData.savedJobs);
     try {
       final res = await _dio.get<Map<String, dynamic>>(
         '/me/saved-jobs',
@@ -32,6 +35,7 @@ class SavedJobsRepository {
 
   /// Remove a saved job. A 404 means it's already gone → treated as success.
   Future<void> remove(int jobId) async {
+    if (AppConfig.useMockData) return;
     try {
       await _dio.delete<void>('/me/saved-jobs/$jobId');
     } on DioException catch (e) {

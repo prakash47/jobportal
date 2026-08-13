@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/config/demo_data.dart';
 import '../../../core/network/api_error.dart';
 import '../../../core/network/network_providers.dart';
 import 'job_alert.dart';
@@ -21,6 +23,9 @@ class AlertsRepository {
   final Dio _dio;
 
   Future<List<JobAlert>> list() async {
+    if (AppConfig.useMockData) {
+      return DemoData.alerts.map(JobAlert.fromJson).toList();
+    }
     try {
       final res = await _dio.get<List<dynamic>>('/me/alerts');
       return (res.data ?? const [])
@@ -38,6 +43,7 @@ class AlertsRepository {
     required Map<String, dynamic> query,
     bool isActive = true,
   }) async {
+    if (AppConfig.useMockData) return;
     try {
       await _dio.post<void>(
         '/me/alerts',
@@ -60,6 +66,7 @@ class AlertsRepository {
     Map<String, dynamic>? query,
     bool? isActive,
   }) async {
+    if (AppConfig.useMockData) return;
     try {
       await _dio.patch<void>(
         '/me/alerts/$id',
@@ -78,6 +85,7 @@ class AlertsRepository {
   Future<void> setActive(int id, bool active) => update(id, isActive: active);
 
   Future<void> remove(int id) async {
+    if (AppConfig.useMockData) return;
     try {
       await _dio.delete<void>('/me/alerts/$id');
     } on DioException catch (e) {

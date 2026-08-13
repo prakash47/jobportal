@@ -4,12 +4,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/api_error.dart';
 import '../../../core/network/network_providers.dart';
+import 'job_filters.dart';
 import 'job_models.dart';
 import 'jobs_mock.dart';
 
 class JobsException implements Exception {
-  const JobsException(this.message);
+  const JobsException(this.message, {this.code});
   final String message;
+
+  /// The contract's error `code` when one applies (e.g. `RESUME_REQUIRED`), so
+  /// callers can react without string-matching the prose message.
+  final String? code;
+
   @override
   String toString() => message;
 }
@@ -29,6 +35,7 @@ class JobsRepository {
     String? q,
     int page = 1,
     String sort = 'relevance',
+    JobFilters filters = const JobFilters(),
   }) async {
     if (AppConfig.useMockData) {
       return JobsMock.search(q: q, page: page, sort: sort);
@@ -40,7 +47,10 @@ class JobsRepository {
           if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
           'page': page,
           'sort': sort,
+          ...filters.toQuery(),
         },
+        // Repeatable params must serialize as `skill=a&skill=b` (no `[]`).
+        options: Options(listFormat: ListFormat.multi),
       );
       return JobsPage.fromJson(res.data ?? const {});
     } on DioException catch (e) {
@@ -77,11 +87,15 @@ class JobsRepository {
       final errCode = data is Map ? data['code'] as String? : null;
       // Branch on the contract's `code`, never on the prose message.
       if (errCode == 'RESUME_REQUIRED') {
-        throw const JobsException('Add a resume to your profile before applying.');
+        throw const JobsException(
+          'Add a resume to your profile before applying.',
+          code: 'RESUME_REQUIRED',
+        );
       }
       if (errCode == 'RESUME_SCANNING') {
         throw const JobsException(
           'Your resume is still being checked — please try again in a moment.',
+          code: 'RESUME_SCANNING',
         );
       }
       if (code == 409) {

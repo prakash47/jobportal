@@ -11,6 +11,7 @@ dependencies:
   cookie_jar: ^4.0.9
   dio: ^5.10.0
   dio_cookie_manager: ^3.4.0
+  file_picker: ^3.0.4
   flutter:
     sdk: flutter
   flutter_riverpod: ^3.3.2
@@ -52,16 +53,17 @@ flutter_launcher_icons:
   background_color_ios: "#FFFFFF"
   min_sdk_android: 21
 
-# Native splash — ONLY the brand background colour (#F4F8FC), no logo. Android 12+
+# Native splash — ONLY the brand navy background (#192349), no logo. Android 12+
 # force-masks any native splash icon into a circle, which garbled the wide logo;
 # by shipping a blank (transparent) image the native frame is just the brand
-# colour, and the animated Dart splash paints the logo on top of that same colour
-# — one continuous surface, nothing to garble. (run: dart run flutter_native_splash:create)
+# navy, and the animated Dart splash paints the glowing constellation + white
+# logo on top of that same navy — one continuous surface, never a white blank
+# flash while Flutter boots. (run: dart run flutter_native_splash:create)
 flutter_native_splash:
-  color: "#F4F8FC"
+  color: "#192349"
   image: assets/icon/blank.png
   android_12:
     image: assets/icon/blank.png
-    icon_background_color: "#F4F8FC"
+    icon_background_color: "#192349"
   android: true
   ios: true

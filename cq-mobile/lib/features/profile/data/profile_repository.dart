@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
+import '../../../core/config/demo_data.dart';
 import '../../../core/network/api_error.dart';
 import '../../../core/network/network_providers.dart';
 import 'profile_overview.dart';
@@ -20,6 +22,7 @@ class ProfileRepository {
   final Dio _dio;
 
   Future<ProfileOverview> load() async {
+    if (AppConfig.useMockData) return ProfileOverview.fromJson(DemoData.profile);
     try {
       final res = await _dio.get<Map<String, dynamic>>('/me/profile');
       return ProfileOverview.fromJson(res.data ?? const {});

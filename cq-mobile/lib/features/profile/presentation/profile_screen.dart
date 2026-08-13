@@ -10,6 +10,7 @@ import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../../../shared/widgets/theme_toggle_button.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../resume/presentation/resume_section.dart';
 import '../data/profile_overview.dart';
 import '../data/profile_repository.dart';
 
@@ -239,6 +240,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             showArrow: true,
             onPressed: _edit,
           ),
+          const SizedBox(height: AppSpacing.xl),
+
+          // ── Resume ──
+          const ResumeCard(),
           const SizedBox(height: AppSpacing.xl),
 
           // ── Details ──

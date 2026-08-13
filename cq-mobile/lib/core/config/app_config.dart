@@ -34,8 +34,16 @@ abstract final class AppConfig {
   /// `--dart-define=USE_MOCK_DATA=false`) once the website dev ships an
   /// endpoint — the repositories already hold the live Dio calls, so only the
   /// data source changes, never the UI.
-  static const bool useMockData = bool.fromEnvironment(
-    'USE_MOCK_DATA',
+  /// Offline demo / presentation mode: sample data everywhere + a one-tap demo
+  /// login, so the app runs with no server. Enable with
+  /// `--dart-define=DEMO_MODE=true`.
+  static const bool demoMode = bool.fromEnvironment(
+    'DEMO_MODE',
     defaultValue: false,
   );
+
+  /// Browse features — and, in [demoMode], every screen — use static sample data
+  /// when true. Forced on by [demoMode]: an offline demo can't reach the API.
+  static const bool useMockData =
+      demoMode || bool.fromEnvironment('USE_MOCK_DATA', defaultValue: false);
 }

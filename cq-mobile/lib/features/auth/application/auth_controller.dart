@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/network/network_providers.dart';
 import '../data/auth_repository.dart';
 import '../data/auth_user.dart';
@@ -60,11 +61,15 @@ class AuthController extends Notifier<AuthState> {
     // the session check returns instantly.
     final minSplash = Future<void>.delayed(const Duration(milliseconds: 2900));
     AuthUser? user;
-    try {
-      final repo = await _repo;
-      user = await repo.currentUser().timeout(const Duration(seconds: 6));
-    } catch (_) {
-      user = null; // backend unreachable / slow → treat as logged out
+    // Demo mode never touches the server — land on the welcome screen, where an
+    // "Enter demo mode" button signs in with sample data.
+    if (!AppConfig.demoMode) {
+      try {
+        final repo = await _repo;
+        user = await repo.currentUser().timeout(const Duration(seconds: 6));
+      } catch (_) {
+        user = null; // backend unreachable / slow → treat as logged out
+      }
     }
     await minSplash;
     state = user != null
@@ -101,8 +106,25 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
-    final repo = await _repo;
-    await repo.logout();
+    // In demo mode there's no server session to revoke.
+    if (!AppConfig.demoMode) {
+      final repo = await _repo;
+      await repo.logout();
+    }
     state = const AuthUnauthenticated();
+  }
+
+  /// Offline demo sign-in — no server call. Only reachable in
+  /// [AppConfig.demoMode], via the welcome screen's demo button.
+  void demoLogin() {
+    state = const AuthAuthenticated(
+      AuthUser(
+        id: 0,
+        email: 'demo@careerqueue.app',
+        name: 'Demo User',
+        role: 'CANDIDATE',
+        emailVerified: true,
+      ),
+    );
   }
 }
