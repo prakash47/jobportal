@@ -1,10 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CANDIDATE_APPLICATIONS_LIMIT,
+  candidateDetailHref,
   candidatesHref,
   clampPage,
   firstParam,
+  formatApplicationStatus,
+  formatBytes,
+  formatCurrentSalary,
+  formatEducationYears,
+  formatExperienceMonths,
+  formatGender,
   formatHeadline,
+  formatJobStatus,
+  formatLanguageProficiency,
+  formatLookingFor,
+  formatNoticePeriod,
+  formatProfileAuditAction,
+  formatScanStatus,
+  formatSectionCap,
+  formatSessionState,
+  formatWorkStatus,
   initials,
+  isOngoingExperience,
   lastPageFor,
   normalizeQuery,
 } from './format';
@@ -212,5 +230,347 @@ describe('re-exported pagination helpers', () => {
     expect(lastPageFor(0, 20)).toBe(1);
     expect(lastPageFor(20, 20)).toBe(1);
     expect(lastPageFor(21, 20)).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Candidate detail page
+// ---------------------------------------------------------------------------
+
+// The point of this builder is that the master list's state survives a round
+// trip to the detail page and back, so these assert the round trip rather than
+// just the string shape.
+describe('candidateDetailHref', () => {
+  it('emits a bare path when there is no list state to carry', () => {
+    expect(candidateDetailHref(42, 1, undefined)).toBe('/candidates/42');
+  });
+
+  it('omits the default page, matching candidatesHref', () => {
+    expect(candidateDetailHref(42, 1, 'priya')).toBe('/candidates/42?q=priya');
+  });
+
+  it('carries both params in a fixed order', () => {
+    expect(candidateDetailHref(42, 3, 'priya')).toBe('/candidates/42?q=priya&page=3');
+  });
+
+  it('carries the page alone', () => {
+    expect(candidateDetailHref(42, 3, undefined)).toBe('/candidates/42?page=3');
+  });
+
+  it('encodes a query that would otherwise smuggle a second param in', () => {
+    const href = candidateDetailHref(7, 2, 'a&b=c');
+    expect(href).toBe('/candidates/7?q=a%26b%3Dc&page=2');
+    const parsed = new URL(href, 'https://example.test');
+    expect(parsed.searchParams.get('q')).toBe('a&b=c');
+    expect(parsed.searchParams.get('page')).toBe('2');
+  });
+
+  // The invariant that makes the Back link correct: whatever this encodes, the
+  // detail page's decoders hand back to candidatesHref unchanged.
+  it('round-trips through the same codecs the detail page uses', () => {
+    const cases: ReadonlyArray<readonly [number, string | undefined]> = [
+      [1, undefined],
+      [3, 'priya sharma'],
+      [12, 'a&b=c'],
+    ];
+    for (const [page, q] of cases) {
+      const href = candidateDetailHref(99, page, q);
+      const parsed = new URL(href, 'https://example.test');
+      const decodedQ = normalizeQuery(firstParam(parsed.searchParams.get('q') ?? undefined));
+      const decodedPage = clampPage(firstParam(parsed.searchParams.get('page') ?? undefined));
+      expect(candidatesHref(decodedPage, decodedQ)).toBe(candidatesHref(page, q));
+    }
+  });
+
+  // basePath is added by Next itself; writing it here would double-apply it.
+  it('never writes the /sadmin basePath', () => {
+    expect(candidateDetailHref(1, 2, 'x').startsWith('/candidates/')).toBe(true);
+  });
+});
+
+// Every table below is a Record keyed by the Prisma enum, so a missing or
+// invented member is a COMPILE error. These pin the wording staff actually read.
+describe('enum labels', () => {
+  it('formatApplicationStatus matches the wording the other three apps use', () => {
+    expect(formatApplicationStatus('APPLIED')).toBe('Applied');
+    expect(formatApplicationStatus('IN_REVIEW')).toBe('In review');
+    expect(formatApplicationStatus('WITHDRAWN')).toBe('Withdrawn');
+  });
+
+  it('formatJobStatus calls PENDING_MODERATION what the recruiter is shown', () => {
+    expect(formatJobStatus('PENDING_MODERATION')).toBe('Under review');
+    expect(formatJobStatus('ACTIVE')).toBe('Live');
+    expect(formatJobStatus('EXPIRED')).toBe('Expired');
+  });
+
+  it('nullable enum formatters answer an em dash rather than throwing', () => {
+    expect(formatWorkStatus(null)).toBe('—');
+    expect(formatLookingFor(null)).toBe('—');
+    expect(formatGender(null)).toBe('—');
+  });
+
+  // apps/web disagrees with itself here — ProfileForm says "Working" while the
+  // onboarding step says "Experienced". The enum member wins on a staff console.
+  it('formatWorkStatus follows the enum, not the onboarding wizard', () => {
+    expect(formatWorkStatus('EXPERIENCED')).toBe('Experienced');
+    expect(formatWorkStatus('FRESHER')).toBe('Fresher');
+  });
+
+  it('formatLookingFor spells BOTH out', () => {
+    expect(formatLookingFor('BOTH')).toBe('Job or internship');
+  });
+
+  it('formatGender never renders the raw PREFER_NOT_TO_SAY', () => {
+    expect(formatGender('PREFER_NOT_TO_SAY')).toBe('Prefer not to say');
+  });
+
+  it('formatLanguageProficiency covers every member', () => {
+    expect(formatLanguageProficiency('BEGINNER')).toBe('Beginner');
+    expect(formatLanguageProficiency('INTERMEDIATE')).toBe('Intermediate');
+    expect(formatLanguageProficiency('ADVANCED')).toBe('Advanced');
+  });
+
+  // PENDING is the column DEFAULT, so it is the ordinary state, not an alarm.
+  it('formatScanStatus words PENDING as a fact rather than a warning', () => {
+    expect(formatScanStatus('PENDING')).toBe('Scan pending');
+    expect(formatScanStatus('CLEAN')).toBe('Scanned clean');
+    expect(formatScanStatus('INFECTED')).toBe('Malware detected');
+  });
+
+  it('formatProfileAuditAction covers the actions a CANDIDATE can produce', () => {
+    expect(formatProfileAuditAction('PROFILE_UPDATE')).toBe('Updated profile');
+    expect(formatProfileAuditAction('RESUME_UPLOAD')).toBe('Uploaded a CV');
+    expect(formatProfileAuditAction('RESUME_DELETE')).toBe('Removed a CV');
+    expect(formatProfileAuditAction('SKILLS_UPDATE')).toBe('Updated skills');
+    expect(formatProfileAuditAction('EDUCATION_ADD')).toBe('Added education');
+    expect(formatProfileAuditAction('EXPERIENCE_DELETE')).toBe('Removed work experience');
+  });
+
+  // The record is exhaustive by construction; this pins that no entry was
+  // filled in with the enum member itself as a placeholder.
+  it('formatProfileAuditAction never returns a raw SCREAMING_SNAKE value', () => {
+    expect(formatProfileAuditAction('OTP_CODE_REVEALED')).toBe('Revealed a signup OTP');
+    expect(formatProfileAuditAction('BILLING_PAYMENT_FAILED')).toBe('Payment failed');
+  });
+});
+
+describe('formatExperienceMonths', () => {
+  it('answers an em dash for an unset value', () => {
+    expect(formatExperienceMonths(null)).toBe('—');
+  });
+
+  it('says so in words when there is genuinely none', () => {
+    expect(formatExperienceMonths(0)).toBe('No experience yet');
+  });
+
+  it('converts months to years', () => {
+    expect(formatExperienceMonths(12)).toBe('1 yr');
+    expect(formatExperienceMonths(24)).toBe('2 yrs');
+  });
+
+  // Sub-year precision is the whole reason the column is months (SRS §4.3.1).
+  it('keeps sub-year precision', () => {
+    expect(formatExperienceMonths(18)).toBe('1.5 yrs');
+    expect(formatExperienceMonths(30)).toBe('2.5 yrs');
+  });
+
+  it('rounds to one decimal rather than printing a repeating fraction', () => {
+    expect(formatExperienceMonths(7)).toBe('0.6 yrs');
+  });
+
+  it('refuses a negative rather than rendering "-1 yrs"', () => {
+    expect(formatExperienceMonths(-6)).toBe('—');
+  });
+});
+
+describe('formatCurrentSalary', () => {
+  it('answers an em dash for an unset value', () => {
+    expect(formatCurrentSalary(null)).toBe('—');
+  });
+
+  // The reason this function exists at all. formatSalaryLpa(x, null) renders a
+  // lone value as "₹12+ LPA" — a FLOOR — which for an exact current salary tells
+  // staff the person earns at least what they in fact earn.
+  it('renders one figure as an exact amount, never as a floor', () => {
+    expect(formatCurrentSalary(120_000_000)).toBe('₹12 LPA');
+    expect(formatCurrentSalary(120_000_000)).not.toContain('+');
+  });
+
+  it('uses the same paise-to-LPA divisor as the job console', () => {
+    // 1 LPA = 100,000 rupees = 10,000,000 paise.
+    expect(formatCurrentSalary(10_000_000)).toBe('₹1 LPA');
+  });
+
+  it('keeps one decimal and drops a trailing zero', () => {
+    expect(formatCurrentSalary(125_000_000)).toBe('₹12.5 LPA');
+    expect(formatCurrentSalary(80_000_000)).toBe('₹8 LPA');
+  });
+
+  // Deliberate: formatSalaryLpa has no crore branch, so a candidate salary and
+  // a job salary must read in the same unit on the same console.
+  it('stays in LPA past a crore', () => {
+    expect(formatCurrentSalary(1_500_000_000)).toBe('₹150 LPA');
+  });
+
+  it('handles zero without pretending it is unset', () => {
+    expect(formatCurrentSalary(0)).toBe('₹0 LPA');
+  });
+});
+
+describe('formatNoticePeriod', () => {
+  it('answers an em dash for an unset value', () => {
+    expect(formatNoticePeriod(null)).toBe('—');
+  });
+
+  it('uses the canonical labels the seeker actually picked from', () => {
+    expect(formatNoticePeriod(0)).toBe('Immediate');
+    expect(formatNoticePeriod(15)).toBe('15 days');
+    expect(formatNoticePeriod(30)).toBe('1 month');
+    expect(formatNoticePeriod(60)).toBe('2 months');
+    expect(formatNoticePeriod(90)).toBe('3 months');
+    expect(formatNoticePeriod(120)).toBe('More than 3 months');
+  });
+
+  it('falls back to a literal day count rather than snapping to a bucket', () => {
+    expect(formatNoticePeriod(45)).toBe('45 days');
+    expect(formatNoticePeriod(1)).toBe('1 day');
+  });
+
+  it('refuses a negative', () => {
+    expect(formatNoticePeriod(-30)).toBe('—');
+  });
+});
+
+describe('formatBytes', () => {
+  it('uses bytes below a kilobyte', () => {
+    expect(formatBytes(0)).toBe('0 B');
+    expect(formatBytes(999)).toBe('999 B');
+  });
+
+  it('switches unit at each threshold', () => {
+    expect(formatBytes(1024)).toBe('1 KB');
+    expect(formatBytes(1024 * 1024)).toBe('1 MB');
+  });
+
+  it('keeps one decimal', () => {
+    expect(formatBytes(1536)).toBe('1.5 KB');
+    expect(formatBytes(2_621_440)).toBe('2.5 MB');
+  });
+
+  it('refuses a negative rather than rendering "-1 KB"', () => {
+    expect(formatBytes(-5)).toBe('—');
+  });
+});
+
+// startYear/endYear are Int columns. A date formatter would turn 2019 into
+// 1 Jan 1970, so this stays arithmetic-free.
+describe('formatEducationYears', () => {
+  it('renders a closed range', () => {
+    expect(formatEducationYears(2016, 2020)).toBe('2016 – 2020');
+  });
+
+  it('renders an ongoing course', () => {
+    expect(formatEducationYears(2024, null)).toBe('2024 – present');
+  });
+
+  it('renders a single-year course without collapsing the range', () => {
+    expect(formatEducationYears(2020, 2020)).toBe('2020 – 2020');
+  });
+});
+
+describe('isOngoingExperience', () => {
+  it('is ongoing when the seeker ticked "I work here"', () => {
+    expect(isOngoingExperience({ isCurrent: true, endDate: null })).toBe(true);
+  });
+
+  it('is ongoing when there is simply no end date', () => {
+    expect(isOngoingExperience({ isCurrent: false, endDate: null })).toBe(true);
+  });
+
+  it('is finished when both columns agree it is', () => {
+    expect(isOngoingExperience({ isCurrent: false, endDate: new Date('2023-06-30') })).toBe(false);
+  });
+
+  // The two columns can disagree — isCurrent is a checkbox, endDate is
+  // nullable. The tick wins, so a stale end date is not printed beside a claim
+  // to still be working there.
+  it('lets the tick win over a stale end date', () => {
+    expect(isOngoingExperience({ isCurrent: true, endDate: new Date('2020-01-01') })).toBe(true);
+  });
+});
+
+describe('formatSessionState', () => {
+  const now = new Date('2026-08-14T12:00:00Z');
+
+  it('is Active while it is neither revoked nor expired', () => {
+    expect(
+      formatSessionState({ revokedAt: null, expiresAt: new Date('2026-09-13T12:00:00Z') }, now),
+    ).toBe('Active');
+  });
+
+  it('is Expired once the expiry has passed', () => {
+    expect(
+      formatSessionState({ revokedAt: null, expiresAt: new Date('2026-08-14T11:59:59Z') }, now),
+    ).toBe('Expired');
+  });
+
+  // Deliberately NOT "Signed out": revokedAt is stamped both by an explicit
+  // sign-out and by every refresh-token rotation, and the row cannot tell them
+  // apart. "Signed out" would report a deliberate act for what is almost always
+  // a routine 15-minute rotation.
+  it('says Ended, never "Signed out", for a revoked row', () => {
+    const state = formatSessionState(
+      { revokedAt: new Date('2026-08-14T10:00:00Z'), expiresAt: new Date('2026-09-13T12:00:00Z') },
+      now,
+    );
+    expect(state).toBe('Ended');
+  });
+
+  it('reports a revoked row as Ended even after it would also have expired', () => {
+    expect(
+      formatSessionState(
+        {
+          revokedAt: new Date('2026-07-01T10:00:00Z'),
+          expiresAt: new Date('2026-07-31T10:00:00Z'),
+        },
+        now,
+      ),
+    ).toBe('Ended');
+  });
+
+  // apps/api counts active sessions with expiresAt: { gt: now }, so a session
+  // expiring exactly now is NOT active. The two must agree, or the headline
+  // count and the row states contradict each other on the same screen.
+  it('treats the exact expiry instant as expired, matching the API predicate', () => {
+    expect(formatSessionState({ revokedAt: null, expiresAt: now }, now)).toBe('Expired');
+  });
+});
+
+describe('formatSectionCap', () => {
+  // Returning null below the cap is what stops a complete list being labelled
+  // as though something were hidden.
+  it('says nothing when the section is complete', () => {
+    expect(formatSectionCap(20, 20, 'applications')).toBeNull();
+    expect(formatSectionCap(3, 3, 'applications')).toBeNull();
+    expect(formatSectionCap(0, 0, 'applications')).toBeNull();
+  });
+
+  it('states both numbers when the section is truncated', () => {
+    expect(formatSectionCap(20, 137, 'applications')).toBe(
+      'Showing the latest 20 of 137 applications.',
+    );
+  });
+
+  it('groups digits the Indian way, like every other count in this console', () => {
+    expect(formatSectionCap(20, 1_200_000, 'sessions')).toBe(
+      'Showing the latest 20 of 12,00,000 sessions.',
+    );
+  });
+
+  it('is driven by the same constant the query pages on', () => {
+    expect(CANDIDATE_APPLICATIONS_LIMIT).toBe(20);
+    expect(formatSectionCap(CANDIDATE_APPLICATIONS_LIMIT, 21, 'applications')).toBe(
+      'Showing the latest 20 of 21 applications.',
+    );
   });
 });
