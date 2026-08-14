@@ -325,6 +325,8 @@ const PROFILE_AUDIT_ACTION_LABEL: Record<ProfileAuditAction, string> = {
   BILLING_PAYMENT_FAILED: 'Payment failed',
   SUPPORT_TICKET_STATUS_CHANGED: 'Changed a support ticket status',
   OTP_CODE_REVEALED: 'Revealed a signup OTP',
+  CONTENT_REPORT_ACTIONED: 'Upheld a content report',
+  CONTENT_REPORT_DISMISSED: 'Dismissed a content report',
 };
 
 export function formatProfileAuditAction(action: ProfileAuditAction): string {
