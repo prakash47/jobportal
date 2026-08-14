@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/sadmin-candidate-detail` | **Super Admin candidate detail — `/candidates/[id]`**, wiring the list's inert **View** action. New `app/(authed)/candidates/[id]/page.tsx`; `getCandidateDetail()` + detail types in `lib/candidates/queries.ts`; new pure helpers + tests in `lib/candidates/format.{ts,test.ts}`; `View` becomes a real `<Link>` in `candidates/page.tsx`. Reads only: `User`·`Candidate`·`Resume`·`Application`·`SavedJob`·`Session`·`ProfileAuditLog`·`Education`·`WorkExperience`·`Project`·`CandidateLanguage`·`Skill`·`City`. **Suspend/Delete stay inert** (no `User` suspension column exists — that is a migration, deliberately not in this branch). | **None.** No schema change, no migration, no new flag key, no barrel/theme/types edit — `apps/sadmin` only. |
 
 ---
 
