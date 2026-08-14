@@ -33,12 +33,12 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-14 after `feature/sadmin-job-postings` merged (`20260814134602_add_job_deleted_audit_action`). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/content-reports-intake` | 2026-08-14 | `ContentReport` + 3 enums + 2 `ProfileAuditAction` members + `Job.reports` back-relation (`add_content_reports`). |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | Released 2026-08-14 after `feature/sadmin-job-postings` merged (`killswitch.admin_job_delete`). |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | Claude/Prakash | `feature/content-reports-intake` | 2026-08-14 | Adding `moderation.reports.enabled`. ⚠️ `feature/sadmin-admin-migration` also claims this lock — sequence behind this branch, which is short. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -50,6 +50,8 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/content-reports-intake` | **Content reports — PR A of 2: the intake half.** New `ContentReport` model + `ContentReportTargetType` / `ContentReportReason` / `ContentReportStatus` enums, migration `add_content_reports`, and `POST /v1/reports` (anonymous, throttled) in a new `apps/api/src/reports/`, plus the Report control on `apps/web`'s public `/job/[slug]`. Gated by a new `moderation.reports.enabled` flag at L2+L3. **`JOB` is the only target type** — no other content in this product has both a reporter and an enforcement lever. | 🔒 `schema.prisma` + migrations · 🔒 `feature-flags/src/keys.ts` · `packages/db/prisma/seed/flags.ts` · `apps/api/src/app.module.ts` (append) |
+| Claude/Prakash | `feature/sadmin-content-reports` | **Content reports — PR B of 2: the console.** `/sadmin/reports` + `/sadmin/reports/[id]` with Claim / Action / Dismiss, `GET|PATCH /admin/reports` on the existing `AdminGuard`, and an **admin takedown** (guarded force-close of a reported ACTIVE job to `CLOSED` + ES de-index + purge) so `ACTIONED` actually does something. Also carries the sidebar-scroll fix. Starts after PR A merges. | `SidebarNav.tsx` `NAV_ITEMS` (⚠️ not yet a §15.3 lock — this PR adds the row) · `packages/ui/src/icons.ts` (append-only) · `apps/api/src/app.module.ts` (append) |
 
 ---
 
