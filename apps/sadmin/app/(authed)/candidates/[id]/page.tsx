@@ -11,6 +11,7 @@ import {
   formatWorkMode,
 } from '../../../../lib/jobs/format';
 import { displayName } from '../../../../lib/employers/format';
+import { requireSuperAdmin } from '../../../../lib/auth/require-super-admin';
 import {
   CANDIDATE_ACTIVITY_LIMIT,
   CANDIDATE_APPLICATIONS_LIMIT,
@@ -25,6 +26,7 @@ import {
   formatEducationYears,
   formatExperienceMonths,
   formatGender,
+  formatHiddenResumes,
   formatJobStatus,
   formatLanguageProficiency,
   formatLookingFor,
@@ -33,16 +35,15 @@ import {
   formatScanStatus,
   formatSectionCap,
   formatSessionState,
+  formatSignInMethod,
   formatWorkStatus,
+  hasText,
   initials,
   isOngoingExperience,
   normalizeQuery,
+  orDash,
 } from '../../../../lib/candidates/format';
-import {
-  getCandidateDetail,
-  type CandidateDetail,
-  type CandidateJobRef,
-} from '../../../../lib/candidates/queries';
+import { getCandidateDetail, type CandidateJobRef } from '../../../../lib/candidates/queries';
 
 export const metadata: Metadata = {
   title: 'Candidate profile — Career Queue Super Admin',
@@ -94,6 +95,35 @@ export default async function CandidateProfilePage({ params, searchParams }: Pag
   const userId = Number(id);
   if (!/^\d+$/.test(id) || !Number.isInteger(userId) || userId < 1) notFound();
   if (userId > 2_147_483_647) notFound();
+
+  // Defence in depth. The (authed) layout already calls this, so on a full page
+  // load it runs twice, and that is deliberate.
+  //
+  // Be precise about why, because the tempting justification is one I could NOT
+  // substantiate: an attempt to reach this page's data by replaying an RSC
+  // navigation with a hand-built Next-Router-State-Tree (so the layout segment
+  // reads as already rendered) did not reproduce any leak — it answered 500 with
+  // zero PII, and so did the unguarded sibling /employers/[id], and so did the
+  // same request made by a genuine ADMIN. That probe was therefore invalid and
+  // proves nothing in either direction. No bypass is known.
+  //
+  // The reason to keep the call is the standing rule rather than a demonstrated
+  // hole: Next renders layouts and pages concurrently and does not re-render an
+  // unchanged layout segment on every client-side navigation, which is why
+  // Next's own auth guidance puts the check next to the data it protects. The
+  // stakes here are unusually high — require-super-admin.ts's header records
+  // that the access_token cookie is shared across all four portals (localhost
+  // ignores ports; production shares COOKIE_DOMAIN across subdomains), so every
+  // signed-in candidate and recruiter arrives at this origin already holding a
+  // valid, verifiable token and only the ROLE check turns them away, and this is
+  // the most PII-dense route in the product (email, phone, gender, exact salary,
+  // CV filenames, full application and session history). The check costs a
+  // cookie read plus a JWT verify with no database round trip, and the route is
+  // already force-dynamic, so it buys that margin for nothing.
+  //
+  // The sibling detail routes (employers/[id], jobs/[id]) still rely on the
+  // layout alone and should adopt this too. Noted in PROGRESS.md.
+  await requireSuperAdmin();
 
   // One anchor instant for the whole render, so the active-session count and
   // every session state below cannot straddle a boundary and disagree.
@@ -158,7 +188,10 @@ export default async function CandidateProfilePage({ params, searchParams }: Pag
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
-          {profile?.summary && (
+          {/* hasText, not truthiness: the profile DTO permits a whitespace-only
+              summary, which would otherwise mount an About card with nothing
+              visible inside it. */}
+          {profile && hasText(profile.summary) && (
             <Card title="About">
               {/* Seeker-authored. Plain text, never markup. */}
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-fg)]">
@@ -247,10 +280,17 @@ export default async function CandidateProfilePage({ params, searchParams }: Pag
 
           <Card title="Uploaded CVs">
             {candidate.resumes.length === 0 ? (
+              // Keyed on BOTH counts. Testing only the live list produced two
+              // contradictory sentences in a row — "has not uploaded a CV"
+              // directly above "1 older or removed CV is not shown" — for the
+              // ordinary case of a candidate who uploaded one and then removed
+              // it, which leaves zero live rows and one hidden one.
               <p className="text-sm text-[var(--color-fg-muted)]">
-                {profile
-                  ? 'This candidate has not uploaded a CV.'
-                  : 'No CVs — this account has no profile yet.'}
+                {!profile
+                  ? 'No CVs — this account has no profile yet.'
+                  : candidate.deletedResumeCount > 0
+                    ? 'This candidate has no CV on file. Their earlier uploads were replaced or removed.'
+                    : 'This candidate has not uploaded a CV.'}
               </p>
             ) : (
               <ul className="space-y-3">
@@ -281,13 +321,14 @@ export default async function CandidateProfilePage({ params, searchParams }: Pag
               </ul>
             )}
 
-            {/* Soft-deleted CVs are counted rather than listed, so a filtered
-                list can never read as a complete one. */}
-            {candidate.deletedResumeCount > 0 && (
+            {/* Soft-deleted rows are counted rather than listed, so a filtered
+                list can never read as a complete one. Deliberately NOT called
+                "deleted": replacing a CV soft-deletes the previous one inside
+                the upload transaction, so most of this bucket is superseded
+                versions the candidate never deleted. See formatHiddenResumes. */}
+            {formatHiddenResumes(candidate.deletedResumeCount) && (
               <p className="mt-3 text-xs text-[var(--color-fg-muted)]">
-                {candidate.deletedResumeCount === 1
-                  ? '1 deleted CV is not shown.'
-                  : `${candidate.deletedResumeCount.toLocaleString('en-IN')} deleted CVs are not shown.`}
+                {formatHiddenResumes(candidate.deletedResumeCount)}
               </p>
             )}
 
@@ -543,9 +584,9 @@ export default async function CandidateProfilePage({ params, searchParams }: Pag
               {/* User.phone is free-form and unverified for most accounts —
                   shown exactly as written, never reformatted into a shape it
                   may not be. Already visible on the master list. */}
-              <Row label="Phone" value={candidate.phone ?? '—'} />
+              <Row label="Phone" value={orDash(candidate.phone)} />
               <Row label="Phone verified" value={candidate.phoneVerified ? 'Yes' : 'No'} />
-              <Row label="Signed up with" value={formatProvider(candidate)} />
+              <Row label="Signed up with" value={formatSignInMethod(candidate)} />
               <Row label="Registered" value={formatDateIst(candidate.registeredAt)} />
               {profile && <Row label="Profile created" value={formatDateIst(profile.createdAt)} />}
               {profile && <Row label="Last updated" value={formatDateIst(profile.updatedAt)} />}
@@ -555,14 +596,17 @@ export default async function CandidateProfilePage({ params, searchParams }: Pag
           {profile && (
             <Card title="Profile">
               <dl className="space-y-3 text-sm">
-                <Row label="Headline" value={profile.headline ?? '—'} />
-                <Row label="Current title" value={profile.currentTitle ?? '—'} />
+                <Row label="Headline" value={orDash(profile.headline)} />
+                <Row label="Current title" value={orDash(profile.currentTitle)} />
+                {/* The catalogue-linked company wins over the free-text one, but
+                    a whitespace-only free-text value must still fall through to
+                    the em dash rather than to a blank cell. */}
                 <Row
                   label="Current employer"
-                  value={profile.currentCompany?.name ?? profile.currentCompanyName ?? '—'}
+                  value={orDash(profile.currentCompany?.name ?? profile.currentCompanyName)}
                 />
-                <Row label="Industry" value={profile.industry ?? '—'} />
-                <Row label="Location" value={profile.currentCityName ?? '—'} />
+                <Row label="Industry" value={orDash(profile.industry)} />
+                <Row label="Location" value={orDash(profile.currentCityName)} />
                 <Row label="Work status" value={formatWorkStatus(profile.workStatus)} />
                 <Row label="Looking for" value={formatLookingFor(profile.lookingFor)} />
                 <Row
@@ -672,27 +716,6 @@ function fmt(n: number): string {
 }
 
 /**
- * How this person signs in.
- *
- * `provider` records the signup method, but an account can carry a linked Google
- * AND Apple identity — someone who signed up on the web and later used their
- * phone lands on the same row — which `provider` alone does not reveal.
- */
-function formatProvider(candidate: CandidateDetail): string {
-  const linked: string[] = [];
-  if (candidate.hasGoogleLinked) linked.push('Google');
-  if (candidate.hasAppleLinked) linked.push('Apple');
-  const base =
-    candidate.provider === 'LOCAL'
-      ? 'Email and password'
-      : candidate.provider === 'GOOGLE'
-        ? 'Google'
-        : 'Apple';
-  const extra = linked.filter((l) => l.toLowerCase() !== base.toLowerCase());
-  return extra.length === 0 ? base : `${base} (also linked: ${extra.join(', ')})`;
-}
-
-/**
  * The job title itself is the link, rather than a trailing "View".
  *
  * That is an accessibility decision, not a layout one: twenty rows each ending
@@ -744,9 +767,15 @@ function SectionCap({
 function ChipList({ items, className }: { items: string[]; className?: string }) {
   return (
     <ul className={`flex flex-wrap gap-2${className ? ` ${className}` : ''}`}>
-      {items.map((item) => (
+      {/* Keyed by position, not by value. These arrays are not sets: neither
+          ProjectCreateDto.techStack nor ProfilePatchDto.preferredCityIds
+          de-duplicates, so ["React","React"] is storable and a value key would
+          collide (a React duplicate-key warning, and two entries sharing one
+          slot in the reconciliation map). The list is static and never
+          reordered, so the index is a stable identity here. */}
+      {items.map((item, i) => (
         <li
-          key={item}
+          key={i}
           className="rounded-md bg-[var(--color-bg-muted)] px-2 py-1 text-xs text-[var(--color-fg)]"
         >
           {item}

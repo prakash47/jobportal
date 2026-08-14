@@ -12,6 +12,7 @@ import {
   formatExperienceMonths,
   formatGender,
   formatHeadline,
+  formatHiddenResumes,
   formatJobStatus,
   formatLanguageProficiency,
   formatLookingFor,
@@ -20,11 +21,14 @@ import {
   formatScanStatus,
   formatSectionCap,
   formatSessionState,
+  formatSignInMethod,
   formatWorkStatus,
+  hasText,
   initials,
   isOngoingExperience,
   lastPageFor,
   normalizeQuery,
+  orDash,
 } from './format';
 
 // Regression: `?q=a&q=b` used to reach `raw.trim()` on an ARRAY and throw
@@ -572,5 +576,121 @@ describe('formatSectionCap', () => {
     expect(formatSectionCap(CANDIDATE_APPLICATIONS_LIMIT, 21, 'applications')).toBe(
       'Showing the latest 20 of 21 applications.',
     );
+  });
+});
+
+// The profile DTOs declare these columns as z.string().max(N).optional() with no
+// .trim() and no .min(1), so a seeker who types a single space stores ' ' — a
+// value that is neither null nor visible. `?? '—'` does not catch it.
+describe('orDash', () => {
+  it('returns an em dash for null and undefined', () => {
+    expect(orDash(null)).toBe('—');
+    expect(orDash(undefined)).toBe('—');
+  });
+
+  it('returns an em dash for an empty string, which ?? would not', () => {
+    expect(orDash('')).toBe('—');
+  });
+
+  it('returns an em dash for whitespace only', () => {
+    expect(orDash('   ')).toBe('—');
+    expect(orDash('\t\n')).toBe('—');
+  });
+
+  it('trims a real value, so the detail page and the master list agree', () => {
+    // formatHeadline has trimmed since the list shipped; these two must not
+    // render the same stored value differently.
+    expect(orDash('  Staff Engineer  ')).toBe('Staff Engineer');
+    expect(orDash('  Staff Engineer  ')).toBe(formatHeadline({ headline: '  Staff Engineer  ', currentTitle: null }));
+  });
+
+  it('passes an ordinary value through unchanged', () => {
+    expect(orDash('Bengaluru')).toBe('Bengaluru');
+  });
+});
+
+describe('hasText', () => {
+  it('is false for every flavour of absent', () => {
+    expect(hasText(null)).toBe(false);
+    expect(hasText(undefined)).toBe(false);
+    expect(hasText('')).toBe(false);
+    expect(hasText('   ')).toBe(false);
+  });
+
+  it('is true only for real content', () => {
+    expect(hasText('a')).toBe(true);
+    expect(hasText('  a  ')).toBe(true);
+  });
+
+  // The card must not mount for whitespace: `{summary && <Card/>}` is truthy
+  // for '   ' and renders an About card containing nothing visible.
+  it('disagrees with bare truthiness exactly where it matters', () => {
+    const whitespace = '   ';
+    expect(Boolean(whitespace)).toBe(true);
+    expect(hasText(whitespace)).toBe(false);
+  });
+});
+
+describe('formatSignInMethod', () => {
+  const base = { hasGoogleLinked: false, hasAppleLinked: false };
+
+  it('names each signup method', () => {
+    expect(formatSignInMethod({ ...base, provider: 'LOCAL' })).toBe('Email and password');
+    expect(formatSignInMethod({ ...base, provider: 'GOOGLE' })).toBe('Google');
+    expect(formatSignInMethod({ ...base, provider: 'APPLE' })).toBe('Apple');
+  });
+
+  // provider records only the SIGNUP method. User.appleId's schema comment
+  // spells out the case: signed up with Google on the web, later used Apple on
+  // a phone, same account.
+  it('reports an additionally linked identity that provider alone hides', () => {
+    expect(formatSignInMethod({ provider: 'GOOGLE', hasGoogleLinked: true, hasAppleLinked: true })).toBe(
+      'Google (also linked: Apple)',
+    );
+    expect(formatSignInMethod({ provider: 'LOCAL', hasGoogleLinked: true, hasAppleLinked: true })).toBe(
+      'Email and password (also linked: Google, Apple)',
+    );
+  });
+
+  it('does not list the signup provider again as an extra', () => {
+    expect(formatSignInMethod({ provider: 'GOOGLE', hasGoogleLinked: true, hasAppleLinked: false })).toBe(
+      'Google',
+    );
+    expect(formatSignInMethod({ provider: 'APPLE', hasGoogleLinked: false, hasAppleLinked: true })).toBe(
+      'Apple',
+    );
+  });
+
+  // The regression this function was rewritten for: it used to be a ternary
+  // chain ending in a bare `: 'Apple'`, so any provider that was not LOCAL or
+  // GOOGLE rendered as Apple. A keyed Record cannot do that — a new enum member
+  // is a compile error instead.
+  it('never falls through to Apple for a non-Apple provider', () => {
+    for (const provider of ['LOCAL', 'GOOGLE'] as const) {
+      expect(formatSignInMethod({ ...base, provider })).not.toBe('Apple');
+    }
+  });
+});
+
+// Deliberately never says "deleted": ResumeService.upload soft-deletes the
+// previous active resume inside the upload transaction, so replacing a CV puts
+// the old row in this bucket without the candidate deleting anything.
+describe('formatHiddenResumes', () => {
+  it('says nothing when there is nothing hidden', () => {
+    expect(formatHiddenResumes(0)).toBeNull();
+    expect(formatHiddenResumes(-1)).toBeNull();
+  });
+
+  it('is singular for one', () => {
+    expect(formatHiddenResumes(1)).toBe('1 older or removed CV is not shown.');
+  });
+
+  it('is plural beyond one, grouped the Indian way', () => {
+    expect(formatHiddenResumes(3)).toBe('3 older or removed CVs are not shown.');
+    expect(formatHiddenResumes(100000)).toBe('1,00,000 older or removed CVs are not shown.');
+  });
+
+  it('does not attribute a supersession to a deletion', () => {
+    expect(formatHiddenResumes(3)).not.toContain('deleted');
   });
 });

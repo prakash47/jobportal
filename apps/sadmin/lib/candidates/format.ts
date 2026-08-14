@@ -11,6 +11,7 @@
 
 import type {
   ApplicationStatus,
+  AuthProvider,
   Gender,
   JobStatus,
   LanguageProficiency,
@@ -224,9 +225,13 @@ export function formatJobStatus(status: JobStatus): string {
   return JOB_STATUS_LABEL[status];
 }
 
-// 'Experienced' rather than the onboarding wizard's 'Working': the two disagree
-// in apps/web (ProfileForm says one, the onboarding step says the other) and the
-// enum member is EXPERIENCED, so the enum wins on a staff console.
+// 'Experienced', not 'Working'. apps/web disagrees with ITSELF here: the
+// onboarding step (components/onboarding/EmploymentStep.tsx) already labels the
+// member 'Experienced', while the profile editor
+// (components/profile/ProfileForm.tsx) labels the same member 'Working'. This
+// console follows the enum, which is also what onboarding does — so ProfileForm
+// is the outlier, and it is the surface to change if the two are ever
+// reconciled.
 const WORK_STATUS_LABEL: Record<WorkStatus, string> = {
   FRESHER: 'Fresher',
   EXPERIENCED: 'Experienced',
@@ -325,9 +330,91 @@ export function formatProfileAuditAction(action: ProfileAuditAction): string {
   return PROFILE_AUDIT_ACTION_LABEL[action];
 }
 
+const AUTH_PROVIDER_LABEL: Record<AuthProvider, string> = {
+  LOCAL: 'Email and password',
+  GOOGLE: 'Google',
+  APPLE: 'Apple',
+};
+
+/**
+ * How this account signs in.
+ *
+ * `provider` records only the SIGNUP method, but an account can carry a linked
+ * Google AND Apple identity — someone who signed up on the web and later used
+ * their phone lands on the same row (see User.appleId's schema comment) — which
+ * `provider` alone does not reveal.
+ *
+ * Keyed off AUTH_PROVIDER_LABEL rather than branched, and living here rather
+ * than in the page, for the reason stated at the top of this section: an earlier
+ * version of this function was a ternary chain ending in a bare `: 'Apple'`, so
+ * adding a fourth AuthProvider member (the enum's own comment anticipates more
+ * social logins) would have typechecked cleanly and then told a super admin that
+ * every LinkedIn signup authenticates through Apple. A keyed Record cannot
+ * compile wrong, and code in app/ is never executed by the test suite.
+ */
+export function formatSignInMethod(account: {
+  provider: AuthProvider;
+  hasGoogleLinked: boolean;
+  hasAppleLinked: boolean;
+}): string {
+  const base = AUTH_PROVIDER_LABEL[account.provider];
+  const alsoLinked: string[] = [];
+  if (account.hasGoogleLinked && account.provider !== 'GOOGLE') {
+    alsoLinked.push(AUTH_PROVIDER_LABEL.GOOGLE);
+  }
+  if (account.hasAppleLinked && account.provider !== 'APPLE') {
+    alsoLinked.push(AUTH_PROVIDER_LABEL.APPLE);
+  }
+  return alsoLinked.length === 0 ? base : `${base} (also linked: ${alsoLinked.join(', ')})`;
+}
+
 // ---------------------------------------------------------------------------
 // Value formatting
 // ---------------------------------------------------------------------------
+
+/**
+ * A free-text profile value, or the em dash this console uses for "not set".
+ *
+ * `?? '—'` is NOT enough and that is the whole point of this function: the
+ * profile DTOs declare these columns as `z.string().max(N).optional()` with no
+ * `.trim()` and no `.min(1)`, so a seeker who types a single space into a
+ * profile field stores `' '` — a value that is neither null nor visible. Left to
+ * `??`, the detail page renders a labelled row with nothing beside it while the
+ * master list (which routes headline through `formatHeadline`, and has trimmed
+ * since it shipped) shows the em dash. Two staff screens then disagree about the
+ * same account, and the blank reads as a rendering fault rather than as absence.
+ */
+export function orDash(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : '—';
+}
+
+/**
+ * True when there is real text to render, as opposed to a blank the seeker
+ * stored by typing whitespace. Guards the optional free-text CARDS, which must
+ * not mount at all for an empty value — `{profile.summary && <Card/>}` is truthy
+ * for `'   '` and would render an About card containing nothing.
+ */
+export function hasText(value: string | null | undefined): boolean {
+  return (value?.trim().length ?? 0) > 0;
+}
+
+/**
+ * The CVs that exist but are not listed.
+ *
+ * ⚠ These are NOT all deletions, which is why the wording avoids that word.
+ * `ResumeService.upload` soft-deletes the previous active resume inside the
+ * upload transaction, so simply replacing a CV stamps `deletedAt` on the old row
+ * without the candidate deleting anything. Calling the bucket "deleted CVs"
+ * therefore reports withdrawals that never happened — and since every prior
+ * upload lands here, it is the common case rather than the exception.
+ */
+export function formatHiddenResumes(count: number): string | null {
+  if (count <= 0) return null;
+  return count === 1
+    ? '1 older or removed CV is not shown.'
+    : `${count.toLocaleString('en-IN')} older or removed CVs are not shown.`;
+}
 
 /**
  * Total experience, stored in MONTHS for sub-year precision (SRS §4.3.1) and
