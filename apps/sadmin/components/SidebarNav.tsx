@@ -4,7 +4,14 @@ import type { ComponentType, SVGProps } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@jobportal/ui';
-import { Building2, ClipboardList, LayoutDashboard, ShieldCheck, Users } from '@jobportal/ui/icons';
+import {
+  Briefcase,
+  Building2,
+  ClipboardList,
+  LayoutDashboard,
+  ShieldCheck,
+  Users,
+} from '@jobportal/ui/icons';
 
 type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -19,6 +26,12 @@ type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
 const NAV_ITEMS: readonly { href: string; label: string; icon: NavIcon }[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard as NavIcon },
   { href: '/jobs', label: 'Job review', icon: ClipboardList as NavIcon },
+  // Sits directly under Job review because the two are a pair, and the labels
+  // have to stay unambiguous: "Job review" is the moderation QUEUE (only jobs
+  // awaiting or having had a decision), "Job Postings" is the master list of
+  // every posting on the platform whatever its status. Two adjacent job entries
+  // with vague names is the fastest way to land an admin in the wrong console.
+  { href: '/job-postings', label: 'Job Postings', icon: Briefcase as NavIcon },
   { href: '/employers', label: 'Employer management', icon: Building2 as NavIcon },
   { href: '/candidates', label: 'Candidate management', icon: Users as NavIcon },
   { href: '/otp-sessions', label: 'OTP Sessions', icon: ShieldCheck as NavIcon },

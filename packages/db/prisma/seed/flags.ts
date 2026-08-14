@@ -143,6 +143,12 @@ const flags: FlagSeed[] = [
   // and the Job Detail page hides the Collaborate control (L2); existing
   // collaborators keep their access. Seeded OFF so the feature is LIVE by default.
   { key: 'killswitch.recruiter_job_collaborate', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable recruiter job collaboration (kill)' },
+  // Admin job deletion (/sadmin/job-postings → Delete). Broader than the
+  // recruiter switch above — it reaches any job on the platform, not just the
+  // caller's own — and restricted the same way, to jobs with zero applications.
+  // When ON the DELETE endpoint rejects with 503 (L3) and the list renders
+  // Delete disabled (L2). Seeded OFF so the action is LIVE by default.
+  { key: 'killswitch.admin_job_delete', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable admin job deletion (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {
