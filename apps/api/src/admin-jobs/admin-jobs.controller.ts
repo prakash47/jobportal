@@ -2,7 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseIntPipe,
   Patch,
@@ -46,5 +49,25 @@ export class AdminJobsController {
     const parsed = ModerateJobDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
     return this.service.moderate(admin.sub, id, parsed.data);
+  }
+
+  // Hard-delete a posting from the Job Postings master list. Zero-application
+  // jobs only — the service enforces that atomically and 409s otherwise.
+  //
+  // No body and therefore no DTO: the delete takes no options, so there is
+  // nothing to validate beyond the id ParseIntPipe already coerces. That is a
+  // decision rather than an omission — a reason field would make the JOB_DELETED
+  // audit row richer, but it turns a one-click confirm into a form and can be
+  // added additively later.
+  //
+  // 204, matching DELETE /recruiter/jobs/:id: there is no resource left to
+  // return, and the sadmin client only branches on the status code.
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @CurrentUser() admin: AccessClaims,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<void> {
+    await this.service.remove(admin.sub, id);
   }
 }

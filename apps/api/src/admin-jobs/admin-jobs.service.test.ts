@@ -1,10 +1,21 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// remove() consults killswitch.admin_job_delete before doing anything. Mocked at
+// module scope so the delete tests can drive both sides of it without a real
+// flag store; every other method in this service ignores flags entirely.
+vi.mock('@jobportal/feature-flags', () => ({ isFlagEnabled: vi.fn() }));
 
 vi.mock('@jobportal/db', () => ({
   prisma: {
     job: {
       count: vi.fn(),
+      deleteMany: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
@@ -21,11 +32,15 @@ vi.mock('@jobportal/db', () => ({
 }));
 
 import { prisma } from '@jobportal/db';
+import { isFlagEnabled } from '@jobportal/feature-flags';
 import { AdminJobsService } from './admin-jobs.service';
+
+const flagEnabled = isFlagEnabled as unknown as ReturnType<typeof vi.fn>;
 
 const m = prisma as unknown as {
   job: {
     count: ReturnType<typeof vi.fn>;
+    deleteMany: ReturnType<typeof vi.fn>;
     findMany: ReturnType<typeof vi.fn>;
     findUnique: ReturnType<typeof vi.fn>;
     findUniqueOrThrow: ReturnType<typeof vi.fn>;
@@ -85,6 +100,9 @@ describe('AdminJobsService', () => {
     fakeQuota.refund.mockResolvedValue(undefined);
     fakeNotifications.notifyJobModerationDecision.mockResolvedValue(undefined);
     m.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) => fn(prisma));
+    // Killswitches are seeded OFF, so the default here is "the action is live".
+    flagEnabled.mockResolvedValue(false);
+    m.job.deleteMany.mockResolvedValue({ count: 1 });
     m.job.updateMany.mockResolvedValue({ count: 1 });
     m.job.findUniqueOrThrow.mockResolvedValue(decidedJob());
     // getJobDetail, called for the return value.
@@ -332,6 +350,113 @@ describe('AdminJobsService', () => {
     it('still resolves when the notification producer rejects', async () => {
       fakeNotifications.notifyJobModerationDecision.mockRejectedValue(new Error('bell down'));
       await expect(service.moderate(ADMIN, JOB, { decision: 'APPROVE' })).resolves.toBeDefined();
+    });
+  });
+
+  describe('remove', () => {
+    it('rejects with 503 while the killswitch is on, before touching the database', async () => {
+      flagEnabled.mockResolvedValue(true);
+      await expect(service.remove(ADMIN, JOB)).rejects.toBeInstanceOf(ServiceUnavailableException);
+      // The flag is the FIRST thing checked, so a killed delete costs no query
+      // and — more importantly — cannot half-run.
+      expect(m.job.findUnique).not.toHaveBeenCalled();
+      expect(m.job.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('404s an unknown job', async () => {
+      m.job.findUnique.mockResolvedValue(null);
+      await expect(service.remove(ADMIN, JOB)).rejects.toBeInstanceOf(NotFoundException);
+      expect(m.job.deleteMany).not.toHaveBeenCalled();
+    });
+
+    // The single most important assertion in this file. The guard must live in
+    // the WHERE clause, because Application cascades on Job delete: a
+    // count-then-delete would let an application arriving in between be
+    // destroyed silently. If this assertion is ever relaxed, candidates lose
+    // application history.
+    it('guards the zero-application invariant inside the delete statement', async () => {
+      await service.remove(ADMIN, JOB);
+      expect(m.job.deleteMany).toHaveBeenCalledWith({
+        where: { id: JOB, applications: { none: {} } },
+      });
+    });
+
+    it('writes a JOB_DELETED audit row carrying ids but no job content', async () => {
+      m.job.findUnique.mockResolvedValue(pendingJob({ status: 'DRAFT' }));
+      await service.remove(ADMIN, JOB);
+
+      const row = m.profileAuditLog.create.mock.calls[0]?.[0].data;
+      expect(row).toMatchObject({
+        userId: ADMIN,
+        action: 'JOB_DELETED',
+        diff: { jobId: JOB, status: 'DRAFT', companyId: 7, applicationCount: 0 },
+      });
+      // Minimisation: the recruiter's words never reach the audit log.
+      expect(JSON.stringify(row.diff)).not.toContain('Senior Frontend Engineer');
+    });
+
+    // The audit row and the delete share one transaction, so a job cannot be
+    // destroyed without a record of who destroyed it.
+    it('writes the audit row inside the same transaction as the delete', async () => {
+      await service.remove(ADMIN, JOB);
+      expect(m.$transaction).toHaveBeenCalledOnce();
+      expect(m.profileAuditLog.create).toHaveBeenCalledOnce();
+    });
+
+    it('409s when the job has applications, and does not audit', async () => {
+      m.job.deleteMany.mockResolvedValue({ count: 0 });
+      // Still present — so the zero count means the `applications: none` arm
+      // failed, not that the row vanished.
+      m.job.findUnique.mockResolvedValue(pendingJob());
+
+      await expect(service.remove(ADMIN, JOB)).rejects.toBeInstanceOf(ConflictException);
+      expect(m.profileAuditLog.create).not.toHaveBeenCalled();
+      expect(fakeEffects.fireRemoveSideEffects).not.toHaveBeenCalled();
+    });
+
+    // Same zero count, opposite cause. Reporting "has applications" for a row
+    // that simply vanished would send an admin looking for applicants that do
+    // not exist.
+    it('404s rather than 409s when the row vanished in a concurrent delete', async () => {
+      m.job.deleteMany.mockResolvedValue({ count: 0 });
+      m.job.findUnique
+        .mockResolvedValueOnce(pendingJob()) // the pre-delete read
+        .mockResolvedValueOnce(null); // the disambiguating re-read
+
+      await expect(service.remove(ADMIN, JOB)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    // Without this the job stays in Elasticsearch and in job-alert emails while
+    // its detail page 404s, and Cloudflare keeps serving it for up to an hour.
+    it('de-indexes and purges using the PRE-delete snapshot', async () => {
+      const row = pendingJob();
+      m.job.findUnique.mockResolvedValue(row);
+
+      await service.remove(ADMIN, JOB);
+
+      expect(fakeEffects.fireRemoveSideEffects).toHaveBeenCalledOnce();
+      // canonicalSlug is what the cache purge keys on, and it is unreadable
+      // after the row is gone — so the snapshot has to be the one read first.
+      expect(fakeEffects.fireRemoveSideEffects.mock.calls[0]?.[0]).toMatchObject({
+        id: JOB,
+        canonicalSlug: 'senior-frontend-engineer-123',
+      });
+    });
+
+    // Owner decision (this PR): an admin delete is cleanup or enforcement, so
+    // refunding would hand a spammer their posting slot straight back. Moderation
+    // REJECT refunds; this deliberately does not.
+    it('does not refund the recruiter post quota', async () => {
+      await service.remove(ADMIN, JOB);
+      expect(fakeQuota.refund).not.toHaveBeenCalled();
+    });
+
+    // Status is irrelevant to deletability — an unwanted live posting with no
+    // responses is as deletable as a draft.
+    it('deletes an ACTIVE job just as readily as a draft', async () => {
+      m.job.findUnique.mockResolvedValue(pendingJob({ status: 'ACTIVE' }));
+      await expect(service.remove(ADMIN, JOB)).resolves.toBeUndefined();
+      expect(m.job.deleteMany).toHaveBeenCalledOnce();
     });
   });
 });

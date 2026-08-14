@@ -130,6 +130,26 @@ export const FLAG = {
   // ON disables it without a redeploy. As a `killswitch.*` key it is
   // auto-classified critical (Slack + confirm modal).
   KILL_RECRUITER_JOB_COLLABORATE: 'killswitch.recruiter_job_collaborate',
+  // Admin job deletion (/sadmin/job-postings → Delete). Emergency stop for the
+  // destructive action: when ON, DELETE /admin/jobs/:id rejects with 503 (L3)
+  // and the Job Postings list renders the Delete control disabled (L2).
+  //
+  // Broader than KILL_RECRUITER_JOB_DELETE above and therefore more worth being
+  // able to stop: that one reaches only the recruiter's OWN postings, this one
+  // reaches any job on the platform. Deletion is already restricted to jobs with
+  // zero applications — this switch is the no-deploy off button on top of that.
+  //
+  // There is deliberately NO middleware route gate (L1). The gated thing is an
+  // ACTION, not a route: 404ing /sadmin/job-postings because deletion is killed
+  // would take the read-only master list down with it, and that list is the only
+  // surface that can see a DRAFT or never-moderated job at all. Same L2+L3 shape
+  // KILL_RECRUITER_JOB_DELETE uses.
+  //
+  // Seeded enabled:false, so deletion is LIVE by default; an admin flipping this
+  // ON disables it without a redeploy. As a `killswitch.*` key it is
+  // auto-classified critical (Slack + confirm modal) by isCriticalFlag below —
+  // no NON_KILLSWITCH_CRITICAL entry needed.
+  KILL_ADMIN_JOB_DELETE: 'killswitch.admin_job_delete',
 } as const;
 
 export type FlagKey = (typeof FLAG)[keyof typeof FLAG];

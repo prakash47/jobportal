@@ -311,6 +311,7 @@ const PROFILE_AUDIT_ACTION_LABEL: Record<ProfileAuditAction, string> = {
   KYC_REJECTED: 'Rejected business verification',
   JOB_APPROVED: 'Approved a job posting',
   JOB_REJECTED: 'Sent a job posting back',
+  JOB_DELETED: 'Deleted a job posting',
   RECRUITER_PASSWORD_CHANGE: 'Changed password',
   RECRUITER_USER_INVITED: 'Invited a team member',
   RECRUITER_INVITE_REVOKED: 'Revoked an invite',

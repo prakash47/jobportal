@@ -224,6 +224,22 @@ enum ProfileAuditAction {
   // minimisation rule the KYC and support audit rows already follow.
   JOB_APPROVED
   JOB_REJECTED
+  // Admin hard-delete of a job posting (/sadmin/job-postings → Delete). Written
+  // with the DELETING ADMIN's User id.
+  //
+  // This one is audited more urgently than its recruiter counterpart, which
+  // writes no audit row at all: a recruiter deleting their own zero-response
+  // posting is self-service, whereas an admin destroying someone else's posting
+  // platform-wide must leave a trace. Deletion is restricted to jobs with ZERO
+  // applications (the same invariant recruiter-jobs.service.ts enforces), so the
+  // cascade can never reach a candidate's application history.
+  //
+  // The diff carries the job id, the status it was in, the owning company id and
+  // the measured application count — never the job's title or description, the
+  // same minimisation rule the KYC, moderation and billing rows follow. The row
+  // deliberately OUTLIVES the job it names, so `jobId` resolves to nothing after
+  // the fact; that is the point of the record.
+  JOB_DELETED
   // Recruiter self-service password change (Settings → Change Password). Written
   // with the recruiter's own User id. The raw/old/new passwords are never stored
   // in the audit metadata — only the fact of the change.
