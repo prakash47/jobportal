@@ -37,6 +37,7 @@ export function DeleteJobPostingButton({
   title,
   blockedReason,
   killed,
+  showReason = false,
   onDeleted,
 }: {
   jobId: number;
@@ -45,6 +46,16 @@ export function DeleteJobPostingButton({
   blockedReason: string | null;
   /** True when killswitch.admin_job_delete is ON (the L2 half of the gate). */
   killed: boolean;
+  /**
+   * Render the blocked reason as VISIBLE text beside the control.
+   *
+   * Off in the list, where the Applications column already shows the count on
+   * every row and repeating it 20 times would be noise. On for the detail page,
+   * which has no such column — without it the only explanation there is a
+   * `title` tooltip, i.e. mouse-only, so a sighted keyboard admin presses Enter
+   * on a dead control with nothing on screen telling them why.
+   */
+  showReason?: boolean;
   /**
    * Where to go once the row is gone. The list passes nothing and gets a
    * refresh in place; the detail page passes its list href, because refreshing
@@ -129,9 +140,24 @@ export function DeleteJobPostingButton({
         legibility. The danger tone is earned only when the action can actually
         happen — a red control that refuses to fire promises something false.
       */}
+      {/* The visible reason, for the surface that has no Applications column.
+          aria-hidden because the button's own aria-label already carries the
+          same words — without it a screen reader announces the reason twice. */}
+      {showReason && blockedReason && !killed && (
+        <span aria-hidden="true" className="text-sm text-[var(--color-fg-muted)]">
+          This posting {blockedReason}.
+        </span>
+      )}
+
       <button
         type="button"
-        onClick={disabled ? undefined : () => setOpen(true)}
+        // Clearing the error on OPEN, not on close: a 409 left over from a
+        // previous attempt would otherwise be mounted together with the dialog,
+        // stating a stale failure before the admin has done anything — and
+        // because the <p role="alert"> mounts WITH its text rather than changing
+        // it, that stale message is not re-announced either, so it silently
+        // misinforms a sighted user and is invisible to a screen-reader one.
+        onClick={disabled ? undefined : () => { setError(null); setOpen(true); }}
         aria-disabled={disabled || undefined}
         aria-label={label}
         {...(disabled ? { title: killed ? 'Deletion is switched off' : 'Has applications' } : {})}

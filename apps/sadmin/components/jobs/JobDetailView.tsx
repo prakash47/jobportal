@@ -158,10 +158,19 @@ export function JobDetailView({
                   means undisclosed rather than hidden. */}
               <Row label="Salary" value={salary ?? 'Not disclosed'} />
               <Row label="Experience" value={experience ?? 'Not specified'} />
-              {/* postedAt means "reached the market", stamped on approval — so
-                  it is genuinely absent for a draft or a job still in review,
-                  and formatDateIst renders the em dash for that. */}
-              <Row label="Posted" value={formatDateIst(job.postedAt)} />
+              {/* ⚠ There is deliberately NO "Posted" row, and it must not be
+                  added back. `Job.postedAt` looks like the obvious field for one
+                  and is a trap: it is NOT NULL with @default(now())
+                  (schema.prisma, whose own comment warns "a DRAFT carries one
+                  too — do not treat a non-null postedAt as proof a job was ever
+                  live"), and publish() stamps it even when the job routes to
+                  PENDING_MODERATION. So it is populated for postings that never
+                  reached a single job seeker, and rendering it as "Posted" tells
+                  a reviewer an unapproved job is already on the market — on the
+                  exact screen where that is the decision input. reopen() muddies
+                  it further, carrying a months-old postedAt back into review.
+                  An earlier version of this card shipped that row with a comment
+                  claiming the value was null for drafts; it never is. */}
               <Row label="Expires" value={formatDateIst(job.expiresAt)} />
             </dl>
           </Card>

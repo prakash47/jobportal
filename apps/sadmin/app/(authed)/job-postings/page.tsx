@@ -162,7 +162,7 @@ export default async function JobPostingsPage({ searchParams }: PageProps) {
                   <th scope="col" className="px-4 py-3 font-medium">
                     Status
                   </th>
-                  <th scope="col" className="px-4 py-3 font-medium">
+                  <th scope="col" className="px-4 py-3 text-right font-medium">
                     Applications
                   </th>
                   <th scope="col" className="px-4 py-3 font-medium">
@@ -245,14 +245,16 @@ function JobPostingRow({
         <StatusPill status={row.status} />
       </td>
 
-      {/* Right-aligned because it is a quantity, and it is the number that
-          decides whether Delete is available — worth being able to scan. */}
-      <td className="px-4 py-3 text-[var(--color-fg-muted)]">
+      {/* Right-aligned (with the header) because it is a quantity, and it is the
+          number that decides whether Delete is available — so 0 / 7 / 1,234 must
+          line up on the digit to be scannable. Tabular figures keep the columns
+          from jittering between rows. */}
+      <td className="px-4 py-3 text-right tabular-nums text-[var(--color-fg-muted)]">
         {row.applicationCount.toLocaleString('en-IN')}
       </td>
 
-      {/* createdAt, matching the sort. Showing postedAt here would render an em
-          dash for every draft while the rows above it sort by something else. */}
+      {/* createdAt, matching the sort — see the note in lib/job-postings/queries.ts
+          for why postedAt is the wrong column despite its name. */}
       <td className="px-4 py-3 text-[var(--color-fg-muted)]">{formatDateIst(row.createdAt)}</td>
 
       <td className="px-4 py-3">
@@ -280,18 +282,23 @@ function JobPostingRow({
   );
 }
 
-// A neutral pill, not a colour-coded one. Only ACTIVE gets a tone: five colours
-// across a dense table is noise, and this console's palette rule is monochrome
-// plus one accent (CLAUDE.md §2). DRAFT / EXPIRED / CLOSED are ordinary states
-// rather than problems, so painting them amber or red would invent an alarm.
+// A neutral pill. Five colours across a dense table is noise, and this console's
+// palette rule is monochrome plus one accent (CLAUDE.md §2); DRAFT / EXPIRED /
+// CLOSED are ordinary states rather than problems, so painting them amber or red
+// would invent an alarm.
+//
+// ACTIVE is distinguished by WEIGHT AND FOREGROUND, not hue. The first version
+// used --color-success on --color-bg-muted, which measures 2.76:1 — below the
+// 4.5:1 WCAG AA floor for 12px text, on the pill that renders on almost every
+// row of the default tab. Weight-not-colour is also what CLAUDE.md §2 asks for
+// ("typography hierarchy via weight + size, not color"), so the accessible fix
+// and the design mandate agree here.
 function StatusPill({ status }: { status: JobPostingListRow['status'] }) {
   const live = status === 'ACTIVE';
   return (
     <span
-      className={`inline-block rounded-md px-2 py-1 text-xs ${
-        live
-          ? 'bg-[var(--color-bg-muted)] font-medium text-[var(--color-success)]'
-          : 'bg-[var(--color-bg-muted)] text-[var(--color-fg-muted)]'
+      className={`inline-block rounded-md bg-[var(--color-bg-muted)] px-2 py-1 text-xs ${
+        live ? 'font-medium text-[var(--color-fg)]' : 'text-[var(--color-fg-muted)]'
       }`}
     >
       {formatJobPostingStatus(status)}

@@ -271,6 +271,27 @@ export function jobPostingDetailHref(
 }
 
 /**
+ * Escape the LIKE wildcards in a search term.
+ *
+ * Prisma's `contains` compiles to `LIKE '%' || value || '%'` and does NOT escape
+ * the value, so a `%` or `_` the admin typed is interpreted as a pattern rather
+ * than matched literally: `?q=%` currently matches EVERY posting, and `?q=a_c`
+ * matches "abc". Neither is what a search box means.
+ *
+ * Backslash first, or it would double-escape the escapes this function adds.
+ * Postgres' default LIKE escape character IS backslash, so no ESCAPE clause is
+ * needed — which matters, because Prisma gives no way to add one.
+ *
+ * Scoped to this feature rather than folded into the shared `normalizeQuery`:
+ * that helper is re-exported to the candidate console, which has the same latent
+ * issue, and silently changing a shipped surface's search semantics belongs in
+ * its own reviewable change. Logged as a follow-up in PROGRESS.md.
+ */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
  * Whether this posting can be hard-deleted.
  *
  * ZERO applications only. `Application` is `onDelete: Cascade` on Job, so

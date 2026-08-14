@@ -53,10 +53,29 @@ export default async function JobPostingDetailPage({ params, searchParams }: Pag
   await requireSuperAdmin();
 
   const { id } = await params;
-  // The route is [id], so anything can arrive here. Reject non-numeric ids
-  // before spending an API call on them.
+  // The route is [id], so anything can arrive here. Reject junk before spending
+  // a query on it — and this route needs a STRICTER guard than the moderation
+  // sibling, because it reads Prisma directly (countJobApplications) rather than
+  // only calling the API.
+  //
+  // The digits-only test does real work beyond Number.isInteger: Number() also
+  // accepts hex and exponent notation, so without it '0x1a' and '1e1' would
+  // resolve to real postings under non-canonical URLs.
+  //
+  // The upper bound matters more. Job.id is a Postgres int4, so an id above
+  // 2147483647 does NOT come back as null — it throws out of Prisma ("value is
+  // out of range for type integer"). With no segment error.tsx that throw
+  // escapes to global-error and answers 500 where an unknown id deserves 404.
+  // candidates/[id] and employers/[id] both carry this exact bound, the latter
+  // after shipping without it.
+  //
+  // ⚠ This notFound() also depends on there being NO loading.tsx in this segment
+  // or its parents — a Suspense boundary flushes the shell first, the response
+  // commits 200, and the 404 silently becomes a soft 404. See the note on the
+  // over-range redirect in ../page.tsx.
   const jobId = Number(id);
-  if (!Number.isInteger(jobId) || jobId < 1) notFound();
+  if (!/^\d+$/.test(id) || !Number.isInteger(jobId) || jobId < 1) notFound();
+  if (jobId > 2_147_483_647) notFound();
 
   const sp = await searchParams;
   const status = parseStatusTab(sp.status);
@@ -110,6 +129,9 @@ export default async function JobPostingDetailPage({ params, searchParams }: Pag
           title={job.title}
           blockedReason={jobPostingDeleteBlockedReason({ applicationCount })}
           killed={deleteKilled}
+          // This page has no Applications column, so the reason a disabled
+          // Delete is disabled must be on screen rather than in a tooltip.
+          showReason
           // The row is gone after a successful delete, so refreshing this route
           // in place would render a 404. Go back to the list the admin came
           // from instead.

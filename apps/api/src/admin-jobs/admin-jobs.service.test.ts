@@ -354,19 +354,45 @@ describe('AdminJobsService', () => {
   });
 
   describe('remove', () => {
+    // A DISTINCT transaction client, so the tests can tell which client each
+    // write went through.
+    //
+    // The shared `$transaction` mock in the outer beforeEach passes `prisma`
+    // itself as `tx`, which makes tx === the base client and renders any
+    // "happens inside the transaction" assertion vacuous — the previous version
+    // of this block asserted `$transaction` was called and `create` was called
+    // and would have passed with the audit write moved entirely outside the
+    // callback. Handing the callback its own object is what makes the invariant
+    // actually testable.
+    const tx = {
+      job: { deleteMany: vi.fn() },
+      profileAuditLog: { create: vi.fn() },
+    };
+    let txOptions: unknown;
+
+    beforeEach(() => {
+      tx.job.deleteMany.mockReset().mockResolvedValue({ count: 1 });
+      tx.profileAuditLog.create.mockReset().mockResolvedValue({});
+      txOptions = undefined;
+      m.$transaction.mockImplementation(async (fn: (c: unknown) => unknown, opts: unknown) => {
+        txOptions = opts;
+        return fn(tx);
+      });
+    });
+
     it('rejects with 503 while the killswitch is on, before touching the database', async () => {
       flagEnabled.mockResolvedValue(true);
       await expect(service.remove(ADMIN, JOB)).rejects.toBeInstanceOf(ServiceUnavailableException);
       // The flag is the FIRST thing checked, so a killed delete costs no query
       // and — more importantly — cannot half-run.
       expect(m.job.findUnique).not.toHaveBeenCalled();
-      expect(m.job.deleteMany).not.toHaveBeenCalled();
+      expect(tx.job.deleteMany).not.toHaveBeenCalled();
     });
 
     it('404s an unknown job', async () => {
       m.job.findUnique.mockResolvedValue(null);
       await expect(service.remove(ADMIN, JOB)).rejects.toBeInstanceOf(NotFoundException);
-      expect(m.job.deleteMany).not.toHaveBeenCalled();
+      expect(tx.job.deleteMany).not.toHaveBeenCalled();
     });
 
     // The single most important assertion in this file. The guard must live in
@@ -376,7 +402,7 @@ describe('AdminJobsService', () => {
     // application history.
     it('guards the zero-application invariant inside the delete statement', async () => {
       await service.remove(ADMIN, JOB);
-      expect(m.job.deleteMany).toHaveBeenCalledWith({
+      expect(tx.job.deleteMany).toHaveBeenCalledWith({
         where: { id: JOB, applications: { none: {} } },
       });
     });
@@ -385,7 +411,7 @@ describe('AdminJobsService', () => {
       m.job.findUnique.mockResolvedValue(pendingJob({ status: 'DRAFT' }));
       await service.remove(ADMIN, JOB);
 
-      const row = m.profileAuditLog.create.mock.calls[0]?.[0].data;
+      const row = tx.profileAuditLog.create.mock.calls[0]?.[0].data;
       expect(row).toMatchObject({
         userId: ADMIN,
         action: 'JOB_DELETED',
@@ -395,22 +421,37 @@ describe('AdminJobsService', () => {
       expect(JSON.stringify(row.diff)).not.toContain('Senior Frontend Engineer');
     });
 
-    // The audit row and the delete share one transaction, so a job cannot be
-    // destroyed without a record of who destroyed it.
-    it('writes the audit row inside the same transaction as the delete', async () => {
+    // ⚠ This is what actually pins invariant 4. Asserting only that
+    // `$transaction` ran and `create` was called proves NOTHING — that version
+    // passed with the audit write moved entirely outside the callback. What
+    // proves it is that the write went through the TRANSACTION client and never
+    // through the base client, which is only observable because the outer mock's
+    // `tx === prisma` shortcut is overridden with a distinct object above.
+    it('writes the audit row through the transaction client, never the base client', async () => {
       await service.remove(ADMIN, JOB);
+      expect(tx.profileAuditLog.create).toHaveBeenCalledOnce();
+      expect(m.profileAuditLog.create).not.toHaveBeenCalled();
+      expect(tx.job.deleteMany).toHaveBeenCalledOnce();
       expect(m.$transaction).toHaveBeenCalledOnce();
-      expect(m.profileAuditLog.create).toHaveBeenCalledOnce();
+    });
+
+    // The NOT EXISTS guard is snapshot-evaluated, so at Postgres' READ COMMITTED
+    // default an in-flight apply is invisible to it and its Application row can
+    // still be cascade-destroyed. SERIALIZABLE closes that window; losing this
+    // option silently reopens a path that destroys application history.
+    it('runs at SERIALIZABLE so a concurrent apply cannot slip past the guard', async () => {
+      await service.remove(ADMIN, JOB);
+      expect(txOptions).toEqual({ isolationLevel: 'Serializable' });
     });
 
     it('409s when the job has applications, and does not audit', async () => {
-      m.job.deleteMany.mockResolvedValue({ count: 0 });
+      tx.job.deleteMany.mockResolvedValue({ count: 0 });
       // Still present — so the zero count means the `applications: none` arm
       // failed, not that the row vanished.
       m.job.findUnique.mockResolvedValue(pendingJob());
 
       await expect(service.remove(ADMIN, JOB)).rejects.toBeInstanceOf(ConflictException);
-      expect(m.profileAuditLog.create).not.toHaveBeenCalled();
+      expect(tx.profileAuditLog.create).not.toHaveBeenCalled();
       expect(fakeEffects.fireRemoveSideEffects).not.toHaveBeenCalled();
     });
 
@@ -418,7 +459,7 @@ describe('AdminJobsService', () => {
     // that simply vanished would send an admin looking for applicants that do
     // not exist.
     it('404s rather than 409s when the row vanished in a concurrent delete', async () => {
-      m.job.deleteMany.mockResolvedValue({ count: 0 });
+      tx.job.deleteMany.mockResolvedValue({ count: 0 });
       m.job.findUnique
         .mockResolvedValueOnce(pendingJob()) // the pre-delete read
         .mockResolvedValueOnce(null); // the disambiguating re-read
@@ -456,7 +497,7 @@ describe('AdminJobsService', () => {
     it('deletes an ACTIVE job just as readily as a draft', async () => {
       m.job.findUnique.mockResolvedValue(pendingJob({ status: 'ACTIVE' }));
       await expect(service.remove(ADMIN, JOB)).resolves.toBeUndefined();
-      expect(m.job.deleteMany).toHaveBeenCalledOnce();
+      expect(tx.job.deleteMany).toHaveBeenCalledOnce();
     });
   });
 });

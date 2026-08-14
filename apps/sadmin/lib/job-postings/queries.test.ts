@@ -23,7 +23,6 @@ function jobRow(over: Record<string, unknown> = {}) {
     title: 'Senior Frontend Engineer',
     canonicalSlug: 'senior-frontend-engineer-1',
     status: 'ACTIVE',
-    postedAt: new Date('2026-08-01T00:00:00Z'),
     createdAt: new Date('2026-07-30T00:00:00Z'),
     expiresAt: null,
     company: { id: 7, name: 'Acme' },
@@ -81,6 +80,26 @@ describe('listJobPostings', () => {
     });
   });
 
+  // Prisma's `contains` does not escape LIKE wildcards, so an unescaped '%'
+  // matched every posting on the platform and '_' matched any character —
+  // silently turning the search box into a pattern language.
+  it('escapes LIKE wildcards so they match literally', async () => {
+    await listJobPostings(1, 'ALL', '100%_off');
+    expect(whereOf()).toEqual({
+      OR: [
+        { title: { contains: '100\\%\\_off', mode: 'insensitive' } },
+        { company: { name: { contains: '100\\%\\_off', mode: 'insensitive' } } },
+      ],
+    });
+  });
+
+  it('escapes the escape character itself, and does not double-escape', async () => {
+    await listJobPostings(1, 'ALL', 'a\\b');
+    expect(whereOf()).toMatchObject({
+      OR: [{ title: { contains: 'a\\\\b', mode: 'insensitive' } }, {}],
+    });
+  });
+
   it('omits the search arm when there is no query', async () => {
     await listJobPostings(1, 'ACTIVE');
     expect(whereOf()).not.toHaveProperty('OR');
@@ -102,6 +121,16 @@ describe('listJobPostings', () => {
       { createdAt: 'desc' },
       { id: 'desc' },
     ]);
+  });
+
+  // postedAt is NOT NULL with @default(now()) and publish() stamps it even for a
+  // job routed to PENDING_MODERATION, so it is populated for postings that never
+  // reached a job seeker. Selecting it invites rendering it as "Posted", which
+  // states something false. Not fetched at all, so it cannot be.
+  it('does not fetch postedAt, which does not mean what its name suggests', async () => {
+    await listJobPostings(1, 'ALL');
+    expect(m.job.findMany.mock.calls[0]?.[0].select).not.toHaveProperty('postedAt');
+    expect(m.job.findMany.mock.calls[0]?.[0].select.createdAt).toBe(true);
   });
 
   it('pages 20 at a time with the right offset', async () => {

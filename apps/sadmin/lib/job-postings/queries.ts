@@ -19,15 +19,22 @@
 // list backed by ES would silently show an empty Draft tab.
 
 import { prisma, type JobStatus, type Prisma } from '@jobportal/db';
-import { JOB_POSTINGS_PAGE_SIZE, type JobPostingTab } from './format';
+import { JOB_POSTINGS_PAGE_SIZE, escapeLikePattern, type JobPostingTab } from './format';
 
 export interface JobPostingListRow {
   id: number;
   title: string;
   canonicalSlug: string;
   status: JobStatus;
-  /** Null until the posting reaches the market — every DRAFT row has none. */
-  postedAt: Date | null;
+  /**
+   * When the row was created — the only honest "age" this table has.
+   *
+   * ⚠ Deliberately NOT `postedAt`. That column looks like the right one and is
+   * a trap: it is NOT NULL with @default(now()) and publish() stamps it even for
+   * a job routed to PENDING_MODERATION, so it is populated for postings that
+   * never reached a job seeker and cannot distinguish "went live" from "was
+   * drafted". See the note in components/jobs/JobDetailView.tsx.
+   */
   createdAt: Date;
   expiresAt: Date | null;
   company: { id: number; name: string } | null;
@@ -79,11 +86,18 @@ export async function listJobPostings(
     ...(q
       ? {
           OR: [
-            { title: { contains: q, mode: 'insensitive' as const } },
+            // Escaped: Prisma's `contains` does not escape LIKE wildcards, so an
+            // unescaped '%' would match every posting instead of the literal
+            // character the admin typed. See escapeLikePattern.
+            { title: { contains: escapeLikePattern(q), mode: 'insensitive' as const } },
             // Searching the COMPANY name as well as the title is what makes this
             // box useful to a super admin: "show me everything Acme has posted"
             // is the common question, and the company is a column on the table.
-            { company: { name: { contains: q, mode: 'insensitive' as const } } },
+            {
+              company: {
+                name: { contains: escapeLikePattern(q), mode: 'insensitive' as const },
+              },
+            },
           ],
         }
       : {}),
@@ -92,11 +106,13 @@ export async function listJobPostings(
   const [jobs, total] = await Promise.all([
     prisma.job.findMany({
       where,
-      // createdAt, NOT postedAt. postedAt is null for every DRAFT and every job
-      // still awaiting review, so ordering on it would sort exactly the rows this
-      // list exists to surface into an arbitrary clump. createdAt is NOT NULL and
-      // means "when this posting came into existence", which is what "newest
-      // first" should mean on a master list.
+      // createdAt, NOT postedAt. postedAt does not mean what its name suggests:
+      // it is NOT NULL with @default(now()) and publish() stamps it even when the
+      // job routes to PENDING_MODERATION, while reopen() leaves a months-old
+      // value on a job returning to review. Sorting on it would therefore
+      // interleave never-live drafts with genuinely live postings on a
+      // "newest first" list. createdAt is NOT NULL and unambiguously means when
+      // the posting came into existence.
       //
       // `id` breaks ties deterministically. Offset pagination is only sound if
       // the sort is a total order: two jobs sharing a createdAt could otherwise
@@ -112,7 +128,6 @@ export async function listJobPostings(
         title: true,
         canonicalSlug: true,
         status: true,
-        postedAt: true,
         createdAt: true,
         expiresAt: true,
         company: { select: { id: true, name: true } },
@@ -132,7 +147,6 @@ export async function listJobPostings(
       title: j.title,
       canonicalSlug: j.canonicalSlug,
       status: j.status,
-      postedAt: j.postedAt,
       createdAt: j.createdAt,
       expiresAt: j.expiresAt,
       company: j.company,

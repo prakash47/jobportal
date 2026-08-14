@@ -7,6 +7,7 @@ import {
   JOB_POSTING_TAB_LABEL,
   canDeleteJobPosting,
   clampPage,
+  escapeLikePattern,
   formatJobPostingStatus,
   formatJobPostingsSummary,
   formatJobType,
@@ -179,6 +180,30 @@ describe('canDeleteJobPosting', () => {
     expect(jobPostingDeleteBlockedReason({ applicationCount: 2 })).toContain('2 applications');
     // Indian digit grouping, matching every other count in this console.
     expect(jobPostingDeleteBlockedReason({ applicationCount: 1234 })).toContain('1,234');
+  });
+});
+
+describe('escapeLikePattern', () => {
+  // Prisma's `contains` compiles to LIKE without escaping the value, so these
+  // characters were pattern syntax rather than literals: ?q=% matched every
+  // posting on the platform.
+  it('escapes the LIKE wildcards', () => {
+    expect(escapeLikePattern('%')).toBe('\\%');
+    expect(escapeLikePattern('_')).toBe('\\_');
+    expect(escapeLikePattern('100% off')).toBe('100\\% off');
+    expect(escapeLikePattern('a_c')).toBe('a\\_c');
+  });
+
+  // Backslash must be escaped FIRST, or it would double-escape the escapes this
+  // function itself adds.
+  it('escapes the escape character first, without double-escaping', () => {
+    expect(escapeLikePattern('\\')).toBe('\\\\');
+    expect(escapeLikePattern('a\\%b')).toBe('a\\\\\\%b');
+  });
+
+  it('leaves ordinary text untouched', () => {
+    expect(escapeLikePattern('Senior Engineer')).toBe('Senior Engineer');
+    expect(escapeLikePattern('')).toBe('');
   });
 });
 

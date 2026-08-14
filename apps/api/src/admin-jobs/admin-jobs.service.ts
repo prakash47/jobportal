@@ -334,7 +334,8 @@ export class AdminJobsService {
     //
     // The audit row commits in the SAME transaction as the delete, so a job can
     // never be destroyed without a trace of who did it.
-    const deleted = await prisma.$transaction(async (tx) => {
+    const deleted = await prisma.$transaction(
+      async (tx) => {
       const res = await tx.job.deleteMany({
         where: { id: jobId, applications: { none: {} } },
       });
@@ -356,8 +357,25 @@ export class AdminJobsService {
           } as unknown as Prisma.InputJsonValue,
         },
       });
-      return true;
-    });
+        return true;
+      },
+      // SERIALIZABLE, not the READ COMMITTED default, and this is the one place
+      // in the codebase that needs it.
+      //
+      // The `applications: { none: {} }` guard compiles to a NOT EXISTS
+      // sub-select, which under READ COMMITTED is evaluated against the
+      // statement's own snapshot. A candidate's apply INSERT that is in flight
+      // but uncommitted is invisible to that snapshot, so the guard can pass and
+      // the job be deleted while an application for it is mid-commit — and
+      // Application cascades on Job, so that row is destroyed. The window is
+      // narrow, but the loss is a candidate's application history and there is
+      // no undo, which is exactly the trade where a rare serialization failure
+      // is the cheaper outcome.
+      //
+      // The cost is that two conflicting transactions can raise 40001. For a
+      // hand-driven admin action that is a retry, not a regression.
+      { isolationLevel: 'Serializable' },
+    );
 
     if (!deleted) {
       // count 0 means either the row vanished in a concurrent delete (404 — a
