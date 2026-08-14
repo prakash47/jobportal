@@ -9,6 +9,7 @@ import {
   clampPage,
   firstParam,
   formatJobPostingStatus,
+  formatJobPostingsSummary,
   jobPostingDeleteBlockedReason,
   jobPostingDetailHref,
   jobPostingsHref,
@@ -78,20 +79,9 @@ export default async function JobPostingsPage({ searchParams }: PageProps) {
   }
 
   const isEmpty = result.rows.length === 0;
-  const tabLabel = JOB_POSTING_TAB_LABEL[status].toLowerCase();
-  // Three different sentences for the empty case, because "no postings exist"
-  // would be a lie under an active filter — and on this console the filter is
-  // active by DEFAULT (the Active tab), which is exactly when a bare "nothing
-  // here" misleads most.
-  const summary = isEmpty
-    ? q
-      ? `No ${status === 'ALL' ? '' : `${tabLabel} `}postings match “${q}”.`
-      : status === 'ALL'
-        ? 'No jobs have been posted yet.'
-        : `No postings are ${tabLabel} right now.`
-    : `${result.total.toLocaleString('en-IN')} ${
-        result.total === 1 ? 'posting' : 'postings'
-      }${status === 'ALL' ? '' : ` ${tabLabel}`}${q ? ` matching “${q}”` : ''}`;
+  // Wording lives in format.ts so it is unit-testable — this is the sentence a
+  // screen-reader user hears when a search narrows the list to nothing.
+  const summary = formatJobPostingsSummary(result.total, status, q);
 
   return (
     <div data-wide className="space-y-6">

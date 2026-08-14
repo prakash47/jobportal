@@ -12,7 +12,7 @@
 // neither review view. The two surfaces answer different questions and keep
 // separate params, labels and href builders on purpose.
 
-import type { JobStatus } from '@jobportal/db';
+import type { JobStatus, JobType } from '@jobportal/db';
 
 /**
  * Postings per page. Matches the candidate list, the employer list, the OTP
@@ -99,6 +99,93 @@ export const JOB_POSTING_TAB_LABEL: Record<JobPostingTab, string> = {
 
 export function formatJobPostingStatus(status: JobStatus): string {
   return JOB_POSTING_STATUS_LABEL[status];
+}
+
+/**
+ * The commercial category of a posting (Job.jobType), NOT its employment type.
+ *
+ * Labels mirror apps/recruiter's JOB_TYPES verbatim, so the category a recruiter
+ * chose when posting reads identically to staff reviewing it. Copied rather than
+ * imported because tsconfig.base.json has no path alias reaching `apps/`, so
+ * sadmin structurally cannot import from another app — the same constraint
+ * lib/candidates/format.ts documents for its status labels.
+ *
+ * `Record<JobType, string>` for the usual reason: this field was previously
+ * fetched and never rendered, and the first version of this page put the raw
+ * column on screen, showing a super admin "FREE". A keyed record makes a missing
+ * or invented member a compile error.
+ */
+const JOB_TYPE_LABEL: Record<JobType, string> = {
+  FREE: 'Free Job',
+  HOT_VACANCY: 'Hot Vacancy',
+  SMB: 'SMB Pack',
+  INTERNSHIP: 'Internship',
+};
+
+/**
+ * Takes a plain string because the sadmin API types are hand-mirrored — the
+ * detail payload declares `jobType: string`, not the Prisma enum (see
+ * lib/jobs/types.ts). An unrecognised value falls back to itself rather than
+ * throwing: this is a read-only staff screen, and a new JobType member shipped
+ * by the API should not blank the whole page.
+ *
+ * ⚠ `Object.hasOwn` rather than `MAP[value] ?? value`, and this is a real bug
+ * rather than defensive noise: `??` only falls back on null/undefined, but
+ * `JOB_TYPE_LABEL['__proto__']` returns Object.prototype and
+ * `JOB_TYPE_LABEL['toString']` returns a function — both truthy, so the
+ * fallback never fires and a non-string reaches React, which renders
+ * "[object Object]" or throws. The parameter is a plain string off an API
+ * payload, so those values are genuinely reachable. This is the same
+ * prototype-chain class of bug already found once on the SRP, and the reason
+ * parseStatusTab above validates by tuple membership.
+ */
+export function formatJobType(value: string): string {
+  return Object.hasOwn(JOB_TYPE_LABEL, value) ? JOB_TYPE_LABEL[value as JobType] : value;
+}
+
+/**
+ * The noun phrase for a count on each tab, singular and plural.
+ *
+ * A table rather than `${count} postings ${label.toLowerCase()}` because that
+ * template produces "1 posting draft" — the status labels are a mix of
+ * adjectives ("Draft", "Active") and a prepositional phrase ("Under review"),
+ * and no single word order reads correctly for both. Spelling the phrases out is
+ * the only way all six read like English.
+ */
+const JOB_POSTING_TAB_NOUN: Record<JobPostingTab, { one: string; many: string }> = {
+  ACTIVE: { one: 'active posting', many: 'active postings' },
+  PENDING_MODERATION: { one: 'posting under review', many: 'postings under review' },
+  DRAFT: { one: 'draft posting', many: 'draft postings' },
+  EXPIRED: { one: 'expired posting', many: 'expired postings' },
+  CLOSED: { one: 'closed posting', many: 'closed postings' },
+  ALL: { one: 'posting', many: 'postings' },
+};
+
+/**
+ * The one line above the table, covering both the counted and the empty case.
+ *
+ * Computed here rather than in the page so the wording is unit-testable — this
+ * is the sentence a screen-reader user hears when a search narrows the list to
+ * nothing, and the page's `role="status"` region renders nothing else.
+ *
+ * The empty copy must never claim more than it knows. "No jobs have been posted
+ * yet" is only true on the ALL tab with no search; on every other tab the list
+ * is filtered — and on this console it is filtered BY DEFAULT, since ACTIVE is
+ * the landing tab — which is exactly when a bare "nothing here" misleads most.
+ */
+export function formatJobPostingsSummary(
+  total: number,
+  status: JobPostingTab,
+  q?: string,
+): string {
+  const noun = JOB_POSTING_TAB_NOUN[status];
+  if (total === 0) {
+    if (q) return `No ${noun.many} match “${q}”.`;
+    if (status === 'ALL') return 'No jobs have been posted yet.';
+    return `There are no ${noun.many} right now.`;
+  }
+  const counted = `${total.toLocaleString('en-IN')} ${total === 1 ? noun.one : noun.many}`;
+  return q ? `${counted} matching “${q}”` : counted;
 }
 
 /**

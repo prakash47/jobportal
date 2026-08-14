@@ -12,6 +12,7 @@ import {
   formatWorkMode,
   waitingDays,
 } from '../../lib/jobs/format';
+import { formatJobType } from '../../lib/job-postings/format';
 import type { JobReviewDetail } from '../../lib/jobs/types';
 
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
@@ -172,7 +173,10 @@ export function JobDetailView({
             <dl className="space-y-3 text-sm">
               <Row label="Industry" value={job.industry?.name ?? '—'} />
               <Row label="Function" value={job.functionalArea?.name ?? '—'} />
-              <Row label="Job type" value={job.jobType} />
+              {/* The commercial category (Free Job / Hot Vacancy / …), not the
+                  employment type. Labelled rather than printed raw — the column
+                  is a SCREAMING_SNAKE enum and rendered "FREE" before this. */}
+              <Row label="Job type" value={formatJobType(job.jobType)} />
             </dl>
           </Card>
 

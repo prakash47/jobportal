@@ -8,6 +8,8 @@ import {
   canDeleteJobPosting,
   clampPage,
   formatJobPostingStatus,
+  formatJobPostingsSummary,
+  formatJobType,
   jobPostingDeleteBlockedReason,
   jobPostingDetailHref,
   jobPostingsHref,
@@ -177,6 +179,83 @@ describe('canDeleteJobPosting', () => {
     expect(jobPostingDeleteBlockedReason({ applicationCount: 2 })).toContain('2 applications');
     // Indian digit grouping, matching every other count in this console.
     expect(jobPostingDeleteBlockedReason({ applicationCount: 1234 })).toContain('1,234');
+  });
+});
+
+describe('formatJobType', () => {
+  // This field was fetched but never rendered until the detail view surfaced it,
+  // and the first version printed the raw column — a super admin saw "FREE".
+  it('labels every JobType member, never the raw enum', () => {
+    expect(formatJobType('FREE')).toBe('Free Job');
+    expect(formatJobType('HOT_VACANCY')).toBe('Hot Vacancy');
+    expect(formatJobType('SMB')).toBe('SMB Pack');
+    expect(formatJobType('INTERNSHIP')).toBe('Internship');
+  });
+
+  // The API types are hand-mirrored as `string`, so an unknown value is
+  // reachable. A read-only staff screen must degrade, not throw.
+  it('falls back to the raw value rather than throwing on an unknown type', () => {
+    expect(formatJobType('SOMETHING_NEW')).toBe('SOMETHING_NEW');
+    expect(formatJobType('')).toBe('');
+  });
+
+  it('is not fooled by prototype-chain keys', () => {
+    expect(formatJobType('__proto__')).toBe('__proto__');
+    expect(formatJobType('toString')).toBe('toString');
+  });
+});
+
+describe('formatJobPostingsSummary', () => {
+  // The naive `${n} postings ${label.toLowerCase()}` template produced
+  // "1 posting draft" — the labels are a mix of adjectives and a prepositional
+  // phrase, so every tab is spelled out. These read like English or they are wrong.
+  it('reads as English on every tab', () => {
+    expect(formatJobPostingsSummary(53, 'ACTIVE')).toBe('53 active postings');
+    expect(formatJobPostingsSummary(1, 'DRAFT')).toBe('1 draft posting');
+    expect(formatJobPostingsSummary(4, 'DRAFT')).toBe('4 draft postings');
+    expect(formatJobPostingsSummary(1, 'PENDING_MODERATION')).toBe('1 posting under review');
+    expect(formatJobPostingsSummary(6, 'PENDING_MODERATION')).toBe('6 postings under review');
+    expect(formatJobPostingsSummary(2, 'EXPIRED')).toBe('2 expired postings');
+    expect(formatJobPostingsSummary(2, 'CLOSED')).toBe('2 closed postings');
+  });
+
+  // The ALL tab is unfiltered, so it must not describe the rows as anything.
+  it('drops the status word on the All tab', () => {
+    expect(formatJobPostingsSummary(53, 'ALL')).toBe('53 postings');
+    expect(formatJobPostingsSummary(1, 'ALL')).toBe('1 posting');
+  });
+
+  it('names the active search', () => {
+    expect(formatJobPostingsSummary(3, 'ACTIVE', 'sutra')).toBe(
+      '3 active postings matching “sutra”',
+    );
+  });
+
+  it('groups large counts the Indian way, like every other count in the console', () => {
+    expect(formatJobPostingsSummary(12345, 'ALL')).toBe('12,345 postings');
+  });
+
+  // ⚠ The empty copy must never claim more than it knows. This console lands on
+  // the ACTIVE tab, so the list is filtered by DEFAULT — "no jobs have been
+  // posted yet" would be flatly false with a hundred drafts in the table.
+  it('never claims the platform is empty while a filter is on', () => {
+    expect(formatJobPostingsSummary(0, 'DRAFT')).toBe('There are no draft postings right now.');
+    expect(formatJobPostingsSummary(0, 'ACTIVE')).toBe('There are no active postings right now.');
+    expect(formatJobPostingsSummary(0, 'PENDING_MODERATION')).toBe(
+      'There are no postings under review right now.',
+    );
+    expect(formatJobPostingsSummary(0, 'ACTIVE')).not.toContain('posted yet');
+  });
+
+  it('only says the platform is empty on an unfiltered, unsearched All tab', () => {
+    expect(formatJobPostingsSummary(0, 'ALL')).toBe('No jobs have been posted yet.');
+    expect(formatJobPostingsSummary(0, 'ALL', 'zzz')).toBe('No postings match “zzz”.');
+  });
+
+  it('blames the search, not the platform, when a search returns nothing', () => {
+    expect(formatJobPostingsSummary(0, 'CLOSED', 'zzz')).toBe(
+      'No closed postings match “zzz”.',
+    );
   });
 });
 
