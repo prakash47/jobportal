@@ -32,10 +32,15 @@ export class ReportsService {
   ): Promise<{ id: number }> {
     await this.assertReportingEnabled();
 
-    // Only one target type exists today; the switch is what will fail to compile
-    // when a second is added, rather than silently filing it with a null FK.
+    // Only one target type exists today. The `never` assignment below is a real
+    // compile-time exhaustiveness guard, not a comment promising one: with JOB
+    // as the sole member, `input.targetType` narrows to `never` in this branch
+    // and the assignment is legal. Add a second member and it narrows to that
+    // member instead, so this file stops compiling until the new target is given
+    // its own FK and handling — rather than being filed silently with a null one.
     if (input.targetType !== 'JOB') {
-      throw new NotFoundException('Unknown report target');
+      const unhandled: never = input.targetType;
+      throw new NotFoundException(`Unknown report target: ${String(unhandled)}`);
     }
     const jobId = input.jobId as number; // guaranteed by CreateReportDto's refine
 

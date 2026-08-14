@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CreateReportDto, REPORT_REASONS, REPORT_TARGET_TYPES } from './dto';
+import { CreateReportDto, REPORT_REASONS, REPORT_TARGET_TYPES, stripControlChars } from './dto';
+
+const NUL = String.fromCharCode(0);
+const BELL = String.fromCharCode(7);
+const C1 = String.fromCharCode(0x85);
 
 // A valid body, spread-and-overridden per case so each test states only what it
 // is actually about.
@@ -85,6 +89,51 @@ describe('CreateReportDto', () => {
 
   // Trim happens BEFORE the length check, so padding cannot be used to exceed
   // the cap and 2000 spaces is not a 2000-character report.
+  // A NUL byte reached the driver and produced a 500 on this UNAUTHENTICATED
+  // endpoint before stripControlChars existed — verified against the running API.
+  it('strips a NUL byte instead of passing it to Postgres', () => {
+    const r = CreateReportDto.safeParse({ ...valid, details: `scam${NUL}posting` });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.details).toBe('scamposting');
+      expect(r.data.details).not.toContain(NUL);
+    }
+  });
+
+  it('strips other C0 and C1 control characters', () => {
+    const r = CreateReportDto.safeParse({ ...valid, details: `a${BELL}b${C1}c` });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.details).toBe('abc');
+  });
+
+  // Tab/newline/CR are what a textarea actually produces; stripping them would
+  // silently reflow the reporter's prose into one line.
+  it('keeps tab, newline and carriage return', () => {
+    const r = CreateReportDto.safeParse({ ...valid, details: 'line one\nline two\tend' });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.details).toBe('line one\nline two\tend');
+  });
+
+  // Control chars are stripped BEFORE the empty check, so a details field made
+  // only of them must land as undefined (NULL), not as a stray empty string.
+  it('turns control-only details into undefined', () => {
+    const r = CreateReportDto.safeParse({ ...valid, details: `${NUL}${BELL} ${C1}` });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.details).toBeUndefined();
+  });
+
+  // Iterated with for..of, so an emoji must survive whole rather than losing a
+  // surrogate half and becoming mojibake.
+  it('leaves astral-plane characters intact', () => {
+    const r = CreateReportDto.safeParse({ ...valid, details: 'salary is a lie 🚩 avoid' });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.details).toBe('salary is a lie 🚩 avoid');
+  });
+
+  it('stripControlChars is a no-op on ordinary prose', () => {
+    expect(stripControlChars('Asks for a 5000 rupee fee.')).toBe('Asks for a 5000 rupee fee.');
+  });
+
   it('applies the 2000-char cap to the TRIMMED value', () => {
     const at = 'a'.repeat(2000);
     expect(CreateReportDto.safeParse({ ...valid, details: at }).success).toBe(true);

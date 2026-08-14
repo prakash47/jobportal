@@ -41,6 +41,37 @@ export const REPORT_REASONS = Object.keys(REASONS) as [
 // error, so it must fail validation and answer 400.
 const INT4_MAX = 2_147_483_647;
 
+const TAB = 0x09;
+const LINE_FEED = 0x0a;
+const CARRIAGE_RETURN = 0x0d;
+const C0_END = 0x20;
+const C1_START = 0x7f;
+const C1_END = 0x9f;
+
+// Removes C0 and C1 control characters, KEEPING tab, newline and carriage
+// return — the three a textarea legitimately produces.
+//
+// This is not cosmetic. Postgres cannot store U+0000 in a text column, and
+// `String.prototype.trim()` does not treat it as whitespace, so a NUL byte
+// survives validation intact and reaches the driver. Measured against the
+// running API before this existed: a plain 500 on an UNAUTHENTICATED endpoint,
+// which (being >= 500) also feeds Sentry.
+//
+// Written as an explicit code-point filter rather than a regex character class
+// so the source contains no escape sequences to get mangled, and iterated with
+// for..of so astral-plane characters are handled as single code points instead
+// of being split into surrogate halves.
+export function stripControlChars(input: string): string {
+  let out = '';
+  for (const ch of input) {
+    const code = ch.codePointAt(0) ?? 0;
+    const isC0 = code < C0_END && code !== TAB && code !== LINE_FEED && code !== CARRIAGE_RETURN;
+    const isC1 = code >= C1_START && code <= C1_END;
+    if (!isC0 && !isC1) out += ch;
+  }
+  return out;
+}
+
 export const CreateReportDto = z
   .object({
     targetType: z.enum(REPORT_TARGET_TYPES),
@@ -53,12 +84,18 @@ export const CreateReportDto = z
     // The reporter's own words. Optional — the structured `reason` is the axis
     // the queue works from, and demanding prose suppresses reports.
     //
-    // Trimmed BEFORE the length check so 2000 spaces is not a valid report, and
-    // an empty result becomes undefined rather than an empty string, so the
+    // Control characters are stripped BEFORE trimming (see stripControlChars);
+    // stripping rather than rejecting because no human types one on purpose, so
+    // a 400 would be an unexplainable dead end for a reporter whose only mistake
+    // was pasting from a broken source.
+    //
+    // Then trimmed BEFORE the length check, so 2000 spaces is not a valid report,
+    // and an empty result becomes undefined rather than an empty string — the
     // column holds NULL instead of '' and the console's "no detail given" branch
     // is reached by one value rather than two.
     details: z
       .string()
+      .transform(stripControlChars)
       .transform((s) => s.trim())
       .pipe(z.string().max(2000))
       .transform((s) => (s.length > 0 ? s : undefined))

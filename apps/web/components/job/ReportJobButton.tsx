@@ -41,11 +41,15 @@ export interface ReportJobButtonProps {
 // fake-job reports worth having. That is why this does NOT follow SaveButton's
 // `isAuthed` → redirect-to-login shape.
 export function ReportJobButton({ jobId }: ReportJobButtonProps) {
-  // useId, not hand-written strings: this page already renders an apply form and
-  // a save control, and several jobs' markup can coexist in the router cache.
-  // Duplicate ids would silently mis-associate labels. (COLLABORATION.md §4.3.)
+  // useId, not hand-written strings. This dialog is the only one of its kind on
+  // /job/[slug] today, but the ids it mints are generic ('details', 'reason')
+  // and the page already carries ids from the shared shell — and nothing stops a
+  // second instance rendering, since Radix portals dialog content to the body
+  // and Next keeps prior route segments alive in the router cache. A collision
+  // silently mis-associates a label with the wrong control. (COLLABORATION.md §4.3.)
   const reasonLabelId = useId();
   const detailsId = useId();
+  const limitMsgId = useId();
 
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<ContentReportReason | null>(null);
@@ -171,10 +175,18 @@ export function ReportJobButton({ jobId }: ReportJobButtonProps) {
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
                 invalid={overLimit}
+                // Named ONLY while the message is on screen — an aria-describedby
+                // pointing at a node that is not rendered is read as nothing.
+                // Without this the field announces "invalid entry" with no reason
+                // available on a second visit (role="alert" fires once on insert),
+                // while Submit is disabled and therefore out of the tab order, so
+                // there is no way left to discover why. Conditional spread because
+                // exactOptionalPropertyTypes rejects an explicit undefined.
+                {...(overLimit ? { 'aria-describedby': limitMsgId } : {})}
                 placeholder="What made this posting look wrong?"
               />
               {overLimit && (
-                <p role="alert" className="text-sm text-[var(--color-danger)]">
+                <p id={limitMsgId} role="alert" className="text-sm text-[var(--color-danger)]">
                   Please keep this under {REPORT_DETAILS_MAX.toLocaleString('en-IN')} characters.
                 </p>
               )}
