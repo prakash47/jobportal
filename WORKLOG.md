@@ -33,12 +33,12 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-08 after `feature/mobile-social-auth` merged (`20260808180000_add_apple_auth_provider`). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/sadmin-job-postings` | 2026-08-14 | One additive enum member: `JOB_DELETED` on `ProfileAuditAction`. Migration `add_job_deleted_audit_action`. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | New flag keys. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | Claude/Prakash | `feature/sadmin-job-postings` | 2026-08-14 | Adds `killswitch.admin_job_delete`. Short hold — release on merge. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -50,6 +50,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/sadmin-job-postings` | **sadmin "Job Postings" master list — `/sadmin/job-postings` + `/sadmin/job-postings/[id]`.** All jobs regardless of status, `?q` search over title + company name, `?status` tab filter defaulting to `ACTIVE`, `?page` pagination. Actions: **View** (full detail) and **Delete**. New `DELETE /admin/jobs/:id` on the existing `AdminJobsController` (zero-application jobs only — inherits the owner's 2026-07-16 recruiter ruling; 409 otherwise), audited as `JOB_DELETED`, gated by `killswitch.admin_job_delete`. New files under `apps/sadmin/lib/job-postings/*` and `apps/sadmin/components/job-postings/*`; `JobDetailView` extracted from `jobs/[id]/page.tsx`. **`/sadmin/jobs` (the moderation queue) is deliberately NOT touched** — its pending/decided views and FIFO order stay byte-identical. | 🔒 **schema.prisma** (one enum member + migration `add_job_deleted_audit_action`) · 🔒 **feature-flags/keys.ts** · `apps/sadmin/components/SidebarNav.tsx` **`NAV_ITEMS`** (not in the lock table — ⚠️ `feature/sadmin-admin-migration` will edit the same array; this branch is small and lands first) · `packages/db/prisma/seed/flags.ts` |
 
 ---
 
