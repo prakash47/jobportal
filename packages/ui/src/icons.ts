@@ -26,6 +26,7 @@ export {
   EyeOff,
   FileText,
   Filter,
+  Flag,
   GraduationCap,
   IndianRupee,
   Info,

@@ -3,6 +3,7 @@ import { permanentRedirect } from 'next/navigation';
 import { notFound } from 'next/navigation';
 import Script from 'next/script';
 import { prisma } from '@jobportal/db';
+import { isFlagEnabled, FLAG } from '@jobportal/feature-flags';
 import { Breadcrumbs, Container } from '@jobportal/ui';
 import { SiteShell } from '../../../components/shell/SiteShell';
 import {
@@ -12,6 +13,7 @@ import {
   JobBody,
   JobHero,
   JobOverviewCard,
+  ReportJobButton,
   SaveButton,
   ShareButtons,
 } from '../../../components/job';
@@ -117,10 +119,16 @@ export default async function JobDetailPage({ params }: PageProps) {
   ]);
 
   const userId = user?.sub;
-  const [applied, saved, quota] = await Promise.all([
+  const [applied, saved, quota, reportingEnabled] = await Promise.all([
     userId ? readApplied(userId, job.id) : Promise.resolve(false),
     userId ? readSaved(userId, job.id) : Promise.resolve(false),
     userId ? readApplyQuota() : Promise.resolve(null),
+    // Layer 2 for moderation.reports.enabled. NOT user-scoped and NOT gated on
+    // sign-in: reporting is open to anonymous visitors, which is most of this
+    // page's traffic. There is deliberately no Layer 1 middleware gate — the
+    // gated thing is an action, and /job/[slug] must keep serving either way.
+    // POST /v1/reports re-checks this and is the enforcement point (CLAUDE.md §4).
+    isFlagEnabled(FLAG.MODERATION_REPORTS),
   ]);
   const quotaUiState = quota ? classifyQuota(quota) : 'normal';
 
@@ -198,8 +206,12 @@ export default async function JobDetailPage({ params }: PageProps) {
           isAuthed={user !== null}
           initialSaved={saved}
         />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <ShareButtons url={canonicalUrl} title={job.title} />
+          {/* Sits with Share rather than beside Apply: reporting is a rare,
+              deliberate act, and giving it equal visual weight to the primary
+              conversion would be wrong on every honest posting. */}
+          {reportingEnabled && <ReportJobButton jobId={job.id} />}
         </div>
       </div>
     </div>

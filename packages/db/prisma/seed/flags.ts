@@ -11,7 +11,19 @@ import type { PrismaClient } from '../../generated/client';
 type FlagSeed = {
   key: string;
   type: 'BOOLEAN' | 'TIER_GATED' | 'PERCENTAGE_ROLLOUT' | 'USER_TARGETED' | 'COHORT_TARGETED';
-  category: 'services' | 'subscription' | 'features' | 'recruiter' | 'experiments' | 'killswitch';
+  // 'moderation' has been in USE since the job-moderation flag below but was
+  // missing from this union — it only compiled because packages/db/tsconfig.json
+  // excludes prisma/ from the typecheck. apps/web/lib/admin/types.ts already
+  // lists it in CATEGORY_ORDER + CATEGORY_LABEL, so the admin UI groups and
+  // labels it correctly today.
+  category:
+    | 'services'
+    | 'subscription'
+    | 'features'
+    | 'recruiter'
+    | 'experiments'
+    | 'killswitch'
+    | 'moderation';
   uiLabel: string;
   description?: string;
   /** Defaults to false. Only set true for free/visibility flags. */
@@ -76,6 +88,21 @@ const flags: FlagSeed[] = [
   // Turning it back OFF is safe and instant — jobs already in the queue stay
   // reviewable, because the admin endpoints deliberately do not check this flag.
   { key: 'moderation.jobs.enabled', type: 'BOOLEAN', category: 'moderation', uiLabel: 'Route new jobs through admin moderation', enabled: true },
+
+  // User-submitted content reports. Seeded ON: reporting a fake or scam job is a
+  // free safety surface, not a paid capability, so CLAUDE.md §0 does not apply.
+  //
+  // Gates INTAKE only — the "Report this job" control (L2) and POST /v1/reports
+  // (L3). Turning it OFF is safe and instant: reports already filed stay in the
+  // queue and stay actionable, because the admin endpoints deliberately do not
+  // check this flag (the same rule the job-moderation queue above follows).
+  //
+  // Because seedFlags upserts with `update: {}`, this reaches existing databases
+  // by INSERT on the next `pnpm db:seed` — a fresh row is created, an existing
+  // one is never overwritten. No migration is needed for a NEW key; the
+  // companion migration pattern above exists only to change the default on a key
+  // that already exists everywhere.
+  { key: 'moderation.reports.enabled', type: 'BOOLEAN', category: 'moderation', uiLabel: 'Allow users to report job postings', enabled: true },
 
   // Experiments
   { key: 'experiment.new_homepage', type: 'COHORT_TARGETED', category: 'experiments', uiLabel: 'New homepage A/B test' },
