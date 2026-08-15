@@ -264,6 +264,28 @@ enum ProfileAuditAction {
   BILLING_ORDER_CREATED
   BILLING_SUBSCRIPTION_ACTIVATED
   BILLING_PAYMENT_FAILED
+  // Admin subscription management (/sadmin/subscriptions). All four are written
+  // with the ACTING ADMIN's User id, not the subscribing recruiter's — the
+  // opposite of BILLING_SUBSCRIPTION_ACTIVATED above, which is attributed to the
+  // order's createdBy because a webhook has no session. Read the two groups
+  // together and the actor changes meaning; that is why these are separate
+  // members rather than a reuse of the purchase-side actions.
+  //
+  // They are split four ways for the same reason JOB_APPROVED/JOB_REJECTED and
+  // CONTENT_REPORT_ACTIONED/DISMISSED are: this table is the only durable record
+  // of WHICH lever staff pulled, and "granted a paid plan for free" and
+  // "cancelled someone's plan" must not collapse into one line.
+  //
+  // Every one of these is money-equivalent, so the diff carries the plan
+  // identity, the period transition and the staff-authored reason — never card
+  // or payment-instrument data, matching the minimisation rule the purchase-side
+  // billing rows already follow. GRANTED/PLAN_CHANGED/EXTENDED/CANCELLED can
+  // only ever apply to an admin-granted subscription (Subscription.grantedAt is
+  // non-null); a gateway-paid row is not mutable from the console at all.
+  BILLING_SUBSCRIPTION_GRANTED
+  BILLING_SUBSCRIPTION_PLAN_CHANGED
+  BILLING_SUBSCRIPTION_EXTENDED
+  BILLING_SUBSCRIPTION_CANCELLED
   // Recruiter Help & Support. Written with the reviewing ADMIN's User id when
   // support staff moves a ticket through its lifecycle. Ticket create/reply
   // need no audit action — the SupportTicket / SupportTicketMessage rows are
@@ -1518,6 +1540,23 @@ model Subscription {
   cancelledAt            DateTime?
   cancelAtPeriodEnd      Boolean            @default(false)
   cancelReason           String?
+  // Admin-grant provenance (/sadmin/subscriptions). A NON-NULL grantedAt means
+  // this subscription was comped by staff rather than bought through Razorpay,
+  // and it is the ONLY thing the admin console is permitted to mutate: a
+  // gateway-paid row is view-only there (owner ruling 2026-08-15 — staff must
+  // not be able to override billing). The marker is a timestamp rather than a
+  // boolean so "when was this comped" needs no second column, and it is never
+  // cleared — flipping it back would silently hand staff write access to a row
+  // that a company actually paid for.
+  //
+  // grantedById is the granting admin's User id — loose, like
+  // ContentReport.reviewedById and Job.reviewedById. Deliberately NOT a
+  // relation: a real FK would either cascade a paid-for subscription away with
+  // the staff account or null the attribution, and this breadcrumb has to
+  // outlive the admin who left it. Full attribution lives in ProfileAuditLog.
+  grantedAt              DateTime?
+  grantedById            Int?
+  grantNote              String?
   stripeSubscriptionId   String?            @unique
   razorpaySubscriptionId String?            @unique
   createdAt              DateTime           @default(now())

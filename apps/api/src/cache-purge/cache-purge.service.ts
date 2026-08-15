@@ -95,6 +95,13 @@ const PATH_MAP: Record<string, string[]> = {
   // 60`, so a toggle propagates within a minute on its own — comfortably close
   // to the 30s the flag's own cache holds the old value for anyway.
   'moderation.reports.enabled': [],
+  // Gates the write actions on /sadmin/subscriptions. Every surface it touches
+  // lives in apps/sadmin, which is behind auth, noindex, and served by a
+  // different app than the Cloudflare-cached seeker site — so there is no cached
+  // page anywhere for this flag to invalidate. Mapped explicitly to [] so it
+  // doesn't hit the defensive ['/'] default and purge the seeker homepage, which
+  // it cannot affect.
+  'killswitch.admin_subscription_write': [],
 };
 
 export function pathsForFlag(flagKey: string): string[] {

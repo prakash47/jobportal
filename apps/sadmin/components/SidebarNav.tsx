@@ -8,6 +8,7 @@ import {
   Briefcase,
   Building2,
   ClipboardList,
+  CreditCard,
   LayoutDashboard,
   ShieldCheck,
   Users,
@@ -35,6 +36,11 @@ const NAV_ITEMS: readonly { href: string; label: string; icon: NavIcon }[] = [
   { href: '/employers', label: 'Employer management', icon: Building2 as NavIcon },
   { href: '/candidates', label: 'Candidate management', icon: Users as NavIcon },
   { href: '/otp-sessions', label: 'OTP Sessions', icon: ShieldCheck as NavIcon },
+  // Plans & billing overview. Sits after the two "who is on the platform"
+  // consoles because it is answered in terms of them: a subscription is read as
+  // "which employer is on which plan", so it follows Employer management rather
+  // than opening the rail.
+  { href: '/subscriptions', label: 'Subscriptions & Billing', icon: CreditCard as NavIcon },
 ];
 
 function isActive(pathname: string, href: string): boolean {

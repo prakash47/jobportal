@@ -12,6 +12,7 @@ import { prisma, Prisma } from '@jobportal/db';
 import type { CompanyBillingProfile, RecruiterRole } from '@jobportal/db';
 import { EmailService } from '../email/email.service';
 import { StorageService } from '../storage/storage.service';
+import { addDays } from '../common/billing-period';
 import { buildDiff, isDiffEmpty } from '../profile/audit';
 import { computeGstBreakup, formatInrFromPaise } from './gst';
 import { allocateInvoiceNumber } from './invoice-number';
@@ -73,10 +74,6 @@ interface RazorpayWebhookBody {
     };
     order?: { entity?: { id?: string } };
   };
-}
-
-function addDays(base: Date, days: number): Date {
-  return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
 function sellerState(): string {
@@ -493,7 +490,18 @@ export class RecruiterBillingService {
       // Serialize all activations for this company (see method comment). Held
       // until the transaction ends; consistent lock order (order row → company)
       // avoids deadlocks.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:company:${order.companyId}`}))`;
+      //
+      // ⚠ $executeRaw, NOT $queryRaw. pg_advisory_xact_lock() returns `void`,
+      // and Prisma cannot deserialize a void column — $queryRaw throws "Failed
+      // to deserialize column of type 'void'" and takes the whole capture down
+      // with it. This line used $queryRaw from the day it was written and had
+      // never run: PaymentOrder has zero rows, the gateway is unprovisioned, and
+      // every test mocks Prisma, so the first REAL Razorpay capture would have
+      // been the first execution — and it would have failed after the customer
+      // was charged. Found when the admin console copied this line verbatim and
+      // its own first live grant 500'd; verified by running both forms against
+      // the dev database ($queryRaw fails, $executeRaw succeeds).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:company:${order.companyId}`}))`;
 
       await tx.paymentOrder.update({
         where: { id: paymentOrderId },
@@ -528,7 +536,23 @@ export class RecruiterBillingService {
         invoicePeriodEnd = periodEnd;
         await tx.subscription.update({
           where: { id: existing.id },
-          data: { status: 'ACTIVE', currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false },
+          data: {
+            status: 'ACTIVE',
+            currentPeriodEnd: periodEnd,
+            cancelAtPeriodEnd: false,
+            // Money has now been taken against this row, so it stops being a
+            // comp. Clearing the grant provenance is what keeps the admin
+            // console's "staff may not change a subscription that was paid for"
+            // rule true: without this, a company whose comped plan was renewed
+            // by a real payment would keep a non-null grantedAt forever and stay
+            // permanently editable by staff — the exact override the owner ruled
+            // out on 2026-08-15. The comp itself is not erased; the
+            // BILLING_SUBSCRIPTION_GRANTED audit row remains the record that it
+            // happened.
+            grantedAt: null,
+            grantedById: null,
+            grantNote: null,
+          },
         });
         subscriptionId = existing.id;
       } else {
