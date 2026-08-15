@@ -176,6 +176,12 @@ const flags: FlagSeed[] = [
   // When ON the DELETE endpoint rejects with 503 (L3) and the list renders
   // Delete disabled (L2). Seeded OFF so the action is LIVE by default.
   { key: 'killswitch.admin_job_delete', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable admin job deletion (kill)' },
+  // Admin subscription writes (/sadmin/subscriptions → Comp / Change plan /
+  // Extend / Cancel). When ON the POST and PATCH endpoints reject with 503 (L3)
+  // and the console renders those controls disabled (L2); READING the console is
+  // never gated, so staff can still see who is on what while writes are stopped.
+  // Seeded OFF so the actions are LIVE by default.
+  { key: 'killswitch.admin_subscription_write', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable admin subscription changes (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {

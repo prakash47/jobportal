@@ -150,6 +150,37 @@ export const FLAG = {
   // auto-classified critical (Slack + confirm modal) by isCriticalFlag below —
   // no NON_KILLSWITCH_CRITICAL entry needed.
   KILL_ADMIN_JOB_DELETE: 'killswitch.admin_job_delete',
+  // Admin subscription writes (/sadmin/subscriptions → Comp plan / Change plan /
+  // Extend / Cancel). Emergency stop for the money-equivalent actions: when ON,
+  // POST and PATCH /admin/billing/subscriptions reject with 503 (L3) and the
+  // console renders those controls disabled (L2).
+  //
+  // This is the most consequential killswitch in the enum, because with the
+  // Razorpay gateway unprovisioned and `subscription.system.enabled` OFF, this
+  // console is the ONLY writer of Subscription rows in the product — there is no
+  // second path an admin could fall back to, and equally nothing else to stop if
+  // a grant goes wrong. It gates writes only; reading the console is never
+  // gated (see below).
+  //
+  // There is deliberately NO middleware route gate (L1), matching
+  // KILL_ADMIN_JOB_DELETE and MODERATION_REPORTS. The gated thing is an ACTION,
+  // not a route: 404ing /sadmin/subscriptions would take down the only surface
+  // that can see who is on which plan and when it renews, which is exactly the
+  // information staff need most while writes are disabled. Killing the write
+  // must not blind the read.
+  //
+  // Seeded enabled:false, so the admin actions are LIVE by default; flipping it
+  // ON disables them without a redeploy. As a `killswitch.*` key it is
+  // auto-classified critical (Slack + confirm modal) by isCriticalFlag below —
+  // no NON_KILLSWITCH_CRITICAL entry needed, which is the right default for an
+  // action that hands out paid plans for free.
+  //
+  // NOT to be confused with SUBSCRIPTION_SYSTEM below: that one gates whether
+  // RECRUITERS can buy, and is read by two quota services that render
+  // customer-facing "upgrade" CTAs. Reusing it here would tie staff's ability to
+  // comp an account to the storefront being open, which is backwards — comping
+  // matters most precisely while the storefront is shut.
+  KILL_ADMIN_SUBSCRIPTION_WRITE: 'killswitch.admin_subscription_write',
 
   // Moderation
   //
