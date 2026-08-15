@@ -12,6 +12,7 @@ import { prisma, Prisma } from '@jobportal/db';
 import type { CompanyBillingProfile, RecruiterRole } from '@jobportal/db';
 import { EmailService } from '../email/email.service';
 import { StorageService } from '../storage/storage.service';
+import { addDays } from '../common/billing-period';
 import { buildDiff, isDiffEmpty } from '../profile/audit';
 import { computeGstBreakup, formatInrFromPaise } from './gst';
 import { allocateInvoiceNumber } from './invoice-number';
@@ -73,10 +74,6 @@ interface RazorpayWebhookBody {
     };
     order?: { entity?: { id?: string } };
   };
-}
-
-function addDays(base: Date, days: number): Date {
-  return new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
 function sellerState(): string {
