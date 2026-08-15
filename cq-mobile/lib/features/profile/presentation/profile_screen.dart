@@ -10,7 +10,11 @@ import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../../../shared/widgets/theme_toggle_button.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../experience/presentation/experience_section.dart';
+import '../../languages/presentation/languages_section.dart';
+import '../../projects/presentation/projects_section.dart';
 import '../../resume/presentation/resume_section.dart';
+import '../../skills/presentation/skills_section.dart';
 import '../data/profile_overview.dart';
 import '../data/profile_repository.dart';
 
@@ -244,6 +248,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
           // ── Resume ──
           const ResumeCard(),
+          const SizedBox(height: AppSpacing.xl),
+
+          // ── Work experience ──
+          const WorkExperienceSection(),
+          const SizedBox(height: AppSpacing.xl),
+
+          // ── Skills ──
+          const SkillsSection(),
+          const SizedBox(height: AppSpacing.xl),
+
+          // ── Projects ──
+          const ProjectsSection(),
+          const SizedBox(height: AppSpacing.xl),
+
+          // ── Languages ──
+          const LanguagesSection(),
           const SizedBox(height: AppSpacing.xl),
 
           // ── Details ──

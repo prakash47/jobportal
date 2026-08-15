@@ -24,7 +24,7 @@ Future<ResumeView?> pickAndUploadResume(BuildContext context, WidgetRef ref) asy
       ),
     );
 
-  final picked = await FilePicker.platform.pickFiles(
+  final picked = await FilePicker.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['pdf', 'doc', 'docx'],
   );

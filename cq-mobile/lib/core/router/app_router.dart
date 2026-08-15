@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/alerts/presentation/alerts_screen.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/presentation/auth_landing_screen.dart';
+import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/phone_continue_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
@@ -25,6 +26,7 @@ abstract final class AppRoutes {
   static const welcome = '/welcome';
   static const phoneContinue = '/continue/phone';
   static const login = '/login';
+  static const forgotPassword = '/forgot-password';
   static const register = '/register';
   static const onboarding = '/onboarding';
   static const home = '/home';
@@ -51,6 +53,7 @@ abstract final class AppRoutes {
     welcome,
     phoneContinue,
     login,
+    forgotPassword,
     register,
   };
 }
@@ -104,6 +107,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         // The email-first step passes the address via `extra` to prefill it.
         builder: (_, state) =>
             LoginScreen(initialEmail: state.extra is String ? state.extra as String : null),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        builder: (_, state) => ForgotPasswordScreen(
+          initialEmail: state.extra is String ? state.extra as String : null,
+        ),
       ),
       GoRoute(
         path: AppRoutes.register,

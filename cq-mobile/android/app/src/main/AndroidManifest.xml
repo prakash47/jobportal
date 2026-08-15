@@ -30,6 +30,14 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Some budget Android GPUs (Vivo/BBK/Mali, common in India) render a
+             blank first frame under Impeller — the launch screen comes up empty.
+             Fall back to the Skia renderer so the splash and the whole UI paint
+             reliably. Visual output is identical; this only swaps the engine.
+             Remove this line to re-enable Impeller once the device supports it. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

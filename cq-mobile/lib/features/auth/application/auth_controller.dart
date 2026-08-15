@@ -105,6 +105,13 @@ class AuthController extends Notifier<AuthState> {
     state = AuthAuthenticated(user, justRegistered: true);
   }
 
+  /// After a successful password reset the server set fresh session cookies, so
+  /// the user is now signed in — flip to authenticated and the router moves them
+  /// home. [user] comes from the reset-password response.
+  void completePasswordReset(AuthUser user) {
+    state = AuthAuthenticated(user);
+  }
+
   Future<void> logout() async {
     // In demo mode there's no server session to revoke.
     if (!AppConfig.demoMode) {

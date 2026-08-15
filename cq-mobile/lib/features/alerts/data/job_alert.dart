@@ -1,7 +1,6 @@
 /// A saved job alert from `/me/alerts`. The saved query supports keywords,
-/// skills, cities, experience and salary — but skills/cities need a catalogue
-/// API the backend doesn't expose, so the app edits **keywords + experience +
-/// salary** only (any skills/cities set on the website are preserved untouched).
+/// skills, cities, experience and salary — all editable in the app. The full
+/// [query] map is preserved on edit so nothing set elsewhere is dropped.
 class JobAlert {
   const JobAlert({
     required this.id,
@@ -19,12 +18,23 @@ class JobAlert {
   final String frequency;
   final bool isActive;
 
-  /// The full saved query (kept as-is so an edit doesn't drop website-set
-  /// skill/city filters the app can't render).
+  /// The full saved query, kept as-is and merged over on edit.
   final Map<String, dynamic> query;
   final DateTime? lastSentAt;
 
   String get keywords => query['q'] as String? ?? '';
+
+  List<String> get skillSlugs =>
+      ((query['skillSlugs'] as List?) ?? const []).whereType<String>().toList();
+
+  List<String> get citySlugs =>
+      ((query['citySlugs'] as List?) ?? const []).whereType<String>().toList();
+
+  int? get minExperienceMonths => (query['minExperienceMonths'] as num?)?.toInt();
+  int? get maxExperienceMonths => (query['maxExperienceMonths'] as num?)?.toInt();
+
+  /// Minimum salary in paise (1 LPA = 10,000,000 paise), matching the SRP.
+  int? get salaryMinPaise => (query['salaryMin'] as num?)?.toInt();
 
   factory JobAlert.fromJson(Map<String, dynamic> j) {
     return JobAlert(

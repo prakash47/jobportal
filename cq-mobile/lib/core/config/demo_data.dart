@@ -57,6 +57,9 @@ abstract final class DemoData {
           'title': 'Android Engineer',
           'company': {'name': 'Playverse'},
         },
+        'statusHistory': [
+          {'from': 'APPLIED', 'to': 'IN_REVIEW', 'at': _daysAgo(1), 'by': 'RECRUITER'},
+        ],
       },
       {
         'id': 90002,
@@ -67,6 +70,10 @@ abstract final class DemoData {
           'title': 'Backend Engineer (Node.js)',
           'company': {'name': 'Finixo'},
         },
+        'statusHistory': [
+          {'from': 'APPLIED', 'to': 'IN_REVIEW', 'at': _daysAgo(7), 'by': 'RECRUITER'},
+          {'from': 'IN_REVIEW', 'to': 'SHORTLISTED', 'at': _daysAgo(4), 'by': 'RECRUITER'},
+        ],
       },
       {
         'id': 90003,
@@ -77,6 +84,10 @@ abstract final class DemoData {
           'title': 'Data Analyst',
           'company': {'name': 'Kite Retail'},
         },
+        'statusHistory': [
+          {'from': 'APPLIED', 'to': 'IN_REVIEW', 'at': _daysAgo(17), 'by': 'RECRUITER'},
+          {'from': 'IN_REVIEW', 'to': 'REJECTED', 'at': _daysAgo(12), 'by': 'RECRUITER'},
+        ],
       },
     ],
     'total': 3,

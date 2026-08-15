@@ -24,13 +24,28 @@ class ApplicationsRepository {
   Future<ApplicationsPage> list({String status = 'ALL', int page = 1}) async {
     if (AppConfig.useMockData) {
       final all = ApplicationsPage.fromJson(DemoData.applications);
-      if (status == 'ALL') return all;
+      // Counts are independent of the status filter, so derive them from the
+      // full set (the live API returns these directly).
+      final counts = <String, int>{'ALL': all.hits.length};
+      for (final a in all.hits) {
+        counts[a.status] = (counts[a.status] ?? 0) + 1;
+      }
+      if (status == 'ALL') {
+        return ApplicationsPage(
+          hits: all.hits,
+          total: all.hits.length,
+          page: 1,
+          pageSize: 20,
+          counts: counts,
+        );
+      }
       final hits = all.hits.where((a) => a.status == status).toList();
       return ApplicationsPage(
         hits: hits,
         total: hits.length,
         page: 1,
         pageSize: 20,
+        counts: counts,
       );
     }
     try {

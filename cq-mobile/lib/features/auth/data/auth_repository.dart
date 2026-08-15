@@ -10,6 +10,19 @@ class AuthException implements Exception {
   String toString() => message;
 }
 
+/// Timing for the password-reset OTP (durations in seconds, per the contract —
+/// run countdowns off these, never off wall-clock instants).
+class OtpChallenge {
+  const OtpChallenge({required this.resendInSeconds, required this.expiresInSeconds});
+  final int resendInSeconds;
+  final int expiresInSeconds;
+
+  factory OtpChallenge.fromJson(Map<String, dynamic> j) => OtpChallenge(
+    resendInSeconds: (j['resendInSeconds'] as num?)?.toInt() ?? 30,
+    expiresInSeconds: (j['expiresInSeconds'] as num?)?.toInt() ?? 600,
+  );
+}
+
 /// Talks to the Career Queue `/auth/*` endpoints.
 ///
 /// The login session is handled by cookies (see `dio_client.dart`), so these
@@ -57,6 +70,74 @@ class AuthRepository {
     } on DioException catch (e) {
       throw AuthException(
         _messageFor(e, fallback: 'Could not create your account. Please try again.'),
+      );
+    }
+  }
+
+  // ── Password reset (3-step OTP, `/auth/*`, cookie-based) ──
+  // 1) request a code → 2) verify it for a ticket → 3) set a new password. Step
+  // 3 sets fresh session cookies, so the user is signed in on success.
+
+  Future<OtpChallenge> requestPasswordResetOtp(String email) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/auth/forgot-password',
+        data: {'email': email},
+      );
+      return OtpChallenge.fromJson(res.data ?? const {});
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      if (code == 503) {
+        throw const AuthException(
+          'Password reset is temporarily unavailable. Please try again later.',
+        );
+      }
+      throw AuthException(
+        _messageFor(e, fallback: 'Could not send the code. Please try again.'),
+      );
+    }
+  }
+
+  /// Verify the 6-digit code; returns an opaque ticket for the reset step.
+  Future<String> verifyResetOtp({required String email, required String code}) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/auth/verify-reset-otp',
+        data: {'email': email, 'code': code},
+      );
+      final ticket = res.data?['ticket'] as String?;
+      if (ticket == null || ticket.isEmpty) {
+        throw const AuthException('Unexpected response from the server.');
+      }
+      return ticket;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 400) {
+        throw const AuthException('That code is incorrect or has expired.');
+      }
+      throw AuthException(
+        _messageFor(e, fallback: 'Could not verify the code. Please try again.'),
+      );
+    }
+  }
+
+  /// Set the new password. The response sets fresh session cookies (captured by
+  /// the cookie jar), so the returned user is signed in.
+  Future<AuthUser> resetPassword({
+    required String ticket,
+    required String password,
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/auth/reset-password',
+        data: {'ticket': ticket, 'password': password},
+      );
+      return _userFrom(res.data);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 400) {
+        throw const AuthException('That reset session expired. Please start again.');
+      }
+      throw AuthException(
+        _messageFor(e, fallback: 'Could not reset your password. Please try again.'),
       );
     }
   }

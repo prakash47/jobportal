@@ -2,31 +2,27 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-// Brand palette — a bold navy stage so the launch never reads as a blank
-// white frame, with the cyan constellation glowing against it.
+const Color _bg = Color(0xFFF4F8FC);
 const Color _navy = Color(0xFF192349);
-const Color _navyLift = Color(0xFF223163); // lighter centre for depth
-const Color _navyDeep = Color(0xFF0E1430); // deeper edges (vignette)
 const Color _cyan = Color(0xFF24A0DB);
-const Color _cyanBright = Color(0xFF57C1EE);
 
-/// Animated launch screen — the "network" concept, on a bold navy stage.
+/// Animated launch screen — the "network" concept.
 ///
-/// The story: a living **constellation** of cyan nodes drifts across a deep
-/// navy field, connecting and disconnecting with thin lines as they move (a
-/// "network of opportunities"). A soft cyan spotlight blooms in the centre and
-/// the white "Career Queue" logo **grows up into it**. The tagline slides up
-/// last.
+/// The story: a living **constellation** of nodes drifts behind the stage,
+/// connecting and disconnecting with thin lines as they move (a "network of
+/// opportunities"). Out of it the navy "CQ / Career Queue" letters **grow in
+/// from nothing**, then the cyan arrow **shoots in from the left to complete the
+/// logo**. The tagline slides up last.
 ///
-/// Two hard rules keep it correct on every device:
+/// Two hard rules keep it correct:
 ///
-/// 1. **The stage is a solid brand colour from the very first frame.** The
-///    native launch screen is the same navy (see `flutter_native_splash` in
-///    pubspec), so app-open → animation is *one* continuous surface — never a
-///    white blank flash while Flutter boots.
-/// 2. **No widget opacity-from-zero.** Vivo/BBK's Impeller path drops widgets
-///    that fade up via [Opacity]/[FadeTransition]. Everything here fades via
-///    canvas paint-alpha or animates via [Transform] only — both are safe.
+/// 1. **The very first frame is blank** — the network fades up from 0 (drawn on
+///    a canvas, so it's paint-alpha, not a widget opacity layer) and the letters
+///    grow from scale ~0. This matches the native launch screen (just [_bg]), so
+///    launch reads as **one** screen, not two.
+/// 2. **No widget opacity-from-zero** — Vivo/BBK's Impeller path drops widgets
+///    that fade up via [Opacity]/[FadeTransition]. Canvas paint-alpha and
+///    transforms are safe, so that's all we use.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -36,10 +32,15 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
+  // Logical size of the logo lock-up (aspect 2966:1784 → 232 x 139.5).
+  static const double _logoW = 232;
+  static const double _logoH = 139.5;
+
   late final AnimationController _entrance;
   late final AnimationController _drift;
   late final Animation<double> _intro;
-  late final Animation<double> _logo;
+  late final Animation<double> _letters;
+  late final Animation<double> _arrow;
   late final Animation<double> _tagline;
 
   @override
@@ -48,28 +49,32 @@ class _SplashScreenState extends State<SplashScreen>
 
     _entrance = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1600),
+      duration: const Duration(milliseconds: 1500),
     );
-    // The constellation drifts on an endless loop (lower = faster movement).
+    // The network drifts on an endless loop (lower = faster movement).
     _drift = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 11000),
     )..repeat();
 
-    // The network + centre glow fade up over the first part of the entrance.
+    // The network fades up over the first part of the entrance.
     _intro = CurvedAnimation(
       parent: _entrance,
-      curve: const Interval(0.0, 0.55, curve: Curves.easeOutCubic),
+      curve: const Interval(0.0, 0.6, curve: Curves.easeOutCubic),
     );
-    // The logo grows up into the glow (scale + rise, no opacity layer).
-    _logo = CurvedAnimation(
+    // Letters grow up from nothing, so frame 0 is empty (matches native screen).
+    _letters = CurvedAnimation(
       parent: _entrance,
-      curve: const Interval(0.14, 0.72, curve: Curves.easeOutCubic),
+      curve: const Interval(0.05, 0.6, curve: Curves.easeOutCubic),
     );
-    // Tagline slides up from below, last.
+    // Arrow flies in from the left and locks in (easeOutBack overshoots a touch).
+    _arrow = CurvedAnimation(
+      parent: _entrance,
+      curve: const Interval(0.32, 0.95, curve: Curves.easeOutBack),
+    );
     _tagline = CurvedAnimation(
       parent: _entrance,
-      curve: const Interval(0.64, 1.0, curve: Curves.easeOutCubic),
+      curve: const Interval(0.66, 1.0, curve: Curves.easeOutCubic),
     );
 
     _entrance.forward();
@@ -84,28 +89,11 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final logoW = (size.width * 0.60).clamp(200.0, 300.0);
-
     return Scaffold(
-      backgroundColor: _navy,
+      backgroundColor: _bg,
       body: Stack(
         children: [
-          // ── Base: navy field with a soft radial vignette for depth ──
-          const Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment(0, -0.14),
-                  radius: 1.15,
-                  colors: [_navyLift, _navy, _navyDeep],
-                  stops: [0.0, 0.52, 1.0],
-                ),
-              ),
-            ),
-          ),
-
-          // ── Drifting constellation + centre glow (canvas paint-alpha) ──
+          // ── Background: drifting network of connected nodes ──
           Positioned.fill(
             child: RepaintBoundary(
               child: AnimatedBuilder(
@@ -121,35 +109,87 @@ class _SplashScreenState extends State<SplashScreen>
             ),
           ),
 
-          // ── Logo: white lock-up grows up into the glow ──
-          Center(
+          // ── Focus veil: softens the network right behind the logo so it
+          //    stays crisp and readable (a static gradient, faded in). ──
+          Positioned.fill(
             child: AnimatedBuilder(
-              animation: _logo,
-              builder: (_, child) {
-                final v = _logo.value;
-                return Transform.translate(
-                  offset: Offset(0, 24 * (1 - v)),
-                  child: Transform.scale(scale: 0.60 + 0.40 * v, child: child),
-                );
-              },
-              child: Image.asset(
-                'assets/images/cq_logo_white.png',
-                width: logoW,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => Text(
-                  'Career Queue',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: logoW * 0.13,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
+              animation: _intro,
+              builder: (context, _) => DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: const Alignment(0, -0.10),
+                    radius: 0.52,
+                    colors: [
+                      _bg.withAlpha((0.86 * _intro.value * 255).round()),
+                      _bg.withAlpha(0),
+                    ],
+                    stops: const [0.0, 1.0],
                   ),
                 ),
               ),
             ),
           ),
 
-          // ── Tagline: slides up from below (below frame at start) ──
+          // ── Logo: navy letters + wordmark, then the arrow flies in ──
+          Center(
+            child: SizedBox(
+              width: _logoW,
+              height: _logoH,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Letters + wordmark — grow up from nothing.
+                  AnimatedBuilder(
+                    animation: _letters,
+                    builder: (_, child) {
+                      final v = _letters.value;
+                      return Transform.translate(
+                        offset: Offset(0, 26 * (1 - v)),
+                        child: Transform.scale(
+                          scale: 0.001 + 0.999 * v, // never exactly 0
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: Image.asset(
+                      'assets/images/cq_letters_wordmark.png',
+                      width: _logoW,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => Image.asset(
+                        'assets/images/cq_logo.png',
+                        width: _logoW,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const Text(
+                          'Career Queue',
+                          style: TextStyle(
+                            color: _navy,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Arrow — shoots in from the left to complete the logo.
+                  AnimatedBuilder(
+                    animation: _arrow,
+                    builder: (_, child) => Transform.translate(
+                      offset: Offset(-172 * (1 - _arrow.value), 0),
+                      child: child,
+                    ),
+                    child: Image.asset(
+                      'assets/images/cq_arrow_part.png',
+                      width: _logoW,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Tagline: slides up from below (hidden at frame 0) ──
           Positioned(
             left: 0,
             right: 0,
@@ -158,7 +198,7 @@ class _SplashScreenState extends State<SplashScreen>
               child: AnimatedBuilder(
                 animation: _tagline,
                 builder: (_, child) => Transform.translate(
-                  offset: Offset(0, 60 * (1 - _tagline.value)),
+                  offset: Offset(0, 70 * (1 - _tagline.value)),
                   child: child,
                 ),
                 child: const _MadeWithLine(),
@@ -194,10 +234,10 @@ const List<_NetNode> _netNodes = [
   _NetNode(0.86, 0.85, 0.028, 0.026, 1.8, 0.2),
 ];
 
-/// Draws the centre glow + the drifting node-and-line constellation. Everything
-/// is direct canvas paint with per-shape alpha (never a widget opacity layer),
-/// so it fades in and renders reliably on every device. Lines appear/disappear
-/// by distance, so the network feels alive as nodes wander.
+/// Draws the drifting node-and-line constellation. Everything is direct canvas
+/// paint with per-shape alpha (never a widget opacity layer), so it fades in and
+/// renders reliably on every device. Lines appear/disappear by distance, so the
+/// network feels alive as nodes wander.
 class _NetworkPainter extends CustomPainter {
   _NetworkPainter({required this.phase, required this.intro});
 
@@ -208,15 +248,7 @@ class _NetworkPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (intro <= 0) return;
 
-    // Soft cyan spotlight behind the logo — gives the lock-up a premium bloom
-    // and does the "fade-in" heavy lifting so the logo entrance reads as soft.
-    final glowCenter = Offset(size.width / 2, size.height * 0.46);
-    final glow = Paint()
-      ..color = _cyan.withAlpha((0.20 * intro * 255).round())
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 88);
-    canvas.drawCircle(glowCenter, size.shortestSide * 0.36, glow);
-
-    // Current positions of every node (home + drift orbit). [amp] widens the
+    // Current positions of every node (home + drift orbit). [_amp] widens the
     // orbit so movement reads clearly on the phone.
     const amp = 1.7;
     final pts = <Offset>[
@@ -236,25 +268,19 @@ class _NetworkPainter extends CustomPainter {
       for (var j = i + 1; j < pts.length; j++) {
         final d = (pts[i] - pts[j]).distance;
         if (d < threshold) {
-          final a = (1 - d / threshold) * 0.55 * intro;
+          final a = (1 - d / threshold) * 0.45 * intro;
           linePaint.color = _cyan.withAlpha((a * 255).round());
           canvas.drawLine(pts[i], pts[j], linePaint);
         }
       }
     }
 
-    // Nodes: a soft halo, a cyan body, and a bright core so they read as
-    // glowing points of light on the navy field.
-    final halo = Paint()
-      ..color = _cyan.withAlpha((0.18 * intro * 255).round())
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-    final body = Paint()..color = _cyan.withAlpha((0.95 * intro * 255).round());
-    final core = Paint()
-      ..color = _cyanBright.withAlpha((1.0 * intro * 255).round());
+    // Nodes: a soft halo + a solid dot.
+    final halo = Paint()..color = _cyan.withAlpha((0.12 * intro * 255).round());
+    final dot = Paint()..color = _cyan.withAlpha((0.90 * intro * 255).round());
     for (final p in pts) {
-      canvas.drawCircle(p, 9, halo);
-      canvas.drawCircle(p, 3.0, body);
-      canvas.drawCircle(p, 1.3, core);
+      canvas.drawCircle(p, 8, halo);
+      canvas.drawCircle(p, 2.8, dot);
     }
   }
 
@@ -263,7 +289,7 @@ class _NetworkPainter extends CustomPainter {
       old.phase != phase || old.intro != intro;
 }
 
-/// "Made with ♥ in India" — white text, brand-cyan heart (never the common red).
+/// "Made with ❤ in India" — navy text, brand-cyan heart (never the common red).
 class _MadeWithLine extends StatelessWidget {
   const _MadeWithLine();
 
@@ -275,16 +301,16 @@ class _MadeWithLine extends StatelessWidget {
         Text(
           'Made with ',
           style: TextStyle(
-            color: Colors.white,
+            color: _navy,
             fontSize: 13.5,
             fontWeight: FontWeight.w600,
           ),
         ),
-        Icon(Icons.favorite, size: 14, color: _cyanBright),
+        Icon(Icons.favorite, size: 14, color: _cyan),
         Text(
           ' in India',
           style: TextStyle(
-            color: Colors.white,
+            color: _navy,
             fontSize: 13.5,
             fontWeight: FontWeight.w600,
           ),

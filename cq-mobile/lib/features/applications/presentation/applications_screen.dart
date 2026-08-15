@@ -19,16 +19,21 @@ const _statuses = [
   'OFFERED', 'HIRED', 'REJECTED', 'WITHDRAWN',
 ];
 
-String _pretty(String s) {
-  final words = s.toLowerCase().split('_');
-  return words
-      .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
-      .join(' ');
+Color _statusColor(BuildContext context, String status) {
+  final cq = context.cq;
+  return switch (status) {
+    'HIRED' || 'OFFERED' => cq.success,
+    'REJECTED' => cq.danger,
+    'INTERVIEWED' || 'SHORTLISTED' => cq.warning,
+    'IN_REVIEW' => cq.accent,
+    'WITHDRAWN' => cq.fgSubtle,
+    _ => cq.fgMuted,
+  };
 }
 
 /// Applications tab — the seeker's application dashboard (`/me/applications`).
-/// Filter by status, withdraw non-terminal ones. (Per-status counts and the
-/// status-history timeline need a backend addition, so they're omitted for now.)
+/// Filter by status (with live per-status counts), withdraw non-terminal ones,
+/// and tap a card to see its full status timeline.
 class ApplicationsScreen extends ConsumerStatefulWidget {
   const ApplicationsScreen({super.key});
 
@@ -106,21 +111,11 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
     if (confirmed != true) return;
 
     try {
-      final newStatus = await (await _repository()).withdraw(app.id);
+      await (await _repository()).withdraw(app.id);
       if (!mounted) return;
-      final page = _page;
-      if (page != null) {
-        setState(() {
-          _page = ApplicationsPage(
-            hits: page.hits
-                .map((a) => a.id == app.id ? a.copyWith(status: newStatus) : a)
-                .toList(),
-            total: page.total,
-            page: page.page,
-            pageSize: page.pageSize,
-          );
-        });
-      }
+      // Reload so counts + filtered list stay correct after the transition.
+      await _load(page: _currentPage);
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(const SnackBar(content: Text('Application withdrawn')));
@@ -148,6 +143,7 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
           children: [
             _FilterRow(
               current: _status,
+              counts: _page?.counts ?? const {},
               onSelect: (s) => _load(status: s, page: 1),
             ),
             Expanded(child: _body()),
@@ -182,7 +178,11 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
             return _Pager(page: page, onGo: (p) => _load(page: p));
           }
           final a = page.hits[i];
-          return _AppCard(app: a, onWithdraw: () => _withdraw(a));
+          return _AppCard(
+            app: a,
+            onWithdraw: () => _withdraw(a),
+            onTap: () => _showApplicationTimeline(context, a),
+          );
         },
       ),
     );
@@ -190,8 +190,13 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
 }
 
 class _FilterRow extends StatelessWidget {
-  const _FilterRow({required this.current, required this.onSelect});
+  const _FilterRow({
+    required this.current,
+    required this.counts,
+    required this.onSelect,
+  });
   final String current;
+  final Map<String, int> counts;
   final ValueChanged<String> onSelect;
 
   @override
@@ -207,6 +212,8 @@ class _FilterRow extends StatelessWidget {
         itemBuilder: (context, i) {
           final s = _statuses[i];
           final selected = s == current;
+          final count = counts[s];
+          final label = applicationStatusLabel(s);
           return Center(
             child: Material(
               color: selected ? cq.accent : cq.surfaceMuted,
@@ -224,7 +231,7 @@ class _FilterRow extends StatelessWidget {
                     border: Border.all(color: selected ? cq.accent : cq.border),
                   ),
                   child: Text(
-                    s == 'ALL' ? 'All' : _pretty(s),
+                    count != null ? '$label  $count' : label,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: selected ? cq.onAccent : cq.fg,
                       fontWeight: FontWeight.w600,
@@ -241,97 +248,251 @@ class _FilterRow extends StatelessWidget {
 }
 
 class _AppCard extends StatelessWidget {
-  const _AppCard({required this.app, required this.onWithdraw});
+  const _AppCard({
+    required this.app,
+    required this.onWithdraw,
+    required this.onTap,
+  });
   final Application app;
   final VoidCallback onWithdraw;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final cq = context.cq;
     final text = Theme.of(context).textTheme;
+    final fg = _statusColor(context, app.status);
 
-    Color fg;
-    switch (app.status) {
-      case 'OFFERED':
-      case 'HIRED':
-        fg = cq.success;
-      case 'REJECTED':
-        fg = cq.danger;
-      case 'INTERVIEWED':
-      case 'SHORTLISTED':
-        fg = cq.warning;
-      case 'IN_REVIEW':
-        fg = cq.accent;
-      default:
-        fg = cq.fgMuted;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: cq.surfaceMuted,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: cq.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Material(
+      color: cq.surfaceMuted,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: cq.border),
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(app.jobTitle, style: text.titleMedium),
-                    if (app.companyName.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        app.companyName,
-                        style: text.bodyMedium?.copyWith(color: cq.fgMuted),
-                      ),
-                    ],
-                  ],
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(app.jobTitle, style: text.titleMedium),
+                        if (app.companyName.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            app.companyName,
+                            style: text.bodyMedium?.copyWith(color: cq.fgMuted),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: fg.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      border: Border.all(color: fg.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      applicationStatusLabel(app.status),
+                      style: text.labelSmall?.copyWith(color: fg),
+                    ),
+                  ),
+                ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.sm,
-                  vertical: 3,
-                ),
-                decoration: BoxDecoration(
-                  color: fg.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  border: Border.all(color: fg.withValues(alpha: 0.4)),
-                ),
-                child: Text(
-                  _pretty(app.status),
-                  style: text.labelSmall?.copyWith(color: fg),
-                ),
+              const SizedBox(height: AppSpacing.md),
+              _StatusBar(app: app),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                children: [
+                  Text(
+                    'Applied ${_fmtDate(app.appliedAt)}',
+                    style: text.bodySmall?.copyWith(color: cq.fgSubtle),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.timeline_rounded, size: 15, color: cq.fgSubtle),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Timeline',
+                    style: text.labelSmall?.copyWith(color: cq.fgSubtle),
+                  ),
+                  if (!app.isTerminal)
+                    TextButton(
+                      onPressed: onWithdraw,
+                      style: TextButton.styleFrom(
+                        foregroundColor: cq.danger,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                        ),
+                        minimumSize: const Size(0, 34),
+                      ),
+                      child: const Text('Withdraw'),
+                    ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Text(
-                'Applied ${_fmtDate(app.appliedAt)}',
-                style: text.bodySmall?.copyWith(color: cq.fgSubtle),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact segmented progress across the forward stages, filled up to the
+/// furthest stage reached (from the timeline). Colour reflects the outcome.
+class _StatusBar extends StatelessWidget {
+  const _StatusBar({required this.app});
+  final Application app;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    var reached = 0;
+    for (final e in app.timeline) {
+      final idx = applicationForwardStages.indexOf(e.to);
+      if (idx > reached) reached = idx;
+    }
+    final fill = _statusColor(context, app.status);
+    return Row(
+      children: [
+        for (var i = 0; i < applicationForwardStages.length; i++) ...[
+          if (i > 0) const SizedBox(width: 4),
+          Expanded(
+            child: Container(
+              height: 4,
+              decoration: BoxDecoration(
+                color: i <= reached ? fill : cq.border,
+                borderRadius: BorderRadius.circular(2),
               ),
-              const Spacer(),
-              if (!app.isTerminal)
-                TextButton(
-                  onPressed: onWithdraw,
-                  style: TextButton.styleFrom(
-                    foregroundColor: cq.danger,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                    ),
-                    minimumSize: const Size(0, 34),
-                  ),
-                  child: const Text('Withdraw'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+Future<void> _showApplicationTimeline(BuildContext context, Application app) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+    ),
+    builder: (_) => _TimelineSheet(app: app),
+  );
+}
+
+class _TimelineSheet extends StatelessWidget {
+  const _TimelineSheet({required this.app});
+  final Application app;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    final text = Theme.of(context).textTheme;
+    final events = app.timeline;
+    return Padding(
+      padding: EdgeInsets.only(
+        left: AppSpacing.xl2,
+        right: AppSpacing.xl2,
+        top: AppSpacing.lg,
+        bottom: MediaQuery.of(context).viewPadding.bottom + AppSpacing.xl2,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+                decoration: BoxDecoration(
+                  color: cq.border,
+                  borderRadius: BorderRadius.circular(2),
                 ),
+              ),
+            ),
+            Text(app.jobTitle, style: text.titleLarge),
+            if (app.companyName.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(app.companyName, style: text.bodyMedium?.copyWith(color: cq.fgMuted)),
             ],
+            const SizedBox(height: AppSpacing.xl),
+            for (var i = 0; i < events.length; i++)
+              _TimelineRow(event: events[i], isLast: i == events.length - 1),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TimelineRow extends StatelessWidget {
+  const _TimelineRow({required this.event, required this.isLast});
+  final StatusEvent event;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    final text = Theme.of(context).textTheme;
+    final color = _statusColor(context, event.to);
+    final by = switch (event.by) {
+      'RECRUITER' => ' · by recruiter',
+      'CANDIDATE' => ' · by you',
+      _ => '',
+    };
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              if (!isLast)
+                Expanded(child: Container(width: 2, color: cq.border)),
+            ],
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    applicationStatusLabel(event.to),
+                    style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${_fmtDate(event.at)}$by',
+                    style: text.bodySmall?.copyWith(color: cq.fgMuted),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
