@@ -323,6 +323,14 @@ const PROFILE_AUDIT_ACTION_LABEL: Record<ProfileAuditAction, string> = {
   BILLING_ORDER_CREATED: 'Created a payment order',
   BILLING_SUBSCRIPTION_ACTIVATED: 'Activated a subscription',
   BILLING_PAYMENT_FAILED: 'Payment failed',
+  // Staff actions on /sadmin/subscriptions. Worded to distinguish them from the
+  // purchase-side rows above, which are attributed to the RECRUITER: these four
+  // are attributed to the acting ADMIN, so "Comped" and "Cancelled" read as
+  // something staff did to a company rather than something the company did.
+  BILLING_SUBSCRIPTION_GRANTED: 'Comped a subscription',
+  BILLING_SUBSCRIPTION_PLAN_CHANGED: 'Changed a comped subscription’s plan',
+  BILLING_SUBSCRIPTION_EXTENDED: 'Extended a comped subscription',
+  BILLING_SUBSCRIPTION_CANCELLED: 'Cancelled a comped subscription',
   SUPPORT_TICKET_STATUS_CHANGED: 'Changed a support ticket status',
   OTP_CODE_REVEALED: 'Revealed a signup OTP',
   CONTENT_REPORT_ACTIONED: 'Upheld a content report',
