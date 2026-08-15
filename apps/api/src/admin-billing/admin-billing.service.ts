@@ -167,63 +167,106 @@ export class AdminBillingService {
    * override, and adding one would need the invoice/credit-note story that
    * InvoiceStatus.REFUNDED currently has no writer for.
    *
-   * Every branch mutates the EXISTING row in place. None of them creates a
-   * second subscription, so — unlike the purchase path's cancel-and-recreate —
-   * this service cannot produce two live rows for one company even if the
-   * advisory lock were somehow bypassed.
+   * Every branch mutates the EXISTING row in place and none creates a row, so
+   * this method cannot by itself put two live subscriptions on one company.
+   * That is a statement about row COUNT and not about entitlement STATE: the
+   * purchase path's upgrade branch (recruiter-billing.service.ts) does cancel a
+   * row and create another, and it selects the row to cancel without filtering
+   * on `grantedAt` — so a capture landing on a company that holds a comp can
+   * cancel the comp and create a paid row beside it. That is precisely what the
+   * shared advisory-lock key exists to serialise, and it is why every guard
+   * below runs INSIDE the lock. Latent today: the gateway is unprovisioned and
+   * `subscription.system.enabled` is OFF, so no capture can occur.
+   *
+   * ⚠ READ-MODIFY-WRITE DISCIPLINE. The row is read TWICE: a minimal
+   * pre-transaction read that exists only to 404 an unknown id and to learn the
+   * companyId the lock key is built from, and then a full re-read INSIDE the
+   * transaction, after the lock, from which every guard and every computed date
+   * is derived. The pre-lock snapshot is deliberately never used for a decision.
+   *
+   * Doing it the obvious way — read once up front, then lock and write — was the
+   * shape this method originally shipped in, and it is worse than no lock at
+   * all: the lock does not narrow the window, it WIDENS it. Two admins whose
+   * reads both land before either transaction opens are then serialised such
+   * that the second waits for the first to commit and applies its stale
+   * computation on top, making the lost update near-deterministic under
+   * contention rather than a knife-edge race.
    */
   async update(adminUserId: number, subscriptionId: number, input: UpdateSubscriptionInput) {
     await this.assertWritesEnabled();
     const now = new Date();
 
-    const existing = await prisma.subscription.findUnique({
+    // Pre-transaction read: ONLY to 404 an unknown id without taking a lock, and
+    // to learn which company's lock to take. Deliberately selects nothing a
+    // decision is made on — every guard re-reads inside the lock below.
+    const target = await prisma.subscription.findUnique({
       where: { id: subscriptionId },
-      select: {
-        id: true,
-        companyId: true,
-        planId: true,
-        status: true,
-        currentPeriodEnd: true,
-        grantedAt: true,
-        plan: { select: { slug: true } },
-      },
+      select: { id: true, companyId: true },
     });
-    if (!existing) throw new NotFoundException('Subscription not found');
-    if (existing.grantedAt === null) {
-      throw new ConflictException(
-        'This subscription was paid for through the payment gateway and cannot be changed here',
-      );
-    }
+    if (!target) throw new NotFoundException('Subscription not found');
     // Defensive: a grant always sets companyId, so this is unreachable today.
-    // Asserted rather than assumed because the advisory lock below is keyed on
-    // it, and a null would silently take a lock on the string "null" — i.e. no
-    // mutual exclusion at all, which is exactly the failure this service exists
-    // to prevent.
-    if (existing.companyId === null) {
+    // Asserted rather than assumed because the advisory lock is keyed on it, and
+    // a null would silently take a lock on the string "null" — i.e. no mutual
+    // exclusion at all, which is exactly the failure this service exists to
+    // prevent.
+    if (target.companyId === null) {
       throw new ConflictException('This subscription is not company-scoped');
     }
-    if (input.action !== 'CANCEL' && !isLive(existing.status)) {
-      throw new ConflictException(
-        `This subscription is ${existing.status.toLowerCase()} — comp a new one instead`,
-      );
-    }
 
-    // A plan lookup must happen BEFORE the transaction opens so a bad planId
-    // 404s without having taken the company lock.
+    // The plan lookup happens BEFORE the transaction so a bad planId 404s
+    // without having taken the company lock. It reads SubscriptionPlan, which
+    // this lock does not protect and no billing path mutates, so there is
+    // nothing to re-read.
     const nextPlan =
       input.action === 'CHANGE_PLAN' ? await this.loadGrantablePlan(input.planId) : null;
 
-    // Idempotent no-op, matching AdminSupportService.updateStatus: re-submitting
-    // the plan a subscription is already on writes no audit row, because nothing
-    // changed and a "changed plan from Growth to Growth" line is noise in the
-    // one record that has to stay readable.
-    if (nextPlan && nextPlan.id === existing.planId) return this.detail(subscriptionId);
-    if (input.action === 'CANCEL' && !isLive(existing.status)) return this.detail(subscriptionId);
-
-    const companyId = existing.companyId;
-    await prisma.$transaction(async (tx) => {
+    const companyId = target.companyId;
+    const outcome = await prisma.$transaction(async (tx) => {
       // $executeRaw for the void-return reason documented on the grant path.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:company:${companyId}`}))`;
+
+      // THE re-read. Everything from here down uses `existing`, which was loaded
+      // under the lock — so a concurrent CANCEL or EXTEND that committed while
+      // this request was queued is visible, and cannot be silently overwritten.
+      const existing = await tx.subscription.findUnique({
+        where: { id: subscriptionId },
+        select: {
+          id: true,
+          companyId: true,
+          planId: true,
+          status: true,
+          currentPeriodEnd: true,
+          grantedAt: true,
+          plan: { select: { slug: true } },
+        },
+      });
+      // Deleted between the two reads. Nothing deletes subscriptions today
+      // (there is no delete path at all), but the re-read makes the check free.
+      if (!existing) throw new NotFoundException('Subscription not found');
+      // The company must still be the one whose lock is held. If it moved, the
+      // lock protects the wrong key and this request has no mutual exclusion —
+      // refuse rather than write unserialised.
+      if (existing.companyId !== companyId) {
+        throw new ConflictException('This subscription moved to another company — retry');
+      }
+      // The no-override rule, re-checked under the lock so a capture that
+      // converted this row cannot be raced.
+      if (existing.grantedAt === null) {
+        throw new ConflictException(
+          'This subscription was paid for through the payment gateway and cannot be changed here',
+        );
+      }
+      if (input.action !== 'CANCEL' && !isLive(existing.status)) {
+        throw new ConflictException(
+          `This subscription is ${existing.status.toLowerCase()} — comp a new one instead`,
+        );
+      }
+
+      // Idempotent no-ops, matching AdminSupportService.updateStatus: no state
+      // change, no audit row. Evaluated under the lock too — re-submitting the
+      // plan a row was JUST moved to must be a no-op, not an overwrite.
+      if (nextPlan && nextPlan.id === existing.planId) return 'noop' as const;
+      if (input.action === 'CANCEL' && !isLive(existing.status)) return 'noop' as const;
 
       if (input.action === 'CHANGE_PLAN' && nextPlan) {
         // Repoints the plan and leaves the period alone. There is no proration
@@ -254,9 +297,22 @@ export class AdminBillingService {
         // ever writes EXPIRED), so extending from its stored end would spend the
         // grant on time that has already passed and could leave it still expired.
         const periodEnd = addDays(extendFrom(existing.currentPeriodEnd, now), input.days);
+        // Writes ONLY the date. `status` is deliberately not set here: the
+        // isLive guard above has already established the row is ACTIVE or
+        // TRIALING, so writing 'ACTIVE' could only ever do two things — convert
+        // a TRIALING row to ACTIVE, which nobody asked for, or resurrect a
+        // subscription that was cancelled between the read and the write. The
+        // re-read under the lock closes that second window, and not writing the
+        // column removes the mechanism entirely.
+        //
+        // `cancelAtPeriodEnd` is left alone for a similar reason: it records the
+        // recruiter's own "do not renew me" wish, and extending the period they
+        // have is not consent to reinstate renewal. This is a deliberate
+        // divergence from the purchase path, which does clear it — there, the
+        // recruiter has just paid again, which IS that consent.
         await tx.subscription.update({
           where: { id: subscriptionId },
-          data: { status: 'ACTIVE', currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false },
+          data: { currentPeriodEnd: periodEnd },
         });
         await tx.profileAuditLog.create({
           data: {
@@ -275,13 +331,30 @@ export class AdminBillingService {
           },
         });
       } else {
-        // CANCEL. Status alone ends the entitlement — resolveRecruiterTier
-        // requires status IN (ACTIVE, TRIALING) — so currentPeriodEnd is left
-        // untouched as the record of what was granted. Truncating it would
-        // destroy the only evidence of the period the company actually had.
+        // CANCEL ends the entitlement immediately and truncates the period to
+        // match.
+        //
+        // `status: 'CANCELLED'` alone would be enough for entitlement —
+        // resolveRecruiterTier requires status IN (ACTIVE, TRIALING) — and an
+        // earlier version stopped there, on the reasoning that currentPeriodEnd
+        // was the record of what had been granted. That was wrong, because the
+        // column is not private to this console: the RECRUITER's own billing
+        // card renders "Ended on {currentPeriodEnd}"
+        // (apps/recruiter/components/billing/SubscriptionStatusCard.tsx), so
+        // leaving a future date there tells the company their access ended on a
+        // day that has not happened yet.
+        //
+        // The record is not lost — it moves to where records belong. The audit
+        // diff below carries the period the cancellation cut short, which is
+        // durable, attributed and outlives the row.
         await tx.subscription.update({
           where: { id: subscriptionId },
-          data: { status: 'CANCELLED', cancelledAt: now, cancelReason: input.reason },
+          data: {
+            status: 'CANCELLED',
+            cancelledAt: now,
+            cancelReason: input.reason,
+            currentPeriodEnd: now,
+          },
         });
         await tx.profileAuditLog.create({
           data: {
@@ -292,16 +365,29 @@ export class AdminBillingService {
               companyId,
               status: { before: existing.status, after: 'CANCELLED' },
               planSlug: existing.plan.slug,
+              // The period the cancellation cut short. This is the durable
+              // record of what the company had been granted, now that the row's
+              // own currentPeriodEnd is truncated to the cancellation instant.
+              currentPeriodEnd: {
+                before: existing.currentPeriodEnd.toISOString(),
+                after: now.toISOString(),
+              },
               reason: input.reason,
             } as unknown as Prisma.InputJsonValue,
           },
         });
       }
+      return 'written' as const;
     });
 
-    this.logger.warn(
-      `admin=${adminUserId} ${input.action} on granted subscription=${subscriptionId} (company=${companyId})`,
-    );
+    // detail() is called AFTER the transaction commits, never inside it — a read
+    // through the global client inside a transaction callback would run on a
+    // different connection and could not see the uncommitted write.
+    if (outcome === 'written') {
+      this.logger.warn(
+        `admin=${adminUserId} ${input.action} on granted subscription=${subscriptionId} (company=${companyId})`,
+      );
+    }
     return this.detail(subscriptionId);
   }
 

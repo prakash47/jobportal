@@ -73,8 +73,20 @@ describe('AdminBillingService', () => {
   // --- the killswitch (L3) -------------------------------------------------
 
   describe('killswitch.admin_subscription_write', () => {
+    // ⚠ These mocks are keyed on the FLAG KEY, not a blanket true/false.
+    //
+    // The first version of these tests did `flag.mockResolvedValue(true)`, which
+    // answers true for every key — so they passed identically with the emergency
+    // stop wired to the wrong flag, or to a typo'd string that exists nowhere.
+    // A killswitch test that cannot tell which switch it is testing is the same
+    // class of vacuous test this repo has shipped twice before.
+    const KILL = 'killswitch.admin_subscription_write';
+    function killswitch(on: boolean) {
+      flag.mockImplementation(async (key: string) => (key === KILL ? on : false));
+    }
+
     it('503s the grant and writes nothing when ON', async () => {
-      flag.mockResolvedValue(true);
+      killswitch(true);
       await expect(service.grant(ADMIN, grantInput)).rejects.toBeInstanceOf(
         ServiceUnavailableException,
       );
@@ -84,7 +96,7 @@ describe('AdminBillingService', () => {
     });
 
     it('503s an update and writes nothing when ON', async () => {
-      flag.mockResolvedValue(true);
+      killswitch(true);
       await expect(
         service.update(ADMIN, 900, { action: 'CANCEL', reason: 'r' }),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
@@ -92,12 +104,27 @@ describe('AdminBillingService', () => {
       expect(m.profileAuditLog.create).not.toHaveBeenCalled();
     });
 
+    it('consults exactly the admin_subscription_write key', async () => {
+      killswitch(false);
+      await service.grant(ADMIN, grantInput);
+      expect(flag.mock.calls.map((c) => c[0])).toContain(KILL);
+    });
+
+    // Wiring the guard to any OTHER key must not stop the write. Simulated by
+    // turning a different killswitch on and asserting the grant still proceeds —
+    // which fails if the service reads the wrong key.
+    it('is not gated by a different killswitch', async () => {
+      flag.mockImplementation(async (key: string) => key === 'killswitch.admin_job_delete');
+      await service.grant(ADMIN, grantInput);
+      expect(m.subscription.create).toHaveBeenCalled();
+    });
+
     // Polarity guard. A killswitch is seeded OFF and means "kill it when ON" —
     // the OPPOSITE of a feature toggle like moderation.reports.enabled, which
     // throws on !enabled. Copying that one verbatim would disable comping for
     // everyone, silently. This pins the direction.
     it('permits the write when the flag is OFF', async () => {
-      flag.mockResolvedValue(false);
+      killswitch(false);
       await service.grant(ADMIN, grantInput);
       expect(m.subscription.create).toHaveBeenCalled();
     });
@@ -132,8 +159,16 @@ describe('AdminBillingService', () => {
     it('takes the same per-company advisory lock the purchase path takes', async () => {
       await service.grant(ADMIN, grantInput);
       expect(m.$executeRaw).toHaveBeenCalled();
-      const values = m.$executeRaw.mock.calls[0]?.slice(1);
+      const call = m.$executeRaw.mock.calls[0];
+      const values = call?.slice(1);
       expect(values).toContain('billing:company:7');
+      // The SQL half of the contract too. The interpolated value alone does not
+      // pin the lock: the same string handed to a different function, or to no
+      // lock at all, would satisfy a value-only assertion while silently
+      // removing the mutual exclusion with activatePaidOrder.
+      const sql = (call?.[0] as unknown as string[]).join('?');
+      expect(sql).toContain('pg_advisory_xact_lock');
+      expect(sql).toContain('hashtext');
     });
 
     it('refuses to stack a second live subscription on one company', async () => {
@@ -233,13 +268,26 @@ describe('AdminBillingService', () => {
       plan: { slug: 'recruiter-growth-monthly' },
     };
 
-    function existing(over: Record<string, unknown> = {}) {
+    /**
+     * update() reads the row TWICE and the distinction is the point: a minimal
+     * pre-transaction read that only yields the lock key, then a full re-read
+     * INSIDE the advisory lock from which every guard and every date is derived.
+     *
+     * `inLock` lets a test make the second read differ from the first — i.e.
+     * simulate another admin committing while this request was queued on the
+     * lock. That is the only way to prove the guards consume the fresh row.
+     */
+    function existing(over: Record<string, unknown> = {}, inLock?: Record<string, unknown>) {
       m.subscription.findUnique.mockReset();
-      m.subscription.findUnique.mockResolvedValueOnce({ ...granted, ...over });
+      // 1. pre-transaction: id + companyId only
+      m.subscription.findUnique.mockResolvedValueOnce({ id: 900, companyId: 7 });
+      // 2. inside the lock: the row every decision is made from
+      m.subscription.findUnique.mockResolvedValueOnce({ ...granted, ...over, ...(inLock ?? {}) });
+      // 3+. detail() after commit
       m.subscription.findUnique.mockResolvedValue(DETAIL_ROW);
     }
 
-    it('404s an unknown subscription', async () => {
+    it('404s an unknown subscription before taking any lock', async () => {
       m.subscription.findUnique.mockReset();
       m.subscription.findUnique.mockResolvedValue(null);
       await expect(
@@ -267,6 +315,12 @@ describe('AdminBillingService', () => {
       const data = m.subscription.update.mock.calls[0]?.[0].data;
       const expected = granted.currentPeriodEnd.getTime() + 30 * 24 * 3600 * 1000;
       expect(data.currentPeriodEnd.getTime()).toBe(expected);
+      // EXTEND writes ONLY the date. Writing status:'ACTIVE' was the mechanism
+      // that let a stale snapshot resurrect a cancelled subscription; not
+      // writing the column removes it entirely. cancelAtPeriodEnd is the
+      // recruiter's own do-not-renew wish and is likewise left alone.
+      expect(data.status).toBeUndefined();
+      expect(data.cancelAtPeriodEnd).toBeUndefined();
     });
 
     // Nothing in this product writes SubscriptionStatus.EXPIRED, so a lapsed
@@ -298,14 +352,25 @@ describe('AdminBillingService', () => {
 
     // Status alone ends the entitlement (resolveRecruiterTier requires ACTIVE or
     // TRIALING), so the period is left as the record of what was granted.
-    it('cancels by status and preserves the granted period', async () => {
+    it('cancels by status AND truncates the period to the cancellation instant', async () => {
       existing();
       await service.update(ADMIN, 900, { action: 'CANCEL', reason: 'spam' });
       const data = m.subscription.update.mock.calls[0]?.[0].data;
       expect(data.status).toBe('CANCELLED');
       expect(data.cancelReason).toBe('spam');
       expect(data.cancelledAt).toBeInstanceOf(Date);
-      expect(data.currentPeriodEnd).toBeUndefined();
+      // The recruiter's own billing card renders "Ended on {currentPeriodEnd}",
+      // so leaving a future date there would tell the company their access ended
+      // on a day that has not happened yet.
+      expect(data.currentPeriodEnd).toBeInstanceOf(Date);
+      expect(data.currentPeriodEnd.getTime()).toBeLessThan(granted.currentPeriodEnd.getTime());
+    });
+
+    it('records the cut-short period in the audit diff, not on the row', async () => {
+      existing();
+      await service.update(ADMIN, 900, { action: 'CANCEL', reason: 'spam' });
+      const diff = m.profileAuditLog.create.mock.calls[0]?.[0].data.diff;
+      expect(diff.currentPeriodEnd.before).toBe(granted.currentPeriodEnd.toISOString());
     });
 
     it('refuses to change or extend a terminal subscription', async () => {
@@ -333,6 +398,69 @@ describe('AdminBillingService', () => {
       existing();
       await service.update(ADMIN, 900, { action: 'CANCEL', reason: 'r' });
       expect(m.$executeRaw.mock.calls[0]?.slice(1)).toContain('billing:company:7');
+    });
+
+    // --- read-modify-write under the lock ----------------------------------
+    //
+    // update() reads the row twice: once before the transaction (only to 404 and
+    // to learn the lock key) and again INSIDE the lock, from which every guard
+    // and every date is computed. These four tests make the second read return
+    // something DIFFERENT from the first — i.e. another admin committed while
+    // this request was queued on the lock — and assert the fresh row wins.
+    //
+    // The original implementation read once up front and computed everything
+    // from that snapshot. It passed every other test in this file, because they
+    // all feed the same row to both reads.
+
+    it('re-reads the row inside the lock rather than trusting the pre-lock read', async () => {
+      existing();
+      await service.update(ADMIN, 900, { action: 'CANCEL', reason: 'r' });
+      // Two reads before detail(): the minimal pre-read and the in-lock re-read.
+      const selects = m.subscription.findUnique.mock.calls.map((c) => c[0].select);
+      expect(selects[0]).toEqual({ id: true, companyId: true });
+      expect(selects[1]).toHaveProperty('grantedAt', true);
+      expect(selects[1]).toHaveProperty('currentPeriodEnd', true);
+    });
+
+    it('refuses EXTEND when the row was CANCELLED while this request waited', async () => {
+      existing({}, { status: 'CANCELLED' });
+      await expect(
+        service.update(ADMIN, 900, { action: 'EXTEND', days: 30, reason: 'r' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      // The resurrection this guards: a stale snapshot would have written
+      // currentPeriodEnd (and, before the fix, status:'ACTIVE') straight over a
+      // cancellation that had already committed.
+      expect(m.subscription.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses a mutation when the row became gateway-paid while this request waited', async () => {
+      existing({}, { grantedAt: null });
+      await expect(
+        service.update(ADMIN, 900, { action: 'CANCEL', reason: 'r' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(m.subscription.update).not.toHaveBeenCalled();
+    });
+
+    it('extends from the value read INSIDE the lock, not the pre-lock snapshot', async () => {
+      // Another admin extended by 10 days while this request was queued.
+      const fresher = new Date(granted.currentPeriodEnd.getTime() + 10 * 24 * 3600 * 1000);
+      existing({}, { currentPeriodEnd: fresher });
+      await service.update(ADMIN, 900, { action: 'EXTEND', days: 30, reason: 'r' });
+      const data = m.subscription.update.mock.calls[0]?.[0].data;
+      // Must be fresher + 30d. Computing from the stale snapshot would silently
+      // swallow the other admin's 10 days — a lost update with two audit rows
+      // each claiming their days were added.
+      expect(data.currentPeriodEnd.getTime()).toBe(fresher.getTime() + 30 * 24 * 3600 * 1000);
+    });
+
+    it('refuses if the subscription changed company between the two reads', async () => {
+      existing({}, { companyId: 999 });
+      await expect(
+        service.update(ADMIN, 900, { action: 'CANCEL', reason: 'r' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      // The lock was taken on company 7; a row now owned by 999 is not protected
+      // by it, so writing would be writing unserialised.
+      expect(m.subscription.update).not.toHaveBeenCalled();
     });
 
     it.each([

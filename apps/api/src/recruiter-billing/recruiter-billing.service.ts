@@ -536,7 +536,23 @@ export class RecruiterBillingService {
         invoicePeriodEnd = periodEnd;
         await tx.subscription.update({
           where: { id: existing.id },
-          data: { status: 'ACTIVE', currentPeriodEnd: periodEnd, cancelAtPeriodEnd: false },
+          data: {
+            status: 'ACTIVE',
+            currentPeriodEnd: periodEnd,
+            cancelAtPeriodEnd: false,
+            // Money has now been taken against this row, so it stops being a
+            // comp. Clearing the grant provenance is what keeps the admin
+            // console's "staff may not change a subscription that was paid for"
+            // rule true: without this, a company whose comped plan was renewed
+            // by a real payment would keep a non-null grantedAt forever and stay
+            // permanently editable by staff — the exact override the owner ruled
+            // out on 2026-08-15. The comp itself is not erased; the
+            // BILLING_SUBSCRIPTION_GRANTED audit row remains the record that it
+            // happened.
+            grantedAt: null,
+            grantedById: null,
+            grantNote: null,
+          },
         });
         subscriptionId = existing.id;
       } else {

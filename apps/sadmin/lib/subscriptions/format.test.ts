@@ -3,12 +3,15 @@ import {
   DEFAULT_SUBSCRIPTION_TAB,
   SUBSCRIPTION_STATE_LABEL,
   SUBSCRIPTION_TABS,
-  daysUntil,
+  daysRemaining,
+  daysSince,
   deriveSubscriptionState,
   formatInrFromPaise,
   isAdminGranted,
   parseSubscriptionTab,
-  renewalLabel,
+  formatSubscriptionsSummary,
+  periodLabel,
+  pluralDays,
   subscriptionDetailHref,
   subscriptionsHref,
 } from './format';
@@ -142,34 +145,101 @@ describe('formatInrFromPaise', () => {
   });
 });
 
-describe('daysUntil', () => {
+describe('daysRemaining', () => {
   it('counts whole days remaining', () => {
-    expect(daysUntil(new Date('2026-08-25T12:00:00.000Z'), NOW)).toBe(10);
+    expect(daysRemaining(new Date('2026-08-25T12:00:00.000Z'), NOW)).toBe(10);
   });
 
-  // floor, not ceil: a period ending in 20 hours has 0 whole days left, and ceil
-  // would round it up to "1 day" — the same off-by-one fixed on the recruiter
-  // job detail page.
-  it('floors a partial day rather than rounding it up', () => {
-    expect(daysUntil(new Date('2026-08-16T08:00:00.000Z'), NOW)).toBe(0);
+  // Math.ceil, copied from apps/recruiter's billing card, which shows the SAME
+  // number to the company whose plan this is. An earlier version floored here,
+  // so a plan with 30 hours left read "1 day" on one surface and "1 day" on the
+  // other only by luck - at 20 hours they disagreed outright.
+  it('rounds a partial day UP, matching the recruiter card', () => {
+    expect(daysRemaining(new Date('2026-08-16T08:00:00.000Z'), NOW)).toBe(1);
+    expect(daysRemaining(new Date('2026-08-16T18:00:00.000Z'), NOW)).toBe(2);
   });
 
-  it('goes negative once the period has passed', () => {
-    expect(daysUntil(PAST, NOW)).toBe(-31);
+  it('never goes negative once the period has passed', () => {
+    expect(daysRemaining(PAST, NOW)).toBe(0);
+    expect(daysRemaining(new Date(NOW.getTime()), NOW)).toBe(0);
   });
 
-  it('never produces -0 for a just-expired period', () => {
-    expect(Object.is(daysUntil(new Date(NOW.getTime()), NOW), -0)).toBe(false);
+  it('never produces -0', () => {
+    expect(Object.is(daysRemaining(new Date(NOW.getTime()), NOW), -0)).toBe(false);
   });
 });
 
-describe('renewalLabel', () => {
-  // A single "Renews <date>" column on every row would tell staff that a plan
-  // which stopped granting access months ago is about to renew — which, with no
-  // billing cron in this product, it never will.
-  it('only says Renews for a live subscription', () => {
-    expect(renewalLabel('ACTIVE')).toBe('Renews');
-    expect(renewalLabel('LAPSED')).toBe('Ended');
-    expect(renewalLabel('CANCELLED')).toBe('Cancelled');
+describe('daysSince', () => {
+  it('counts whole elapsed days', () => {
+    expect(daysSince(PAST, NOW)).toBe(31);
+  });
+
+  // Truncates rather than flooring the negative delta. Math.floor rounded AWAY
+  // from zero here, so a period that ended one millisecond ago rendered "Ended 1
+  // days ago" and the display jumped from "Ends today" to "Ended 1 days ago"
+  // across a one-millisecond boundary.
+  it('is 0 for a period that has only just ended', () => {
+    expect(daysSince(new Date(NOW.getTime() - 1), NOW)).toBe(0);
+    expect(daysSince(new Date(NOW.getTime() - 23 * 3600 * 1000), NOW)).toBe(0);
+  });
+
+  it('turns over only on a whole day', () => {
+    expect(daysSince(new Date(NOW.getTime() - 25 * 3600 * 1000), NOW)).toBe(1);
+    expect(daysSince(new Date(NOW.getTime() - 30 * 3600 * 1000), NOW)).toBe(1);
+  });
+
+  it('is 0 for a period still in the future', () => {
+    expect(daysSince(FUTURE, NOW)).toBe(0);
+  });
+});
+
+describe('pluralDays', () => {
+  it('uses the singular for exactly one day', () => {
+    expect(pluralDays(1)).toBe('1 day');
+  });
+
+  it('uses the plural otherwise', () => {
+    expect(pluralDays(0)).toBe('0 days');
+    expect(pluralDays(2)).toBe('2 days');
+  });
+});
+
+describe('formatSubscriptionsSummary', () => {
+  it('pluralises the noun', () => {
+    expect(formatSubscriptionsSummary(1, 'ALL')).toContain('1 subscription.');
+    expect(formatSubscriptionsSummary(2, 'ALL')).toContain('2 subscriptions.');
+  });
+
+  it('names the active tab so the count is not read as platform-wide', () => {
+    expect(formatSubscriptionsSummary(3, 'CANCELLED')).toBe('3 cancelled subscriptions.');
+    expect(formatSubscriptionsSummary(3, 'ALL')).toBe('3 subscriptions.');
+  });
+
+  it('echoes the search term in the empty state', () => {
+    expect(formatSubscriptionsSummary(0, 'ACTIVE', 'acme')).toContain('acme');
+    expect(formatSubscriptionsSummary(0, 'ACTIVE')).toBe('No active subscriptions yet.');
+  });
+
+  it('groups large counts for Indian readers', () => {
+    expect(formatSubscriptionsSummary(100000, 'ALL')).toContain('1,00,000');
+  });
+});
+
+describe('periodLabel', () => {
+  // Never "Renews". Nothing in this product auto-renews: no billing cron, no
+  // queue, and the purchase flow uses the Razorpay ORDERS api (a one-off charge)
+  // rather than the Subscriptions api, which is why razorpaySubscriptionId is
+  // null on every row. A column headed "Renews 14 Sept" would promise staff that
+  // money arrives on a date when nothing is scheduled to happen.
+  it('says Ends for a live subscription, never Renews', () => {
+    expect(periodLabel('ACTIVE')).toBe('Ends');
+    expect(periodLabel('LAPSED')).toBe('Ended');
+    expect(periodLabel('CANCELLED')).toBe('Cancelled');
+  });
+
+  it('never uses the word Renews for any state', () => {
+    for (const state of ['ACTIVE', 'LAPSED', 'CANCELLED'] as const) {
+      expect(periodLabel(state)).not.toMatch(/renew/i);
+    }
   });
 });

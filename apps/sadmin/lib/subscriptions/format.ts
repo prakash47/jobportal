@@ -197,26 +197,51 @@ export function formatInrFromPaise(paise: number): string {
   }).format(rupees);
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Whole days from `now` until `end` — negative once the period has passed.
+ * Days left before the period ends, never negative.
  *
- * Math.floor, not Math.ceil: a period ending in 20 hours has 0 whole days left,
- * and ceil would round that up to "1 day" — the same off-by-one, and the same
- * `-0` on a just-expired row, that was fixed on the recruiter job detail page.
+ * ⚠ `Math.ceil`, and that is NOT a free choice: it is copied from the
+ * recruiter's own billing card
+ * (apps/recruiter/app/(authed)/billing/page.tsx — `Math.max(0, Math.ceil(...))`),
+ * which is a shipped surface showing the SAME number to the company whose plan
+ * this is. An earlier version of this file used `Math.floor`, which meant a
+ * subscription with 30 hours left read "1 day" to the recruiter and "1 day" here
+ * only by luck — at 20 hours the two disagreed outright. Two surfaces quoting a
+ * different number of days for one subscription is worse than either rounding
+ * rule being individually preferable.
  */
-export function daysUntil(end: Date, now: Date): number {
-  return Math.floor((end.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+export function daysRemaining(end: Date, now: Date): number {
+  return Math.max(0, Math.ceil((end.getTime() - now.getTime()) / DAY_MS));
 }
 
 /**
- * How the renewal date reads in the table.
+ * WHOLE days that have elapsed since the period ended, never negative.
  *
- * Says "Renews" only when the subscription is genuinely live; a lapsed row reads
- * "Ended" and a cancelled one "Cancelled". A single "Renews <date>" column
- * applied to every row would tell staff that a plan which stopped granting
- * access six months ago is about to renew — which, with no billing cron in this
- * product, it never will.
+ * Truncates rather than rounds, because this counts completed days: one
+ * millisecond after the end is "0 days ago", not "1 day ago". `Math.floor` on
+ * the negative delta rounds AWAY from zero and produced exactly that — a period
+ * that ended 1ms ago rendered "Ended 1 days ago", and the display jumped from
+ * "Ends today" to "Ended 1 days ago" across a one-millisecond boundary.
+ *
+ * Separate from daysRemaining rather than one signed helper: the two directions
+ * want different rounding (ceil forward, truncate back), and a single function
+ * cannot honestly do both.
  */
+export function daysSince(end: Date, now: Date): number {
+  return Math.max(0, Math.trunc((now.getTime() - end.getTime()) / DAY_MS));
+}
+
+/**
+ * "1 day" / "2 days". The recruiter's card already pluralises this correctly
+ * (`daysLeft === 1 ? 'day' : 'days'`); this console printed "1 days" in both of
+ * its call sites until it did too.
+ */
+export function pluralDays(n: number): string {
+  return `${n} ${n === 1 ? 'day' : 'days'}`;
+}
+
 /**
  * The result-count sentence, and the text of the list's live region.
  *
@@ -241,8 +266,24 @@ export function formatSubscriptionsSummary(
   return `${total.toLocaleString('en-IN')}${scope} ${noun}${suffix}.`;
 }
 
-export function renewalLabel(state: SubscriptionState): string {
-  if (state === 'ACTIVE') return 'Renews';
+/**
+ * How the period date reads in the table.
+ *
+ * ⚠ "Ends", NOT "Renews", and the distinction is factual rather than stylistic.
+ * Nothing in this product auto-renews a subscription: there is no billing cron,
+ * no BullMQ processor touching subscriptions, and `razorpaySubscriptionId` is
+ * null on every row because the purchase flow uses the Razorpay ORDERS API — a
+ * one-off charge — not the Subscriptions API. A "renewal" here is the recruiter
+ * choosing to buy again; the recruiter portal's own CTA calls it "Upgrade or
+ * renew", an action rather than a schedule.
+ *
+ * A column headed "Renews 14 Sept" would therefore promise staff that money
+ * arrives on a date when nothing whatsoever is scheduled to happen, and imply a
+ * lapsed plan is merely between renewals rather than dead. "Ends" is what the
+ * date actually is: the instant the entitlement stops.
+ */
+export function periodLabel(state: SubscriptionState): string {
+  if (state === 'ACTIVE') return 'Ends';
   if (state === 'CANCELLED') return 'Cancelled';
   return 'Ended';
 }

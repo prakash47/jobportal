@@ -17,7 +17,7 @@ import {
   lastPageFor,
   normalizeQuery,
   parseSubscriptionTab,
-  renewalLabel,
+  periodLabel,
   subscriptionDetailHref,
   subscriptionsHref,
   type SubscriptionTab,
@@ -278,10 +278,9 @@ function SubscriptionRow({
       <td className="px-4 py-3 text-[var(--color-fg-muted)]">{granted ? 'Comped' : 'Paid'}</td>
 
       <td className="px-4 py-3 text-[var(--color-fg-muted)]">
-        {/* The label moves with the state so a dead plan is never described as
-            about to renew — there is no billing cron in this product, so it
-            never will. */}
-        <span className="block text-xs uppercase tracking-wide">{renewalLabel(state)}</span>
+        {/* The label moves with the state, and says "Ends" rather than
+            "Renews": nothing in this product auto-renews. See periodLabel. */}
+        <span className="block text-xs uppercase tracking-wide">{periodLabel(state)}</span>
         <span className="block text-[var(--color-fg)]">{formatDateIst(row.currentPeriodEnd)}</span>
       </td>
 

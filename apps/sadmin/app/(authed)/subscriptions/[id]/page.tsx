@@ -8,11 +8,13 @@ import {
   SUBSCRIPTION_STATE_LABEL,
   SUBSCRIPTION_TIER_LABEL,
   clampPage,
-  daysUntil,
+  daysRemaining,
+  daysSince,
   deriveSubscriptionState,
   firstParam,
   formatInrFromPaise,
   isAdminGranted,
+  pluralDays,
   normalizeQuery,
   parseSubscriptionTab,
   subscriptionsHref,
@@ -91,7 +93,8 @@ export default async function SubscriptionDetailPage({ params, searchParams }: P
   const now = new Date();
   const state = deriveSubscriptionState(sub.status, sub.currentPeriodEnd, now);
   const granted = isAdminGranted(sub.grantedAt);
-  const remaining = daysUntil(sub.currentPeriodEnd, now);
+  const remaining = daysRemaining(sub.currentPeriodEnd, now);
+  const elapsed = daysSince(sub.currentPeriodEnd, now);
 
   return (
     <div data-wide className="space-y-6">
@@ -134,12 +137,12 @@ export default async function SubscriptionDetailPage({ params, searchParams }: P
                 reads ACTIVE — nothing in this product ever writes EXPIRED. */}
             {state === 'ACTIVE' && (
               <span className="block text-xs text-[var(--color-fg-muted)]">
-                {remaining === 0 ? 'Ends today' : `${remaining} days remaining`}
+                {remaining === 0 ? 'Ends today' : `${pluralDays(remaining)} remaining`}
               </span>
             )}
             {state === 'LAPSED' && (
               <span className="block text-xs text-[var(--color-fg-muted)]">
-                Ended {Math.abs(remaining)} days ago — it grants no access, though the stored status
+                Ended {pluralDays(elapsed)} ago — it grants no access, though the stored status
                 still reads {sub.status.toLowerCase()}.
               </span>
             )}

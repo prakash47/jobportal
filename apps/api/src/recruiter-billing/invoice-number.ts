@@ -37,7 +37,17 @@ type Tx = Prisma.TransactionClient;
 export async function allocateInvoiceNumber(tx: Tx, now: Date): Promise<string> {
   // Serialize allocators. hashtext() maps the label to the bigint key space;
   // the lock is held until this transaction ends.
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('billing:invoice-number'))`;
+  //
+  // ⚠ $executeRaw, NOT $queryRaw. pg_advisory_xact_lock() returns `void` and
+  // Prisma cannot deserialize a void column — through $queryRaw it throws
+  // "Failed to deserialize column of type 'void'" (P2010 /
+  // UnsupportedNativeDataType). This is the SECOND instance of that defect on
+  // the capture path: activatePaidOrder held the other, and neither had ever
+  // executed because PaymentOrder has zero rows and every test mocks Prisma, so
+  // the first real payment would have failed here after the card was charged.
+  // See the fuller note at RecruiterBillingService.activatePaidOrder; both are
+  // pinned by packages/db/src/advisory-lock.test.ts against real Postgres.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('billing:invoice-number'))`;
 
   const fy = fyCode(now);
   const prefix = `${INVOICE_PREFIX}-${fy}-`;
