@@ -33,13 +33,13 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-15 after `feature/content-reports-intake` merged (`20260814171200_add_content_reports`). PR B needs no schema change. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/sadmin-subscriptions-billing` | 2026-08-15 | Additive only: four `ProfileAuditAction` members + `Subscription.grantedByAdminId`/`grantNote`. Migration `add_admin_subscription_grants`. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | — free — | | | **New entry 2026-08-15.** Not previously listed, but `PROGRESS.md`'s 2026-08-14 follow-up (3) asked for it: it is a short array every new console appends to, and two branches have now needed it. Append-only edits are safe; reorders need the lock. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | Released 2026-08-15 after `feature/content-reports-intake` merged (`moderation.reports.enabled`). `feature/sadmin-admin-migration` may now take it. |
+| **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | Claude/Prakash | `feature/sadmin-subscriptions-billing` | 2026-08-15 | Append-only: one "Subscriptions & Billing" row. **New entry 2026-08-15** per `PROGRESS.md`'s 2026-08-14 follow-up (3): it is a short array every new console appends to. Append-only edits are safe; reorders need the lock. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | Claude/Prakash | `feature/sadmin-subscriptions-billing` | 2026-08-15 | Append-only: one new `killswitch.admin_subscription_write`. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -51,8 +51,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
-| Claude/Prakash | ~~`feature/content-reports-intake`~~ **MERGED** | **Content reports — PR A of 2: the intake half.** New `ContentReport` model + `ContentReportTargetType` / `ContentReportReason` / `ContentReportStatus` enums, migration `add_content_reports`, and `POST /v1/reports` (anonymous, throttled) in a new `apps/api/src/reports/`, plus the Report control on `apps/web`'s public `/job/[slug]`. Gated by a new `moderation.reports.enabled` flag at L2+L3. **`JOB` is the only target type** — no other content in this product has both a reporter and an enforcement lever. | 🔒 `schema.prisma` + migrations · 🔒 `feature-flags/src/keys.ts` · `packages/db/prisma/seed/flags.ts` · `apps/api/src/app.module.ts` (append) |
-| Claude/Prakash | `feature/sadmin-content-reports` | **Content reports — PR B of 2: the console.** `/sadmin/reports` + `/sadmin/reports/[id]` with Claim / Action / Dismiss, `GET|PATCH /admin/reports` on the existing `AdminGuard`, and an **admin takedown** (guarded force-close of a reported ACTIVE job to `CLOSED` + ES de-index + purge) so `ACTIONED` actually does something. Also carries the sidebar-scroll fix. Starts after PR A merges. | `SidebarNav.tsx` `NAV_ITEMS` (⚠️ not yet a §15.3 lock — this PR adds the row) · `packages/ui/src/icons.ts` (append-only) · `apps/api/src/app.module.ts` (append) |
+| Claude/Prakash | `feature/sadmin-subscriptions-billing` | **Subscriptions & Billing console — `/sadmin/subscriptions` (+ `/[id]`).** Admin view of every RECRUITER subscription (plan, derived status, renewal date, payment/invoice history) plus **comp/upgrade/downgrade/extend/cancel** via a new `apps/api/src/admin-billing/` on the existing `AdminGuard`. **Admin writes are confined to admin-granted subscriptions** — a gateway-paid row is view-only (owner ruling 2026-08-15: no override), made explicit by a new `Subscription.grantedByAdminId`. Reuses `activatePaidOrder`'s `pg_advisory_xact_lock` + one-active-per-company dedup rather than fresh Prisma writes. Gated by `killswitch.admin_subscription_write` (L2+L3, no L1). **Transaction & Revenue Log deliberately NOT in this PR.** | 🔒 `schema.prisma` + migrations · 🔒 `feature-flags/src/keys.ts` · 🔒 `SidebarNav.tsx` `NAV_ITEMS` · `packages/db/prisma/seed/flags.ts` · `packages/ui/src/icons.ts` (append) · `apps/api/src/app.module.ts` (append) · `apps/sadmin/lib/candidates/format.ts` (exhaustive audit-label map) |
 
 ---
 
@@ -62,6 +61,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Feature | Notes |
 |---|---|---|
+| Claude/Prakash | **Content reports — PR B (`feature/sadmin-content-reports`)** | Deferred by the owner on 2026-08-15 in favour of the billing console; **not started, no branch exists**. **Content reports — PR B of 2: the console.** `/sadmin/reports` + `/sadmin/reports/[id]` with Claim / Action / Dismiss, `GET|PATCH /admin/reports` on the existing `AdminGuard`, and an **admin takedown** (guarded force-close of a reported ACTIVE job to `CLOSED` + ES de-index + purge) so `ACTIONED` actually does something. Also carries the sidebar-scroll fix. Starts after PR A merges. Shared surfaces when it resumes: `SidebarNav.tsx` `NAV_ITEMS` (⚠️ not yet a §15.3 lock — this PR adds the row) · `packages/ui/src/icons.ts` (append-only) · `apps/api/src/app.module.ts` (append) |
 | Claude/Prakash | **Admin console migration — PR 3 (`feature/sadmin-admin-migration`)** | Moves feature-flags · audit-log · kyc-review · support out of `apps/web/app/admin` into `/sadmin` and deletes the old subtree. **Must land after PR 2**: `/admin/feature-flags` is the only surface that can turn moderation OFF, and a raw DB update can't substitute (`invalidateFlag()` is only called from `setFlag()`, so the 30s cache keeps serving the stale value). Also takes the `keys.ts` lock for the moderation-flag criticality change. |
 
 ---
