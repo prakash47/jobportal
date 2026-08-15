@@ -1,6 +1,7 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MobileAuthController } from './mobile-auth.controller';
+import { OidcVerificationError } from './oidc-verifier.service';
 
 // The whole point of this surface is WHERE the tokens are written, so the
 // tests assert the response body — and that no Set-Cookie path is involved.
@@ -21,11 +22,28 @@ const auth = {
   login: vi.fn(),
   refresh: vi.fn(),
   logout: vi.fn(),
+  // Social sign-in mints its session through issueSession so it inherits the
+  // deactivated-recruiter check that lives there.
+  issueSession: vi.fn(),
 };
 const emailVerify = { issueAndSend: vi.fn() };
 const email = { enqueueRegistrationConfirmation: vi.fn() };
 
-const ctrl = new MobileAuthController(auth as never, emailVerify as never, email as never);
+// Social sign-in collaborators. The pre-existing tests below exercise the
+// password routes and never touch these, so they stay inert stubs there; the
+// social describe block sets them up per test.
+const oidc = { verify: vi.fn() };
+const googleIdentity = { findOrCreateUser: vi.fn() };
+const appleIdentity = { findOrCreateUser: vi.fn() };
+
+const ctrl = new MobileAuthController(
+  auth as never,
+  emailVerify as never,
+  email as never,
+  oidc as never,
+  googleIdentity as never,
+  appleIdentity as never,
+);
 const req = { headers: { 'user-agent': 'CQ/1.0 (Android 14)' }, ip: '203.0.113.9' } as never;
 
 beforeEach(() => {
@@ -150,5 +168,95 @@ describe('POST /v1/auth/mobile/logout', () => {
     await expect(ctrl.logout({ refreshToken: '' })).resolves.toBeUndefined();
     await expect(ctrl.logout(null)).resolves.toBeUndefined();
     expect(auth.logout).not.toHaveBeenCalled();
+  });
+});
+
+
+// ---- Social sign-in --------------------------------------------------------
+
+const APPLE_CLAIMS = {
+  sub: 'apple-sub-1',
+  email: 'arjun.iyer@example.com',
+  emailVerified: true,
+  isPrivateRelayEmail: false,
+};
+
+describe('MobileAuthController — social sign-in', () => {
+  beforeEach(() => {
+    auth.issueSession = vi.fn().mockResolvedValue(PAIR);
+    process.env.GOOGLE_MOBILE_CLIENT_IDS = 'com.careerqueue.app';
+    process.env.APPLE_CLIENT_IDS = 'com.careerqueue.app';
+  });
+
+  it('google: returns body tokens for a verified token', async () => {
+    oidc.verify.mockResolvedValue({ ...APPLE_CLAIMS, name: 'Arjun Iyer', picture: null });
+    googleIdentity.findOrCreateUser.mockResolvedValue({ user: USER, isNew: false });
+
+    const out = await ctrl.googleSignIn({ idToken: 'x.y.z' }, req);
+    expect(out.accessToken).toBe('access.jwt');
+    expect(out.refreshToken).toBe('refresh.jwt');
+    expect(out.tokenType).toBe('Bearer');
+    // The password hash must never travel, same as every other auth response.
+    expect(JSON.stringify(out)).not.toContain('argon2-secret');
+  });
+
+  // Every verification failure collapses to ONE opaque 401. Telling a caller
+  // whether the signature, audience or expiry failed hands them a probe for
+  // refining forged tokens.
+  it('google: a verification failure is an opaque 401', async () => {
+    oidc.verify.mockRejectedValue(new OidcVerificationError('id_token aud mismatch'));
+    const err = await ctrl.googleSignIn({ idToken: 'x.y.z' }, req).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    expect(JSON.stringify((err as UnauthorizedException).getResponse())).not.toMatch(/aud|signature|expired/i);
+    expect(googleIdentity.findOrCreateUser).not.toHaveBeenCalled();
+  });
+
+  // Linking by email downstream is only safe when the provider vouched for it.
+  it('google: refuses a token whose email is unverified', async () => {
+    oidc.verify.mockResolvedValue({ ...APPLE_CLAIMS, emailVerified: false });
+    await expect(ctrl.googleSignIn({ idToken: 'x.y.z' }, req)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(googleIdentity.findOrCreateUser).not.toHaveBeenCalled();
+  });
+
+  it('google: rejects a malformed body before touching the verifier', async () => {
+    await expect(ctrl.googleSignIn({}, req)).rejects.toBeInstanceOf(BadRequestException);
+    expect(oidc.verify).not.toHaveBeenCalled();
+  });
+
+  it('apple: returns body tokens and relays the first-sign-in name', async () => {
+    oidc.verify.mockResolvedValue(APPLE_CLAIMS);
+    appleIdentity.findOrCreateUser.mockResolvedValue({ user: USER, isNew: true });
+
+    const out = await ctrl.appleSignIn({ idToken: 'x.y.z', name: 'Arjun Iyer' }, req);
+    expect(out.accessToken).toBe('access.jwt');
+    expect(appleIdentity.findOrCreateUser).toHaveBeenCalledWith(APPLE_CLAIMS, 'Arjun Iyer');
+  });
+
+  it('apple: a verification failure is an opaque 401', async () => {
+    oidc.verify.mockRejectedValue(new OidcVerificationError('signature mismatch'));
+    await expect(ctrl.appleSignIn({ idToken: 'x.y.z' }, req)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  // Apple omits the email on repeat sign-ins. The token was VALID, so a 401
+  // would be misleading — it is a 400 telling the client what to do.
+  it('apple: 400s, not 401s, when Apple withheld the email', async () => {
+    oidc.verify.mockResolvedValue({ ...APPLE_CLAIMS, email: undefined });
+    appleIdentity.findOrCreateUser.mockResolvedValue({ user: null, reason: 'email-required' });
+    await expect(ctrl.appleSignIn({ idToken: 'x.y.z' }, req)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  // issueSession carries the deactivated-recruiter check; signing tokens
+  // directly here would reopen the hole that once let a removed recruiter back in.
+  it('mints the session through issueSession, not by signing directly', async () => {
+    oidc.verify.mockResolvedValue(APPLE_CLAIMS);
+    appleIdentity.findOrCreateUser.mockResolvedValue({ user: USER, isNew: false });
+    await ctrl.appleSignIn({ idToken: 'x.y.z' }, req);
+    expect(auth.issueSession).toHaveBeenCalledWith(USER, 'CQ/1.0 (Android 14)', '203.0.113.9');
   });
 });

@@ -130,6 +130,53 @@ export const FLAG = {
   // ON disables it without a redeploy. As a `killswitch.*` key it is
   // auto-classified critical (Slack + confirm modal).
   KILL_RECRUITER_JOB_COLLABORATE: 'killswitch.recruiter_job_collaborate',
+  // Admin job deletion (/sadmin/job-postings → Delete). Emergency stop for the
+  // destructive action: when ON, DELETE /admin/jobs/:id rejects with 503 (L3)
+  // and the Job Postings list renders the Delete control disabled (L2).
+  //
+  // Broader than KILL_RECRUITER_JOB_DELETE above and therefore more worth being
+  // able to stop: that one reaches only the recruiter's OWN postings, this one
+  // reaches any job on the platform. Deletion is already restricted to jobs with
+  // zero applications — this switch is the no-deploy off button on top of that.
+  //
+  // There is deliberately NO middleware route gate (L1). The gated thing is an
+  // ACTION, not a route: 404ing /sadmin/job-postings because deletion is killed
+  // would take the read-only master list down with it, and that list is the only
+  // surface that can see a DRAFT or never-moderated job at all. Same L2+L3 shape
+  // KILL_RECRUITER_JOB_DELETE uses.
+  //
+  // Seeded enabled:false, so deletion is LIVE by default; an admin flipping this
+  // ON disables it without a redeploy. As a `killswitch.*` key it is
+  // auto-classified critical (Slack + confirm modal) by isCriticalFlag below —
+  // no NON_KILLSWITCH_CRITICAL entry needed.
+  KILL_ADMIN_JOB_DELETE: 'killswitch.admin_job_delete',
+
+  // Moderation
+  //
+  // User-submitted content reports (the "Report this job" control on the public
+  // job detail page → POST /v1/reports → the /sadmin/reports queue). Gates
+  // INTAKE only: when OFF the control is hidden (L2) and the endpoint rejects
+  // with 503 before touching the database (L3).
+  //
+  // There is deliberately NO middleware route gate (L1). The gated thing is an
+  // ACTION, not a route — /job/[slug] is the public job page and must keep
+  // serving. Same L2+L3 shape KILL_ADMIN_JOB_DELETE uses, and for the same
+  // stated reason.
+  //
+  // The ADMIN side (/admin/reports, and the /sadmin console over it) is
+  // deliberately NOT gated by this key: turning intake off must still let staff
+  // clear a queue that already has rows in it. That is the rule admin-jobs,
+  // admin-support and admin-otp-sessions already follow.
+  //
+  // Seeded enabled:true — reporting is a free safety surface, not a paid
+  // capability, so CLAUDE.md §0 does not apply. Note this is NOT a
+  // `killswitch.*` key, so it is not auto-classified critical: toggling it needs
+  // no reason and fires no Slack alert, which is right for a feature toggle.
+  //
+  // Its sibling `moderation.jobs.enabled` predates the FLAG map and is still
+  // read as a bare string literal in apps/api; do not copy that — use this
+  // constant.
+  MODERATION_REPORTS: 'moderation.reports.enabled',
 } as const;
 
 export type FlagKey = (typeof FLAG)[keyof typeof FLAG];

@@ -32,6 +32,9 @@ enum UserRole {
 enum AuthProvider {
   LOCAL
   GOOGLE
+  // Sign in with Apple. Mandatory on iOS once any third-party social login
+  // ships, per App Store Review Guideline 4.8 — not an optional extra.
+  APPLE
 }
 
 // Delivery channel for a recruiter-signup one-time code (SRS §4.9 / §4.12).
@@ -221,6 +224,22 @@ enum ProfileAuditAction {
   // minimisation rule the KYC and support audit rows already follow.
   JOB_APPROVED
   JOB_REJECTED
+  // Admin hard-delete of a job posting (/sadmin/job-postings → Delete). Written
+  // with the DELETING ADMIN's User id.
+  //
+  // This one is audited more urgently than its recruiter counterpart, which
+  // writes no audit row at all: a recruiter deleting their own zero-response
+  // posting is self-service, whereas an admin destroying someone else's posting
+  // platform-wide must leave a trace. Deletion is restricted to jobs with ZERO
+  // applications (the same invariant recruiter-jobs.service.ts enforces), so the
+  // cascade can never reach a candidate's application history.
+  //
+  // The diff carries the job id, the status it was in, the owning company id and
+  // the measured application count — never the job's title or description, the
+  // same minimisation rule the KYC, moderation and billing rows follow. The row
+  // deliberately OUTLIVES the job it names, so `jobId` resolves to nothing after
+  // the fact; that is the point of the record.
+  JOB_DELETED
   // Recruiter self-service password change (Settings → Change Password). Written
   // with the recruiter's own User id. The raw/old/new passwords are never stored
   // in the audit metadata — only the fact of the change.
@@ -262,6 +281,21 @@ enum ProfileAuditAction {
   // minimisation rule KYC (GSTIN/PAN), job moderation and billing already
   // follow.
   OTP_CODE_REVEALED
+  // Admin decision on a user-submitted content report (/sadmin/reports).
+  // Both are written with the REVIEWING ADMIN's User id.
+  //
+  // ACTIONED = the report was upheld; DISMISSED = reviewed and the content was
+  // found acceptable. They are split rather than a single CONTENT_REPORT_REVIEWED
+  // for the same reason JOB_APPROVED/JOB_REJECTED are: the audit table is the
+  // only durable record of which way a moderator ruled.
+  //
+  // The diff carries the report id, the target's ids, the status transition and
+  // the ADMIN-authored resolution note — never the REPORTER's free-text
+  // `details` and never the job's title, the same minimisation rule KYC, job
+  // moderation and billing already follow. Dismissing overrules a reporter, so
+  // the note is required on that branch and is the thing worth attributing.
+  CONTENT_REPORT_ACTIONED
+  CONTENT_REPORT_DISMISSED
 }
 
 // SRS §4.9 — legal / organisational classification of an employer, shown on the
@@ -363,6 +397,53 @@ enum SupportTicketCategory {
   OTHER
 }
 
+// What a user-submitted content report points at. One member per target that has
+// BOTH a real reporter and a real enforcement lever, which today is exactly one.
+//
+// Deliberately NOT added yet, each for a concrete reason rather than scope:
+//   CANDIDATE_PROFILE — apps/web has no public /candidate/[id] to report FROM,
+//     recruiter.resdex.enabled is seeded OFF, and `User` carries no suspension
+//     column (`deactivatedAt` is Recruiter-only), so there would be nothing to do
+//     about an upheld report.
+//   MESSAGE — there is no user-to-user messaging in this product at all; see
+//     NotificationType's comment. "Spam messages" has no referent.
+//   COMPANY_REVIEW — CompanyReview has no write path in apps/api, so there is no
+//     user-generated corpus to police, and the model carries no moderation state.
+//
+// Adding one later is an additive `ALTER TYPE ... ADD VALUE` plus one nullable
+// FK column — the queue's ?type contract is already shaped for it.
+enum ContentReportTargetType {
+  JOB
+}
+
+// Why the reporter says the content is a problem. The structured axis the queue
+// filters and counts on; the reporter's own words live in ContentReport.details.
+enum ContentReportReason {
+  FAKE_OR_SCAM
+  MISLEADING
+  DISCRIMINATORY
+  OFFENSIVE
+  DUPLICATE
+  OTHER
+}
+
+// Triage state for a content report. Shaped like SupportTicketStatus rather than
+// inventing a new vocabulary, but the two terminal states record a JUDGEMENT
+// rather than just closure: ACTIONED = upheld and dealt with, DISMISSED =
+// reviewed and the content was found acceptable. A single "RESOLVED" could not
+// tell those apart, which is the entire value of the record.
+//
+// There is deliberately no ESCALATED state: this product has exactly one admin
+// role (claims.role === 'ADMIN'), no tiers and no assignee column anywhere, so
+// an escalation would have nobody to escalate to. REVIEWING — an admin has
+// picked this up — is the honest version and is reversible.
+enum ContentReportStatus {
+  OPEN
+  REVIEWING
+  ACTIONED
+  DISMISSED
+}
+
 // ============================================================
 // User & profile (SRS §8.2)
 // ============================================================
@@ -395,6 +476,11 @@ model User {
   role          UserRole     @default(CANDIDATE)
   provider      AuthProvider @default(LOCAL) // auth method — SRS §4.12.6
   googleId      String?      @unique // Google "sub" claim; null for non-Google
+  // Apple "sub" claim. Separate column rather than a shared providerId
+  // because a single account can legitimately carry both — someone who
+  // signed up with Google on the web and later used Apple on their phone
+  // must land on the SAME account, not a duplicate.
+  appleId       String?      @unique
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
@@ -1073,6 +1159,7 @@ model Job {
   applications  Application[]
   savedBy       SavedJob[]
   collaborators JobCollaborator[]
+  reports       ContentReport[]
 
   @@index([status, postedAt])
   // Backs the admin review queue: WHERE status='PENDING_MODERATION'
@@ -1644,4 +1731,64 @@ model SupportContactMessage {
   createdAt DateTime @default(now())
 
   @@index([createdAt(sort: Desc)])
+}
+
+// ============================================================
+// Content reports (moderation.reports.enabled)
+// ============================================================
+
+// A THIRD PARTY's complaint about a piece of content. Distinct from the two
+// review queues it sits beside:
+//   SupportTicket        — the raiser's OWN problem, and recruiter-only.
+//   Job.submittedForReviewAt — a SUBMISSION awaiting its first review, raised by
+//                          the poster themselves.
+// Here the subject never asked for the review and is not told a report exists.
+//
+// TARGET: `targetType` plus exactly one non-null target FK. A real FK rather
+// than an opaque `targetId` is the house style — nothing else in this schema is
+// polymorphic — and it is what makes a report disappear along with the job it
+// names instead of dangling. The "exactly one non-null" rule is service-enforced,
+// the same way RecruiterInvite and KycDocument enforce their own invariants.
+// With a single member in ContentReportTargetType today jobId is effectively
+// always set; it is nullable so adding a second target type stays additive.
+//
+// REPORTER: `reporterId` is a loose User id with NO FK (the CompanyKyc.reviewedById
+// pattern) so deleting an account cannot erase the reports it filed, and it is
+// NULL for an anonymous report. Anonymous is allowed deliberately: /job/[slug] is
+// public and SSR'd, most viewers are logged out, and requiring an account would
+// suppress exactly the fake-job reports most worth having. `reporterIp` mirrors
+// OtpChallenge.ipAddress — abuse triage on an unauthenticated endpoint, never
+// rendered in the console and never returned by the API.
+//
+// `details` is REPORTER-authored free text. It is untrusted user content shown to
+// staff to judge: never copy it into a ProfileAuditLog diff, a log line or an
+// email, and render it as plain text, never markup.
+model ContentReport {
+  id         Int                     @id @default(autoincrement())
+  targetType ContentReportTargetType
+  jobId      Int?
+  job        Job?                    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  reason  ContentReportReason
+  details String?
+
+  reporterId Int?
+  reporterIp String?
+
+  // Written together when the report leaves OPEN/REVIEWING for a terminal state.
+  // reviewedById is the deciding admin's User id — loose, like Job.reviewedById.
+  status         ContentReportStatus @default(OPEN)
+  reviewedAt     DateTime?
+  reviewedById   Int?
+  resolutionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Backs the queue: WHERE status = ? ORDER BY createdAt. Also serves the
+  // default OPEN tab, which is the only view staff work from day to day.
+  @@index([status, createdAt])
+  // Every report against one posting, and the per-job open count the console
+  // shows so a job reported forty times is not read as forty separate problems.
+  @@index([jobId, status])
 }

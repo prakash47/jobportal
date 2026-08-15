@@ -6,6 +6,8 @@ import { GoogleOAuthController } from './google-oauth.controller';
 import { MobileAuthController } from './mobile-auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleOAuthService } from './google-oauth.service';
+import { AppleIdentityService } from './apple-identity.service';
+import { OidcVerifierService } from './oidc-verifier.service';
 import { EmailVerificationService } from './email-verification.service';
 import { PasswordResetService } from './password-reset.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -27,6 +29,8 @@ import { EmailModule } from '../email/email.module';
   providers: [
     AuthService,
     GoogleOAuthService,
+    AppleIdentityService,
+    OidcVerifierService,
     EmailVerificationService,
     PasswordResetService,
     JwtAuthGuard,

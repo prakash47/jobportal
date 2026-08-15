@@ -85,6 +85,16 @@ const PATH_MAP: Record<string, string[]> = {
   // mapped explicitly to [] rather than falling through to the defensive ['/']
   // and purging the seeker homepage for no reason.
   'moderation.jobs.enabled': [],
+  // Gates the "Report this job" control, whose ONLY surface is /job/:slug — a
+  // per-posting path that cannot be enumerated here, and the one page the
+  // defensive ['/'] default would NOT have purged. Purging the seeker homepage
+  // instead would be purging a page this flag cannot affect, so it is mapped
+  // explicitly to [] like the two above.
+  //
+  // Nothing is lost by that: /job/[slug] is ISR with `export const revalidate =
+  // 60`, so a toggle propagates within a minute on its own — comfortably close
+  // to the 30s the flag's own cache holds the old value for anyway.
+  'moderation.reports.enabled': [],
 };
 
 export function pathsForFlag(flagKey: string): string[] {

@@ -4,14 +4,21 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { prisma, Prisma, type JobStatus } from '@jobportal/db';
+import { isFlagEnabled } from '@jobportal/feature-flags';
 import { JobPublishEffectsService } from '../job-effects/job-publish-effects.service';
 import { RecruiterPostQuotaService } from '../recruiter-post-quota/quota.service';
 import { NotificationsProducerService } from '../recruiter-notifications/notifications-producer.service';
 import type { ListAdminJobsQueryInput, ModerateJobInput } from './dto';
 
 const PAGE_SIZE = 20;
+
+// Emergency stop for the admin delete. Declared as a literal here rather than
+// imported from FLAG, matching recruiter-jobs.service.ts's three killswitch
+// constants — the flag package's key map is not imported anywhere in apps/api.
+const ADMIN_JOB_DELETE_KILLSWITCH_FLAG = 'killswitch.admin_job_delete';
 
 @Injectable()
 export class AdminJobsService {
@@ -283,5 +290,117 @@ export class AdminJobsService {
       });
 
     return this.getJobDetail(jobId);
+  }
+
+  /**
+   * Admin hard-delete of a job posting (/sadmin/job-postings → Delete).
+   *
+   * ZERO-APPLICATION JOBS ONLY. This inherits the owner's 2026-07-16 ruling on
+   * the recruiter delete verbatim (recruiter-jobs.service.ts `delete`), and the
+   * reason is the cascade rather than politeness: `Application` is
+   * `onDelete: Cascade` on Job, so deleting a job with responses destroys
+   * candidates' own application history — rows they can still see in their
+   * /applications tracker — with no undo and no notice to them. A job with
+   * responses must be CLOSED instead, which the recruiter portal already does.
+   *
+   * The admin is deliberately NOT given an override. Being able to reach every
+   * company's postings is exactly why this boundary is tighter here, not looser.
+   *
+   * Status is irrelevant: an unwanted ACTIVE posting with no responses is as
+   * deletable as a DRAFT. `SavedJob` and `JobCollaborator` do cascade and are
+   * accepted collateral — a deleted job simply leaves seekers' saved lists.
+   *
+   * Quota is deliberately NOT refunded (owner decision, this PR). Moderation
+   * REJECT refunds because the recruiter never got a live listing; an admin
+   * delete is a cleanup or enforcement action, and refunding would hand a
+   * spammer their slot straight back.
+   */
+  async remove(adminUserId: number, jobId: number): Promise<void> {
+    if (await isFlagEnabled(ADMIN_JOB_DELETE_KILLSWITCH_FLAG)) {
+      throw new ServiceUnavailableException('Job deletion is temporarily unavailable');
+    }
+
+    // Read BEFORE the delete: fireRemoveSideEffects takes the row itself (it
+    // reads .id and .canonicalSlug), and after the delete there is nothing left
+    // to read it from. Selecting the whole row rather than a projection because
+    // that helper's parameter is a full `Job`.
+    const existing = await prisma.job.findUnique({ where: { id: jobId } });
+    if (!existing) throw new NotFoundException('Job not found');
+
+    // The invariant lives INSIDE the where-clause, not in a count-then-delete:
+    // this is a single atomic statement, so an application arriving between a
+    // separate check and the delete cannot be cascade-destroyed. Same
+    // construction, and the same reasoning, as the recruiter path.
+    //
+    // The audit row commits in the SAME transaction as the delete, so a job can
+    // never be destroyed without a trace of who did it.
+    const deleted = await prisma.$transaction(
+      async (tx) => {
+      const res = await tx.job.deleteMany({
+        where: { id: jobId, applications: { none: {} } },
+      });
+      if (res.count === 0) return false;
+      await tx.profileAuditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'JOB_DELETED',
+          // Ids and the status it was in only — never the job's title or
+          // description. Same minimisation rule moderate() above follows.
+          // applicationCount is recorded as the measured 0 that the where-clause
+          // above proved, so the row states the invariant that was held rather
+          // than leaving a reader to assume it.
+          diff: {
+            jobId,
+            status: existing.status,
+            companyId: existing.companyId,
+            applicationCount: 0,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+        return true;
+      },
+      // SERIALIZABLE, not the READ COMMITTED default, and this is the one place
+      // in the codebase that needs it.
+      //
+      // The `applications: { none: {} }` guard compiles to a NOT EXISTS
+      // sub-select, which under READ COMMITTED is evaluated against the
+      // statement's own snapshot. A candidate's apply INSERT that is in flight
+      // but uncommitted is invisible to that snapshot, so the guard can pass and
+      // the job be deleted while an application for it is mid-commit — and
+      // Application cascades on Job, so that row is destroyed. The window is
+      // narrow, but the loss is a candidate's application history and there is
+      // no undo, which is exactly the trade where a rare serialization failure
+      // is the cheaper outcome.
+      //
+      // The cost is that two conflicting transactions can raise 40001. For a
+      // hand-driven admin action that is a retry, not a regression.
+      { isolationLevel: 'Serializable' },
+    );
+
+    if (!deleted) {
+      // count 0 means either the row vanished in a concurrent delete (404 — a
+      // "has applications" message would mislead) or an application arrived
+      // since the read above (409, "close instead"). Disambiguated by re-reading
+      // rather than guessed.
+      const still = await prisma.job.findUnique({ where: { id: jobId }, select: { id: true } });
+      if (!still) throw new NotFoundException('Job not found');
+      throw new ConflictException(
+        'Jobs with applications cannot be deleted — close the job instead',
+      );
+    }
+
+    // Logged at WARN, unlike moderate()'s `log`. This is the one irreversible
+    // action in this console and its side effects below are fire-and-forget with
+    // no reconciliation path for a row that no longer exists — so if the ES
+    // de-index fails, this line is the only record an operator has to hand-remove
+    // the orphaned document from.
+    this.logger.warn(`admin=${adminUserId} DELETED job=${jobId} slug=${existing.canonicalSlug}`);
+
+    // Required, not optional: without it the job stays in the Elasticsearch index
+    // and in job-alert emails while its detail page 404s — a searchable ghost —
+    // and Cloudflare keeps serving the deleted page for up to an hour
+    // (next.config stamps /job/:slug with s-maxage=60, SWR 1h). Fired with the
+    // pre-delete snapshot so canonicalSlug is present for the purge.
+    this.effects.fireRemoveSideEffects(existing);
   }
 }

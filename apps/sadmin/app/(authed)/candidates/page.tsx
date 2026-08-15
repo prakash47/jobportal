@@ -5,6 +5,7 @@ import { Avatar } from '@jobportal/ui';
 import { formatDateIst } from '../../../lib/jobs/format';
 import { displayName } from '../../../lib/employers/format';
 import {
+  candidateDetailHref,
   candidatesHref,
   clampPage,
   firstParam,
@@ -141,7 +142,10 @@ export default async function CandidatesPage({ searchParams }: PageProps) {
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
                 {result.rows.map((row) => (
-                  <CandidateRow key={row.id} row={row} />
+                  // The current list state travels with each row so the detail
+                  // page's Back link can return to this exact filtered page
+                  // rather than an unfiltered page 1.
+                  <CandidateRow key={row.id} row={row} page={result.page} q={q} />
                 ))}
               </tbody>
             </table>
@@ -154,7 +158,15 @@ export default async function CandidatesPage({ searchParams }: PageProps) {
   );
 }
 
-function CandidateRow({ row }: { row: CandidateListRow }) {
+function CandidateRow({
+  row,
+  page,
+  q,
+}: {
+  row: CandidateListRow;
+  page: number;
+  q: string | undefined;
+}) {
   // User.name is NOT NULL but not guaranteed non-blank; the email is the only
   // always-present unique identifier. Same helper the employer list uses.
   const name = displayName(row);
@@ -212,7 +224,18 @@ function CandidateRow({ row }: { row: CandidateListRow }) {
 
       <td className="px-4 py-3">
         <span className="flex items-center gap-3">
-          <InertAction label="View" subject={name} />
+          {/* Self-describing out of context for the same reason InertAction is:
+              twenty links all named "View" is what a screen-reader user hears
+              when listing this page's controls. The visible word stays first so
+              voice control still matches "click View" (WCAG 2.5.3 Label in
+              Name). */}
+          <Link
+            href={candidateDetailHref(row.id, page, q)}
+            className="rounded font-medium text-[var(--color-primary-700)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
+          >
+            View
+            <span className="sr-only"> profile for {name}</span>
+          </Link>
           <InertAction label="Suspend" subject={name} />
           <InertAction label="Delete" subject={name} />
         </span>
@@ -234,9 +257,9 @@ function CandidateRow({ row }: { row: CandidateListRow }) {
  *
  * The name is carried by an explicit `aria-label` rather than a visually-hidden
  * span, because `title` was measured winning the accessible-name computation
- * over the button's own content: in the browser's a11y tree all sixty controls
- * came out named "Not available yet", so View, Suspend and Delete were
- * indistinguishable to a screen reader and the visible word was lost entirely.
+ * over the button's own content: in the browser's a11y tree every one of these
+ * controls came out named "Not available yet", so they were indistinguishable
+ * from each other to a screen reader and the visible word was lost entirely.
  * `aria-label` outranks `title`, so the name is now unambiguous. It STARTS with
  * the visible label so voice control still matches "click View" (WCAG 2.5.3
  * Label in Name), and `title` is kept only for the sighted hover hint.
