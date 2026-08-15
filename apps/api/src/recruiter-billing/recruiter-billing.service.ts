@@ -490,7 +490,18 @@ export class RecruiterBillingService {
       // Serialize all activations for this company (see method comment). Held
       // until the transaction ends; consistent lock order (order row → company)
       // avoids deadlocks.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:company:${order.companyId}`}))`;
+      //
+      // ⚠ $executeRaw, NOT $queryRaw. pg_advisory_xact_lock() returns `void`,
+      // and Prisma cannot deserialize a void column — $queryRaw throws "Failed
+      // to deserialize column of type 'void'" and takes the whole capture down
+      // with it. This line used $queryRaw from the day it was written and had
+      // never run: PaymentOrder has zero rows, the gateway is unprovisioned, and
+      // every test mocks Prisma, so the first REAL Razorpay capture would have
+      // been the first execution — and it would have failed after the customer
+      // was charged. Found when the admin console copied this line verbatim and
+      // its own first live grant 500'd; verified by running both forms against
+      // the dev database ($queryRaw fails, $executeRaw succeeds).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:company:${order.companyId}`}))`;
 
       await tx.paymentOrder.update({
         where: { id: paymentOrderId },

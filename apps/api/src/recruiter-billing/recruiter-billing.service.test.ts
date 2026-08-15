@@ -36,6 +36,10 @@ vi.mock('@jobportal/db', () => {
       profileAuditLog: { create: vi.fn() },
       $transaction: vi.fn(),
       $queryRaw: vi.fn(),
+      // The FOR UPDATE re-read uses $queryRaw; the per-company advisory lock uses
+      // $executeRaw, because pg_advisory_xact_lock() returns void and Prisma
+      // cannot deserialize a void column (see activatePaidOrder).
+      $executeRaw: vi.fn(),
     },
     Prisma: { DbNull: { __dbNull: true }, PrismaClientKnownRequestError },
   };
@@ -60,6 +64,7 @@ const db = prisma as unknown as {
   profileAuditLog: { create: MockFn };
   $transaction: MockFn;
   $queryRaw: MockFn;
+  $executeRaw: MockFn;
 };
 
 // --- Fixtures -----------------------------------------------------------------
@@ -156,6 +161,7 @@ function makeService() {
 function wireActivation(order = makeOrder()) {
   db.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma));
   db.$queryRaw.mockResolvedValue([]);
+  db.$executeRaw.mockResolvedValue(1);
   db.paymentOrder.findUnique.mockResolvedValue(order);
   db.paymentOrder.update.mockResolvedValue({ ...order, status: 'PAID' });
   db.subscription.findFirst.mockResolvedValue(null);

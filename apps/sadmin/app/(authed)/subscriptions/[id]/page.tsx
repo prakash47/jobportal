@@ -194,7 +194,7 @@ export default async function SubscriptionDetailPage({ params, searchParams }: P
         />
       </section>
 
-      <InvoicesTable invoices={sub.invoices} />
+      <InvoicesTable invoices={sub.invoices} granted={granted} />
       <OrdersTable orders={sub.orders} />
     </div>
   );
@@ -211,20 +211,23 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function InvoicesTable({
   invoices,
+  granted,
 }: {
-  invoices: Awaited<ReturnType<typeof getSubscriptionDetail>> extends infer T
-    ? T extends { invoices: infer I }
-      ? I
-      : never
-    : never;
+  invoices: NonNullable<Awaited<ReturnType<typeof getSubscriptionDetail>>>['invoices'];
+  granted: boolean;
 }) {
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-semibold text-[var(--color-fg)]">Invoices</h2>
       {invoices.length === 0 ? (
+        // The empty state has to say WHICH kind of empty this is. "A comped plan
+        // never raises one" is the explanation for a comp and a falsehood for a
+        // gateway-paid row, where no invoice means something went wrong at
+        // capture and is worth investigating rather than reassuring away.
         <p className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-6 text-sm text-[var(--color-fg-muted)]">
-          No invoices. A comped plan never raises one — it moves no money, so it has no GST and must
-          not enter the invoice sequence.
+          {granted
+            ? 'No invoices. A comped plan never raises one — it moves no money, so it has no GST and must not enter the invoice sequence.'
+            : 'No invoices, which is unexpected for a subscription bought through the gateway — an invoice is issued at capture. Check the payment attempts below.'}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)]">

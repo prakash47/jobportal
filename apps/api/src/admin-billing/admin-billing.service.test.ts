@@ -10,7 +10,7 @@ vi.mock('@jobportal/db', () => ({
     recruiter: { findMany: vi.fn() },
     profileAuditLog: { create: vi.fn() },
     $transaction: vi.fn(),
-    $queryRaw: vi.fn(),
+    $executeRaw: vi.fn(),
   },
   Prisma: {},
 }));
@@ -33,7 +33,7 @@ const m = prisma as unknown as {
   recruiter: { findMany: Mock };
   profileAuditLog: { create: Mock };
   $transaction: Mock;
-  $queryRaw: Mock;
+  $executeRaw: Mock;
 };
 const flag = isFlagEnabled as unknown as Mock;
 
@@ -55,7 +55,7 @@ describe('AdminBillingService', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     m.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) => fn(prisma));
-    m.$queryRaw.mockResolvedValue([]);
+    m.$executeRaw.mockResolvedValue(1);
     m.profileAuditLog.create.mockResolvedValue({});
     m.subscription.create.mockResolvedValue({ id: 900 });
     m.subscription.update.mockResolvedValue({});
@@ -131,8 +131,8 @@ describe('AdminBillingService', () => {
     // mid-comp can leave two live subscriptions on one company.
     it('takes the same per-company advisory lock the purchase path takes', async () => {
       await service.grant(ADMIN, grantInput);
-      expect(m.$queryRaw).toHaveBeenCalled();
-      const values = m.$queryRaw.mock.calls[0]?.slice(1);
+      expect(m.$executeRaw).toHaveBeenCalled();
+      const values = m.$executeRaw.mock.calls[0]?.slice(1);
       expect(values).toContain('billing:company:7');
     });
 
@@ -332,7 +332,7 @@ describe('AdminBillingService', () => {
     it('takes the per-company advisory lock before mutating', async () => {
       existing();
       await service.update(ADMIN, 900, { action: 'CANCEL', reason: 'r' });
-      expect(m.$queryRaw.mock.calls[0]?.slice(1)).toContain('billing:company:7');
+      expect(m.$executeRaw.mock.calls[0]?.slice(1)).toContain('billing:company:7');
     });
 
     it.each([

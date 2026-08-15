@@ -3,13 +3,13 @@ import {
   Body,
   Controller,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
 import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { ParseInt32IdPipe } from '../common/parse-int32-id.pipe';
 import { AdminGuard } from '../feature-flags/admin.guard';
 import { AdminBillingService } from './admin-billing.service';
 import { GrantSubscriptionDto, UpdateSubscriptionDto } from './dto';
@@ -44,7 +44,7 @@ export class AdminBillingController {
   @Patch('subscriptions/:id')
   async update(
     @CurrentUser() admin: AccessClaims,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseInt32IdPipe) id: number,
     @Body() body: unknown,
   ) {
     const parsed = UpdateSubscriptionDto.safeParse(body);

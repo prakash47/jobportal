@@ -76,7 +76,12 @@ export class AdminBillingService {
       // while staff comps the same company could leave two live subscriptions
       // on one company — which resolveRecruiterTier's max() would silently
       // absorb while the recruiter's own /billing page rendered a different row.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:company:${input.companyId}`}))`;
+      //
+      // ⚠ $executeRaw, NOT $queryRaw: pg_advisory_xact_lock() returns `void` and
+      // Prisma cannot deserialize a void column. See the fuller note at
+      // RecruiterBillingService.activatePaidOrder, whose copy of this line had
+      // the same latent defect and had never executed.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:company:${input.companyId}`}))`;
 
       const existing = await tx.subscription.findFirst({
         where: {
@@ -217,7 +222,8 @@ export class AdminBillingService {
 
     const companyId = existing.companyId;
     await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:company:${companyId}`}))`;
+      // $executeRaw for the void-return reason documented on the grant path.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`billing:company:${companyId}`}))`;
 
       if (input.action === 'CHANGE_PLAN' && nextPlan) {
         // Repoints the plan and leaves the period alone. There is no proration
