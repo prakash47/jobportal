@@ -273,6 +273,7 @@ abstract final class CompaniesMock {
   static Future<CompaniesPage> list({
     String? category,
     String? sort,
+    bool hiring = false,
     int page = 1,
   }) async {
     await Future.delayed(const Duration(milliseconds: 350));
@@ -280,6 +281,9 @@ abstract final class CompaniesMock {
     if (category != null && category.isNotEmpty) {
       final c = category.toLowerCase();
       list = list.where((s) => s.slug == c || s.industry.toLowerCase() == c).toList();
+    }
+    if (hiring) {
+      list = list.where((s) => s.openRoles > 0).toList();
     }
     switch (sort) {
       case 'name':

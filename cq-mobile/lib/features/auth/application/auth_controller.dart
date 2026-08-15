@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_boot.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/network_providers.dart';
 import '../data/auth_repository.dart';
@@ -57,9 +58,6 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> _restoreSession() async {
-    // Keep the splash on-screen long enough for its animation to play, even if
-    // the session check returns instantly.
-    final minSplash = Future<void>.delayed(const Duration(milliseconds: 2900));
     AuthUser? user;
     // Demo mode never touches the server — land on the welcome screen, where an
     // "Enter demo mode" button signs in with sample data.
@@ -71,7 +69,14 @@ class AuthController extends Notifier<AuthState> {
         user = null; // backend unreachable / slow → treat as logged out
       }
     }
-    await minSplash;
+    // Hold the animated splash so its looping arrow reveal is clearly visible,
+    // measured from the first painted frame (see AppBoot). It's generous because
+    // a slow (debug) boot keeps the native splash up for a few seconds, eating
+    // into the visible window before this fires.
+    await AppBoot.firstFrame.future;
+    // Just enough for the one-shot arrow reveal (starts ~1.3s in, flies ~1.3s)
+    // plus a short beat, then straight to welcome — no lingering static hold.
+    await Future<void>.delayed(const Duration(milliseconds: 2900));
     state = user != null
         ? AuthAuthenticated(user)
         : const AuthUnauthenticated();

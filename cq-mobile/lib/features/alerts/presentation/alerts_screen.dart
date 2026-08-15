@@ -30,6 +30,9 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
   bool _loading = true;
   String? _error;
 
+  /// Alert ids with a test send in flight, so a double tap can't queue twice.
+  final _testing = <int>{};
+
   @override
   void initState() {
     super.initState();
@@ -130,6 +133,25 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
     }
   }
 
+  /// Queue a test send. Ids currently in flight are held so a jittery double
+  /// tap doesn't fire twice — the route has no throttle of its own and shares
+  /// the global request budget.
+  Future<void> _sendTest(JobAlert alert) async {
+    if (!_testing.add(alert.id)) return;
+    try {
+      await (await _repository()).sendTest(alert.id);
+      if (!mounted) return;
+      // "Queued", never "sent" — a 202 is not delivery, and a repeat test with
+      // no newly indexed jobs legitimately emails nothing.
+      _snack('Test queued. If new jobs match, the email arrives shortly.');
+    } catch (e) {
+      if (!mounted) return;
+      _snack(e is AlertsException ? e.message : 'Could not send a test.');
+    } finally {
+      _testing.remove(alert.id);
+    }
+  }
+
   void _snack(String msg) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(msg)));
@@ -137,15 +159,20 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
   @override
   Widget build(BuildContext context) {
     final hasAlerts = (_alerts?.isNotEmpty ?? false);
+    final atCap = (_alerts?.length ?? 0) >= AlertsRepository.maxAlerts;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Job alerts'),
         actions: [
           if (!_loading && _error == null && hasAlerts)
             IconButton(
-              tooltip: 'New alert',
+              tooltip: atCap
+                  ? 'You have used all ${AlertsRepository.maxAlerts} alerts'
+                  : 'New alert',
               icon: const Icon(Icons.add_rounded),
-              onPressed: () => _openEditor(),
+              // Genuinely disabled at the cap rather than letting the user fill
+              // in an editor only to be refused with a 409 on save.
+              onPressed: atCap ? null : () => _openEditor(),
             ),
           const SizedBox(width: AppSpacing.sm),
         ],
@@ -164,18 +191,37 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
     final alerts = _alerts!;
     if (alerts.isEmpty) return _Empty(onCreate: () => _openEditor());
 
+    final atCap = alerts.length >= AlertsRepository.maxAlerts;
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
         padding: const EdgeInsets.all(AppSpacing.lg),
-        itemCount: alerts.length,
+        // +1 for the usage header at index 0.
+        itemCount: alerts.length + 1,
         separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
-        itemBuilder: (context, i) => _AlertCard(
-          alert: alerts[i],
-          onEdit: () => _openEditor(alerts[i]),
-          onTogglePause: () => _togglePause(alerts[i]),
-          onDelete: () => _delete(alerts[i]),
-        ),
+        itemBuilder: (context, i) {
+          if (i == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: Text(
+                atCap
+                    ? '${alerts.length} of ${AlertsRepository.maxAlerts} alerts used — delete one to add another'
+                    : '${alerts.length} of ${AlertsRepository.maxAlerts} alerts used',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: atCap ? context.cq.warning : context.cq.fgMuted,
+                ),
+              ),
+            );
+          }
+          final alert = alerts[i - 1];
+          return _AlertCard(
+            alert: alert,
+            onEdit: () => _openEditor(alert),
+            onTogglePause: () => _togglePause(alert),
+            onDelete: () => _delete(alert),
+            onSendTest: () => _sendTest(alert),
+          );
+        },
       ),
     );
   }
@@ -187,10 +233,11 @@ class _AlertCard extends StatelessWidget {
     required this.onEdit,
     required this.onTogglePause,
     required this.onDelete,
+    required this.onSendTest,
   });
 
   final JobAlert alert;
-  final VoidCallback onEdit, onTogglePause, onDelete;
+  final VoidCallback onEdit, onTogglePause, onDelete, onSendTest;
 
   @override
   Widget build(BuildContext context) {
@@ -254,6 +301,8 @@ class _AlertCard extends StatelessWidget {
                       onEdit();
                     case 'pause':
                       onTogglePause();
+                    case 'test':
+                      onSendTest();
                     case 'delete':
                       onDelete();
                   }
@@ -263,6 +312,13 @@ class _AlertCard extends StatelessWidget {
                   PopupMenuItem(
                     value: 'pause',
                     child: Text(alert.isActive ? 'Pause' : 'Resume'),
+                  ),
+                  PopupMenuItem(
+                    value: 'test',
+                    // A paused alert is skipped by the worker, so testing it
+                    // would queue a scan that can never email anything.
+                    enabled: alert.isActive,
+                    child: const Text('Send test email'),
                   ),
                   const PopupMenuItem(value: 'delete', child: Text('Delete')),
                 ],

@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/config/app_config.dart';
 import '../../../core/format/job_format.dart';
+import '../../../core/network/external_link.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/company_avatar.dart';
 import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/cq_loader.dart';
+import '../../../shared/widgets/job_row_card.dart';
 import '../../../shared/widgets/simple_markdown.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../resume/presentation/resume_section.dart';
 import '../data/job_models.dart';
 import '../data/jobs_repository.dart';
@@ -34,6 +38,8 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
   bool _applying = false;
   bool _applied = false;
   bool _saved = false;
+  List<JobSummary> _similar = const [];
+  ApplyQuota? _quota;
 
   @override
   void initState() {
@@ -45,6 +51,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _similar = const [];
     });
     try {
       final repo = await ref.read(jobsRepositoryProvider.future);
@@ -64,6 +71,12 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
         _saved = state.saved.contains(job.id);
         _applied = state.applied.containsKey(job.id);
       });
+      await _loadQuota(repo);
+      // Similar jobs load last and never throw — the section simply stays
+      // hidden if the query comes back empty.
+      final similar = await repo.similar(job);
+      if (!mounted || _job?.id != job.id) return;
+      setState(() => _similar = similar);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -71,6 +84,18 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
         _loading = false;
       });
     }
+  }
+
+  /// Today's application allowance, for the hint above the apply button.
+  ///
+  /// Only fetched for a signed-in user: job detail is viewable anonymously, so
+  /// an unconditional fetch would fire a guaranteed 401 on every public view
+  /// and spend the shared rate-limit budget for nothing.
+  Future<void> _loadQuota(JobsRepository repo) async {
+    if (ref.read(authControllerProvider) is! AuthAuthenticated) return;
+    final quota = await repo.applyQuota();
+    if (!mounted || quota == null) return;
+    setState(() => _quota = quota);
   }
 
   Future<void> _apply() async {
@@ -92,6 +117,8 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
         _applying = false;
       });
       _toast('Application submitted');
+      // The 201 carries no quota, so the cached figure is now one stale.
+      await _loadQuota(repo);
     } catch (e) {
       if (!mounted) return;
       // No resume on file → offer to upload one, then retry the application.
@@ -103,6 +130,17 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
           return;
         }
         setState(() => _applying = false);
+        return;
+      }
+      // Quota exhausted → reflect it in the bar, not just in a toast that
+      // disappears and leaves an apparently-tappable Apply button.
+      if (e is JobsException && e.code == 'QUOTA_EXCEEDED') {
+        final limit = _quota?.limit ?? 0;
+        setState(() {
+          _applying = false;
+          _quota = ApplyQuota(count: limit, limit: limit);
+        });
+        _toast(e.message, error: true);
         return;
       }
       setState(() => _applying = false);
@@ -139,6 +177,32 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     if (resume == null) return false;
     if (mounted) _toast('Resume added');
     return true;
+  }
+
+  /// Hand the job to the OS share sheet as its canonical website URL — the one
+  /// link that works for someone who doesn't have the app.
+  Future<void> _share() async {
+    final job = _job;
+    if (job == null) return;
+    final url = '${AppConfig.webBaseUrl}/job/${job.canonicalSlug}';
+    final text = '${job.title} at ${job.company.name}\n$url';
+    // The share sheet wants the origin rect on iPad; harmless elsewhere.
+    final box = context.findRenderObject() as RenderBox?;
+    await SharePlus.instance.share(
+      ShareParams(
+        text: text,
+        subject: '${job.title} at ${job.company.name}',
+        sharePositionOrigin: box == null
+            ? null
+            : box.localToGlobal(Offset.zero) & box.size,
+      ),
+    );
+  }
+
+  Future<void> _openCompanyWebsite(String url) async {
+    if (await openExternalLink(url)) return;
+    if (!mounted) return;
+    _toast('Could not open this link', error: true);
   }
 
   Future<void> _toggleSave() async {
@@ -179,6 +243,12 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
       appBar: AppBar(
         title: const Text('Job details'),
         actions: [
+          if (_job != null)
+            IconButton(
+              tooltip: 'Share',
+              icon: const Icon(Icons.ios_share_rounded),
+              onPressed: _share,
+            ),
           if (_job != null)
             IconButton(
               tooltip: _saved ? 'Saved' : 'Save',
@@ -239,6 +309,15 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
                     ],
                   ),
                 ),
+                // Its own tap target inside the company row: the row goes to
+                // the company page, this goes to the company's own site.
+                if (safeWebUri(job.company.websiteUrl) != null)
+                  IconButton(
+                    tooltip: 'Company website',
+                    icon: const Icon(Icons.language_rounded, size: 20),
+                    color: cq.fgSubtle,
+                    onPressed: () => _openCompanyWebsite(job.company.websiteUrl!),
+                  ),
                 Icon(Icons.chevron_right_rounded, size: 20, color: cq.fgSubtle),
               ],
             ),
@@ -300,8 +379,59 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
             ],
           ),
         ],
+
+        if (_similar.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xl),
+          Divider(height: 1, color: cq.border),
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              Expanded(child: Text('Similar jobs', style: text.titleMedium)),
+              TextButton(
+                onPressed: () => context.push(AppRoutes.searchPath(job.title)),
+                child: const Text('See all'),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (final s in _similar) ...[
+            JobRowCard(
+              job: s,
+              // `replace` so a chain of similar-job taps doesn't build an
+              // ever-deeper back stack of job screens.
+              onTap: () =>
+                  context.replace(AppRoutes.jobDetailPath(s.canonicalSlug)),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+        ],
         const SizedBox(height: AppSpacing.lg),
       ],
+    );
+  }
+
+  /// "3 of 10 applications left today", above the Apply button.
+  ///
+  /// Hidden entirely for unlimited plans (where the server pins `count` to a
+  /// meaningless 0) and when the limit is unknown. No "resets at midnight"
+  /// copy: the server buckets the counter in UTC, so for India it actually
+  /// rolls over at 05:30 IST and any clock-time promise would be wrong.
+  Widget? _quotaHint(JobDetail job) {
+    final quota = _quota;
+    if (quota == null || quota.unlimited || quota.limit <= 0) return null;
+    if (_applied || !job.isActive) return null;
+    final exhausted = quota.remaining == 0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Text(
+        exhausted
+            ? "You've used today's applications. More tomorrow."
+            : '${quota.remaining} of ${quota.limit} applications left today',
+        textAlign: TextAlign.center,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: exhausted ? context.cq.warning : context.cq.fgMuted,
+        ),
+      ),
     );
   }
 
@@ -318,8 +448,13 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
         color: Theme.of(context).scaffoldBackgroundColor,
         border: Border(top: BorderSide(color: cq.border)),
       ),
-      child: _applied
-          ? Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ?_quotaHint(job),
+          if (_applied)
+            Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.check_circle_rounded, color: cq.success),
@@ -330,18 +465,27 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
                 ),
               ],
             )
-          : !job.isActive
-              ? Text(
-                  'This job is no longer accepting applications.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cq.fgMuted),
-                )
-              : CqPrimaryButton(
-                  label: 'Apply now',
-                  icon: Icons.send_rounded,
-                  loading: _applying,
-                  onPressed: _apply,
-                ),
+          else if (!job.isActive)
+            Text(
+              'This job is no longer accepting applications.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cq.fgMuted),
+            )
+          else
+            CqPrimaryButton(
+              label: 'Apply now',
+              icon: Icons.send_rounded,
+              loading: _applying,
+              // Out of applications → the button stops pretending it will work.
+              onPressed: (_quota != null &&
+                      !_quota!.unlimited &&
+                      _quota!.limit > 0 &&
+                      _quota!.remaining == 0)
+                  ? null
+                  : _apply,
+            ),
+        ],
+      ),
     );
   }
 }

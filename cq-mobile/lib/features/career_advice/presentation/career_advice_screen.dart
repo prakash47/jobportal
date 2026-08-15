@@ -6,6 +6,7 @@ import '../../../core/format/job_format.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../shared/widgets/article_cover_image.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../data/article_models.dart';
 import '../data/articles_repository.dart';
@@ -24,14 +25,22 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
   ArticlesPage? _page;
   List<String> _allTags = const [];
   String? _tag;
+  String? _q;
   bool _loading = true;
   String? _error;
   int _currentPage = 1;
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _load(1);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<ArticlesRepository> _repository() async {
@@ -48,7 +57,11 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
       _error = null;
     });
     try {
-      final data = await (await _repository()).list(tag: _tag, page: page);
+      final data = await (await _repository()).list(
+        tag: _tag,
+        q: _q,
+        page: page,
+      );
       if (!mounted) return;
       setState(() {
         _page = data;
@@ -76,6 +89,18 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
     _load(1);
   }
 
+  void _submitSearch(String raw) {
+    final q = raw.trim();
+    _q = q.isEmpty ? null : q;
+    _load(1);
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _q = null;
+    _load(1);
+  }
+
   @override
   Widget build(BuildContext context) {
     final cq = context.cq;
@@ -84,6 +109,34 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.sm,
+              ),
+              child: TextField(
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                // Searched on submit rather than per keystroke: every query is
+                // a round trip, and the article set is small enough that
+                // as-you-type would be a lot of requests for little gain.
+                onSubmitted: _submitSearch,
+                decoration: InputDecoration(
+                  hintText: 'Search advice',
+                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  suffixIcon: _q == null
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear',
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: _clearSearch,
+                        ),
+                  isDense: true,
+                ),
+              ),
+            ),
             if (_allTags.isNotEmpty)
               SizedBox(
                 height: 48,
@@ -120,10 +173,12 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
     }
     final page = _page!;
     if (page.hits.isEmpty) {
-      return const _EmptyState(
+      return _EmptyState(
         icon: Icons.menu_book_rounded,
-        title: 'No articles here yet',
-        subtitle: 'Try a different topic.',
+        title: _q == null ? 'No articles here yet' : 'No results for "$_q"',
+        subtitle: _q == null
+            ? 'Try a different topic.'
+            : 'Try different words, or clear the search.',
       );
     }
     return RefreshIndicator(
@@ -181,6 +236,12 @@ class _ArticleCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Absent on most articles today — rendered only when present, so
+              // a coverless list looks deliberate rather than broken.
+              if ((article.coverImageUrl ?? '').isNotEmpty) ...[
+                ArticleCoverImage(url: article.coverImageUrl!, height: 148),
+                const SizedBox(height: AppSpacing.md),
+              ],
               if (article.tags.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.sm),

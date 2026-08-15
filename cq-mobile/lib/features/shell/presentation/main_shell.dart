@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../applications/presentation/applications_screen.dart';
@@ -6,19 +7,13 @@ import '../../home/presentation/home_screen.dart';
 import '../../jobs/presentation/job_search_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
 import '../../saved_jobs/presentation/saved_jobs_screen.dart';
+import '../application/shell_tab.dart';
 
-/// The app's tabbed home, shown after login/onboarding. Bottom navigation across
-/// the seeker features that have a working API today. Job search/browse arrives
-/// once the backend exposes the public jobs API.
-class MainShell extends StatefulWidget {
+/// The app's tabbed home, shown after login/onboarding. The selected tab lives
+/// in [shellTabProvider] so screens inside a tab (the Home header's counts) can
+/// switch to another one instead of pushing a duplicate screen.
+class MainShell extends ConsumerWidget {
   const MainShell({super.key});
-
-  @override
-  State<MainShell> createState() => _MainShellState();
-}
-
-class _MainShellState extends State<MainShell> {
-  int _index = 0;
 
   static const _tabs = <Widget>[
     HomeScreen(),
@@ -29,16 +24,18 @@ class _MainShellState extends State<MainShell> {
   ];
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tab = ref.watch(shellTabProvider);
     return Scaffold(
-      body: IndexedStack(index: _index, children: _tabs),
+      body: IndexedStack(index: tab.index, children: _tabs),
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: context.cq.border)),
         ),
         child: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: (i) => setState(() => _index = i),
+          selectedIndex: tab.index,
+          onDestinationSelected: (i) =>
+              ref.read(shellTabProvider.notifier).select(ShellTab.values[i]),
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.home_outlined),

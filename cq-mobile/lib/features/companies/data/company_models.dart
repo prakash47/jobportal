@@ -165,6 +165,7 @@ class RelatedCompany {
     this.logoUrl,
     this.averageRating,
     this.openRoles = 0,
+    this.serverHandle,
   });
   final int id;
   final String slug;
@@ -173,7 +174,14 @@ class RelatedCompany {
   final double? averageRating;
   final int openRoles;
 
-  String get handle => '$slug-overview-$id';
+  /// The handle as the API sends it, when it does. Preferred over the locally
+  /// derived one so the app isn't the second owner of the URL rule — if the
+  /// website's handle format ever changes, this follows it for free.
+  final String? serverHandle;
+
+  String get handle => (serverHandle?.isNotEmpty ?? false)
+      ? serverHandle!
+      : '$slug-overview-$id';
 
   factory RelatedCompany.fromJson(Map<String, dynamic> j) => RelatedCompany(
     id: (j['id'] as num?)?.toInt() ?? 0,
@@ -182,6 +190,7 @@ class RelatedCompany {
     logoUrl: j['logoUrl'] as String?,
     averageRating: (j['averageRating'] as num?)?.toDouble(),
     openRoles: (j['openRoles'] as num?)?.toInt() ?? 0,
+    serverHandle: j['handle'] as String?,
   );
 }
 

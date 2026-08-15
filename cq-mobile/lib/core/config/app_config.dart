@@ -24,6 +24,18 @@ abstract final class AppConfig {
     defaultValue: 'http://127.0.0.1:4000',
   );
 
+  /// Public website base URL — used to build the shareable canonical job link
+  /// (`<webBaseUrl>/job/<slug>`), which is a *website* URL, not an API one.
+  ///
+  /// The website has no production domain yet (the API's own `WEB_URL` still
+  /// defaults to localhost), so a shared link is only useful once it is
+  /// deployed. Point this at the real domain then:
+  ///     flutter run --dart-define=WEB_BASE_URL=https://careerqueue.in
+  static const String webBaseUrl = String.fromEnvironment(
+    'WEB_BASE_URL',
+    defaultValue: 'http://localhost:3000',
+  );
+
   /// Fail fast if the server can't be reached / is slow.
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 20);

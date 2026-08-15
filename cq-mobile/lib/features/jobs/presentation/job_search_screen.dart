@@ -8,11 +8,19 @@ import '../../../core/theme/app_colors.dart';
 import '../../shell/presentation/app_drawer.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/company_avatar.dart';
+import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/cq_loader.dart';
+import '../../alerts/data/alerts_repository.dart';
 import '../data/job_filters.dart';
 import '../data/job_models.dart';
 import '../data/jobs_repository.dart';
 import 'job_filters_sheet.dart';
+
+/// "a, b and c" — for naming the filters an alert can't carry.
+String _joinWords(List<String> words) {
+  if (words.length <= 1) return words.join();
+  return '${words.sublist(0, words.length - 1).join(', ')} and ${words.last}';
+}
 
 /// Jobs tab — search + browse the job feed. Reads the public `/jobs` endpoint
 /// (static sample data until the backend ships it). Each result taps through to
@@ -130,6 +138,118 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
     _load(1);
   }
 
+  /// Save the current search as a job alert.
+  ///
+  /// The alert query is narrower than the search (see
+  /// [JobFilters.toAlertQuery]), so the sheet states exactly which active
+  /// facets will not be carried over rather than saving a quietly different
+  /// search under the user's chosen name.
+  Future<void> _createAlert() async {
+    final dropped = _filters.unsupportedForAlert;
+    final alertQuery = _filters.toAlertQuery(_query);
+    if (alertQuery.isEmpty) {
+      _snack('Add a keyword or a filter first, so the alert has something to watch.');
+      return;
+    }
+    final defaultName = _query.trim().isNotEmpty
+        ? _query.trim()
+        : (_filters.active.isNotEmpty ? _filters.active.first.label : 'New jobs');
+
+    final controller = TextEditingController(text: defaultName);
+    var frequency = 'daily';
+    final created = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.xl2,
+            AppSpacing.xl,
+            AppSpacing.xl2,
+            AppSpacing.xl + MediaQuery.of(sheetContext).viewInsets.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Create alert',
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: controller,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(labelText: 'Alert name'),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'How often',
+                style: Theme.of(sheetContext).textTheme.labelLarge,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'instant', label: Text('Instant')),
+                  ButtonSegment(value: 'daily', label: Text('Daily')),
+                  ButtonSegment(value: 'weekly', label: Text('Weekly')),
+                ],
+                selected: {frequency},
+                onSelectionChanged: (s) =>
+                    setSheetState(() => frequency = s.first),
+              ),
+              if (dropped.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  'Alerts can\'t follow ${_joinWords(dropped)} — that ${dropped.length == 1 ? 'filter' : 'filters'} won\'t be saved.',
+                  style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
+                    color: sheetContext.cq.fgMuted,
+                  ),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.xl),
+              CqPrimaryButton(
+                label: 'Create alert',
+                icon: Icons.notifications_active_outlined,
+                onPressed: () => Navigator.pop(sheetContext, true),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (created != true || !mounted) {
+      controller.dispose();
+      return;
+    }
+    final name = controller.text.trim().isEmpty
+        ? defaultName
+        : controller.text.trim();
+    controller.dispose();
+    try {
+      final repo = await ref.read(alertsRepositoryProvider.future);
+      await repo.create(name: name, frequency: frequency, query: alertQuery);
+      if (!mounted) return;
+      _snack('Alert created');
+    } catch (e) {
+      if (!mounted) return;
+      // Includes the server's own "You can have at most 10 alerts." on 409.
+      _snack(e is AlertsException ? e.message : 'Could not create the alert.');
+    }
+  }
+
+  void _snack(String message) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+
   Future<void> _openFilters() async {
     final r = await showJobFilters(context, _filters);
     if (r != null) {
@@ -143,7 +263,17 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
     final cq = context.cq;
     return Scaffold(
       drawer: const AppDrawer(),
-      appBar: AppBar(title: const Text('Jobs')),
+      appBar: AppBar(
+        title: const Text('Jobs'),
+        actions: [
+          IconButton(
+            tooltip: 'Create alert for this search',
+            icon: const Icon(Icons.notifications_active_outlined),
+            onPressed: _createAlert,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -202,6 +332,36 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
                 ],
               ),
             ),
+            // ── Active filters ──
+            //
+            // Each chip removes exactly one facet; reopening the whole sheet to
+            // undo one choice is the friction this exists to remove.
+            if (_filters.activeCount > 0)
+              SizedBox(
+                height: 44,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                  children: [
+                    for (final f in _filters.active) ...[
+                      _ActiveFilterChip(
+                        label: f.label,
+                        onRemove: () {
+                          setState(() => _filters = f.without);
+                          _load(1);
+                        },
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                    ],
+                    _ClearAllChip(
+                      onTap: () {
+                        setState(() => _filters = const JobFilters());
+                        _load(1);
+                      },
+                    ),
+                  ],
+                ),
+              ),
             Divider(height: 1, color: cq.border),
             Expanded(child: _body()),
           ],
@@ -218,7 +378,16 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
       return _ErrorView(message: _error!, onRetry: () => _load(_currentPage));
     }
     final page = _page!;
-    if (page.hits.isEmpty) return _EmptyResults(query: _query);
+    if (page.hits.isEmpty) {
+      return _EmptyResults(
+        query: _query,
+        activeFilters: _filters.activeCount,
+        onClearFilters: () {
+          setState(() => _filters = const JobFilters());
+          _load(1);
+        },
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: () => _load(_currentPage),
@@ -309,6 +478,17 @@ class _JobCard extends StatelessWidget {
                     Icon(Icons.bookmark_rounded, size: 18, color: cq.accent),
                 ],
               ),
+              // Optional at posting time and nullable in the database, so this
+              // is absent on plenty of real jobs — never reserve space for it.
+              if ((job.shortDescription ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  job.shortDescription!.trim(),
+                  style: text.bodySmall?.copyWith(color: cq.fgMuted, height: 1.4),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
               const SizedBox(height: AppSpacing.md),
               Wrap(
                 spacing: AppSpacing.lg,
@@ -427,6 +607,74 @@ class _FilterButton extends StatelessWidget {
   }
 }
 
+/// An applied facet, with the X that removes it. Always reads as "on" — an
+/// unselected state would be meaningless here, since the chip only exists while
+/// the facet is active.
+class _ActiveFilterChip extends StatelessWidget {
+  const _ActiveFilterChip({required this.label, required this.onRemove});
+
+  final String label;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    return Center(
+      child: GestureDetector(
+        onTap: onRemove,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, 8, AppSpacing.sm),
+          decoration: BoxDecoration(
+            color: cq.accent.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(color: cq.accent.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: cq.accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.close_rounded, size: 15, color: cq.accent),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ClearAllChip extends StatelessWidget {
+  const _ClearAllChip({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    return Center(
+      child: TextButton(
+        onPressed: onTap,
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          'Clear all',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: cq.fgMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SortChip extends StatelessWidget {
   const _SortChip({
     required this.label,
@@ -500,8 +748,14 @@ class _Pager extends StatelessWidget {
 }
 
 class _EmptyResults extends StatelessWidget {
-  const _EmptyResults({required this.query});
+  const _EmptyResults({
+    required this.query,
+    required this.activeFilters,
+    required this.onClearFilters,
+  });
   final String query;
+  final int activeFilters;
+  final VoidCallback onClearFilters;
 
   @override
   Widget build(BuildContext context) {
@@ -519,12 +773,26 @@ class _EmptyResults extends StatelessWidget {
               Text('No jobs found', style: text.titleLarge),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                query.isEmpty
-                    ? 'Try a different search.'
-                    : 'Nothing matched "$query". Try broader keywords.',
+                // With filters on, they are the likeliest cause — say so and
+                // offer the fix, instead of blaming the keywords.
+                activeFilters > 0
+                    ? 'No jobs match your filters${query.isEmpty ? '' : ' for "$query"'}.'
+                    : query.isEmpty
+                        ? 'Try a different search.'
+                        : 'Nothing matched "$query". Try broader keywords.',
                 textAlign: TextAlign.center,
                 style: text.bodyMedium?.copyWith(color: cq.fgMuted),
               ),
+              if (activeFilters > 0) ...[
+                const SizedBox(height: AppSpacing.lg),
+                OutlinedButton.icon(
+                  onPressed: onClearFilters,
+                  icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
+                  label: Text(
+                    'Clear ${activeFilters == 1 ? 'filter' : 'all $activeFilters filters'}',
+                  ),
+                ),
+              ],
             ],
           ),
         ),

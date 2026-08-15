@@ -53,6 +53,9 @@ class Application {
     required this.updatedAt,
     required this.jobTitle,
     required this.companyName,
+    this.jobSlug = '',
+    this.companyId = 0,
+    this.companySlug = '',
     this.statusHistory = const [],
   });
 
@@ -65,7 +68,16 @@ class Application {
   final DateTime updatedAt;
   final String jobTitle;
   final String companyName;
+  final String jobSlug;
+  final int companyId;
+  final String companySlug;
   final List<StatusEvent> statusHistory;
+
+  /// Tap-through targets, present on the live list payload.
+  String? get jobPath => jobSlug.isEmpty ? null : jobSlug;
+  String? get companyHandle => (companyId > 0 && companySlug.isNotEmpty)
+      ? '$companySlug-overview-$companyId'
+      : null;
 
   /// Terminal states can't be withdrawn (mirrors the server state machine).
   bool get isTerminal =>
@@ -91,6 +103,9 @@ class Application {
     updatedAt: updatedAt,
     jobTitle: jobTitle,
     companyName: companyName,
+    jobSlug: jobSlug,
+    companyId: companyId,
+    companySlug: companySlug,
     statusHistory: statusHistory,
   );
 
@@ -104,6 +119,9 @@ class Application {
       updatedAt: DateTime.tryParse(j['updatedAt'] as String? ?? '') ?? DateTime(2000),
       jobTitle: job['title'] as String? ?? 'Job',
       companyName: company['name'] as String? ?? '',
+      jobSlug: job['canonicalSlug'] as String? ?? '',
+      companyId: (company['id'] as num?)?.toInt() ?? 0,
+      companySlug: company['slug'] as String? ?? '',
       statusHistory: ((j['statusHistory'] as List?) ?? const [])
           .whereType<Map>()
           .map((m) => StatusEvent.fromJson(m.cast<String, dynamic>()))

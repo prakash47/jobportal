@@ -9,7 +9,12 @@ import '../../shell/presentation/app_drawer.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/company_avatar.dart';
 import '../../../shared/widgets/cq_loader.dart';
+import '../../../shared/widgets/job_row_card.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../career_advice/data/article_models.dart';
+import '../../dashboard/data/dashboard_repository.dart';
+import '../../dashboard/data/seeker_snapshot.dart';
+import '../../shell/application/shell_tab.dart';
 import '../data/home_models.dart';
 import '../data/home_repository.dart';
 
@@ -25,6 +30,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   HomeFeed? _feed;
+  SeekerSnapshot? _snapshot;
   bool _loading = true;
   String? _error;
 
@@ -47,6 +53,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _feed = feed;
         _loading = false;
       });
+      await _loadSnapshot();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -56,7 +63,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  /// The seeker's own numbers + recommendations. Loaded *after* the feed so it
+  /// never delays first paint, and swallowed on failure — Home is still Home
+  /// without it.
+  Future<void> _loadSnapshot() async {
+    try {
+      final repo = await ref.read(dashboardRepositoryProvider.future);
+      final snapshot = await repo.load();
+      if (!mounted) return;
+      setState(() => _snapshot = snapshot);
+    } catch (_) {
+      // Non-critical: leave the personal block out entirely.
+    }
+  }
+
   void _search(String query) => context.push(AppRoutes.searchPath(query));
+
+  void _goToTab(ShellTab tab) =>
+      ref.read(shellTabProvider.notifier).select(tab);
 
   @override
   Widget build(BuildContext context) {
@@ -85,11 +109,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return _ErrorView(message: _error!, onRetry: _load);
     }
     final f = _feed!;
+    final snapshot = _snapshot;
+    final auth = ref.watch(authControllerProvider);
+    final firstName = auth is AuthAuthenticated
+        ? auth.user.name.trim().split(' ').first
+        : '';
+
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
         children: [
+          // ── Greeting ──
+          if (firstName.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Text(
+                'Hi, $firstName',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+          ],
+
           // ── Search entry ──
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
@@ -98,11 +140,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const SizedBox(height: AppSpacing.lg),
 
           // ── Counts ──
+          //
+          // The seeker's own activity when we have it; the marketplace numbers
+          // otherwise. Deliberately one row, not two — stacking both would be
+          // six numbers competing for the same glance.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: _CountsRibbon(counts: f.counts),
+            child: (snapshot != null && snapshot.hasCounts)
+                ? _ActivityRibbon(snapshot: snapshot, onOpen: _goToTab)
+                : _CountsRibbon(counts: f.counts),
           ),
           const SizedBox(height: AppSpacing.xl),
+
+          // ── Recommended for you ──
+          if (snapshot != null && snapshot.recommended.isNotEmpty) ...[
+            const _SectionHeader(title: 'Recommended for you'),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Column(
+                children: [
+                  for (final j in snapshot.recommended) ...[
+                    JobRowCard(
+                      job: j,
+                      onTap: () =>
+                          context.push(AppRoutes.jobDetailPath(j.canonicalSlug)),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+          ],
 
           // ── Latest jobs ──
           if (f.featuredJobs.isNotEmpty) ...[
@@ -274,6 +343,85 @@ class _CountsRibbon extends StatelessWidget {
           const SizedBox(height: 2),
           Text(label, style: text.labelSmall?.copyWith(color: cq.fgMuted)),
         ],
+      ),
+    );
+  }
+}
+
+/// The signed-in seeker's own numbers, in the same slot and visual language as
+/// [_CountsRibbon] — but each tile is a shortcut: applications and saved jobs
+/// switch bottom-nav tabs, alerts pushes the alerts screen.
+class _ActivityRibbon extends StatelessWidget {
+  const _ActivityRibbon({required this.snapshot, required this.onOpen});
+
+  final SeekerSnapshot snapshot;
+  final void Function(ShellTab) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      decoration: BoxDecoration(
+        color: cq.accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: cq.accent.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        children: [
+          _stat(
+            context,
+            snapshot.applications,
+            'Applied',
+            () => onOpen(ShellTab.applied),
+          ),
+          _divider(cq),
+          _stat(context, snapshot.saved, 'Saved', () => onOpen(ShellTab.saved)),
+          _divider(cq),
+          _stat(
+            context,
+            snapshot.alerts,
+            'Alerts',
+            () => context.push(AppRoutes.alerts),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _divider(CqColors cq) =>
+      Container(width: 1, height: 32, color: cq.border);
+
+  Widget _stat(
+    BuildContext context,
+    int? value,
+    String label,
+    VoidCallback onTap,
+  ) {
+    final cq = context.cq;
+    final text = Theme.of(context).textTheme;
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          child: Column(
+            children: [
+              Text(
+                // A null count means that endpoint failed — show a dash rather
+                // than a wrong zero.
+                value == null ? '—' : compactCount(value),
+                style: text.titleLarge?.copyWith(
+                  color: cq.accent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(label, style: text.labelSmall?.copyWith(color: cq.fgMuted)),
+            ],
+          ),
+        ),
       ),
     );
   }

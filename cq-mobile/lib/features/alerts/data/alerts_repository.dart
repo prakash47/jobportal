@@ -20,6 +20,12 @@ class AlertsException implements Exception {
 class AlertsRepository {
   const AlertsRepository(this._dio);
 
+  /// Server cap on alerts per user (`MAX_ALERTS_PER_USER` in the API's
+  /// alerts.service.ts). No endpoint exposes it, so the app mirrors the number
+  /// by hand — same as the website does. Paused alerts count toward it: the
+  /// server counts every row for the user, with no `isActive` filter.
+  static const int maxAlerts = 10;
+
   final Dio _dio;
 
   Future<List<JobAlert>> list() async {
@@ -90,6 +96,21 @@ class AlertsRepository {
       await _dio.delete<void>('/me/alerts/$id');
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return;
+      throw AlertsException(friendlyDioMessage(e));
+    }
+  }
+
+  /// Queue a scan of one alert (`POST /me/alerts/:id/test` → 202 `{queued:true}`).
+  ///
+  /// "Queued" is the strongest word the response supports, and the UI must not
+  /// promise more: the worker still skips paused alerts and users who turned
+  /// alert emails off, and it de-duplicates against jobs already emailed — so a
+  /// second test minutes later legitimately sends nothing at all.
+  Future<void> sendTest(int id) async {
+    if (AppConfig.useMockData) return;
+    try {
+      await _dio.post<void>('/me/alerts/$id/test');
+    } on DioException catch (e) {
       throw AlertsException(friendlyDioMessage(e));
     }
   }

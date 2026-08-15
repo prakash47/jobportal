@@ -8,6 +8,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/company_avatar.dart';
 import '../../../shared/widgets/cq_loader.dart';
+import '../../catalogs/data/catalog_models.dart';
+import '../../catalogs/presentation/catalog_picker.dart';
 import '../data/company_models.dart';
 import '../data/companies_repository.dart';
 
@@ -27,6 +29,8 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
   String? _error;
   int _currentPage = 1;
   String _sort = 'rating';
+  bool _hiringOnly = false;
+  CatalogItem? _industry;
 
   @override
   void initState() {
@@ -48,7 +52,13 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
       _error = null;
     });
     try {
-      final data = await (await _repository()).list(sort: _sort, page: page);
+      final data = await (await _repository()).list(
+        sort: _sort,
+        // `category` is the industry SLUG, not its name.
+        category: _industry?.slug,
+        hiring: _hiringOnly,
+        page: page,
+      );
       if (!mounted) return;
       setState(() {
         _page = data;
@@ -86,8 +96,63 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
           ),
         ],
       ),
-      body: SafeArea(child: _body()),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _filterBar(),
+            Divider(height: 1, color: context.cq.border),
+            Expanded(child: _body()),
+          ],
+        ),
+      ),
     );
+  }
+
+  Widget _filterBar() {
+    return SizedBox(
+      height: 52,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        children: [
+          _FilterChip(
+            label: 'Hiring now',
+            selected: _hiringOnly,
+            onTap: () {
+              _hiringOnly = !_hiringOnly;
+              _load(1);
+            },
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          _FilterChip(
+            label: _industry?.name ?? 'Industry',
+            selected: _industry != null,
+            // A selected industry clears on tap; an unset one opens the picker.
+            trailing: _industry == null
+                ? Icons.expand_more_rounded
+                : Icons.close_rounded,
+            onTap: _industry == null ? _pickIndustry : _clearIndustry,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickIndustry() async {
+    final picked = await showCatalogPicker(
+      context: context,
+      kind: CatalogKind.industries,
+      title: 'Industry',
+      initial: _industry == null ? const [] : [_industry!],
+    );
+    if (picked == null || picked.isEmpty) return;
+    _industry = picked.first;
+    _load(1);
+  }
+
+  void _clearIndustry() {
+    _industry = null;
+    _load(1);
   }
 
   Widget _body() {
@@ -99,10 +164,13 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
     }
     final page = _page!;
     if (page.hits.isEmpty) {
-      return const _EmptyState(
+      final filtered = _hiringOnly || _industry != null;
+      return _EmptyState(
         icon: Icons.domain_rounded,
         title: 'No companies found',
-        subtitle: 'Try a different sort or check back later.',
+        subtitle: filtered
+            ? 'Try removing a filter.'
+            : 'Check back later.',
       );
     }
     return RefreshIndicator(
@@ -119,6 +187,65 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
             onTap: () => context.push(AppRoutes.companyPath(c.handle)),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Directory filter chip — same pill language as the career-advice tags, with
+/// an optional trailing affordance (open the picker / clear the selection).
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.trailing,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    return Center(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: selected ? cq.accent.withValues(alpha: 0.14) : cq.surfaceMuted,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(
+              color: selected ? cq.accent.withValues(alpha: 0.5) : cq.border,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: selected ? cq.accent : cq.fgMuted,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  trailing,
+                  size: 15,
+                  color: selected ? cq.accent : cq.fgMuted,
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../shell/presentation/app_drawer.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -133,7 +135,14 @@ class _SavedJobsScreenState extends ConsumerState<SavedJobsScreen> {
         separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
         itemBuilder: (context, i) {
           if (i == page.hits.length) return _Pager(page: page, onGo: _load);
-          return _SavedJobCard(job: page.hits[i], onRemove: () => _remove(page.hits[i]));
+          final job = page.hits[i];
+          return _SavedJobCard(
+            job: job,
+            onRemove: () => _remove(job),
+            onTap: job.canonicalSlug.isEmpty
+                ? null
+                : () => context.push(AppRoutes.jobDetailPath(job.canonicalSlug)),
+          );
         },
       ),
     );
@@ -141,52 +150,58 @@ class _SavedJobsScreenState extends ConsumerState<SavedJobsScreen> {
 }
 
 class _SavedJobCard extends StatelessWidget {
-  const _SavedJobCard({required this.job, required this.onRemove});
+  const _SavedJobCard({required this.job, required this.onRemove, this.onTap});
 
   final SavedJob job;
   final VoidCallback onRemove;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final cq = context.cq;
     final text = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: cq.surfaceMuted,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: cq.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Material(
+      color: cq.surfaceMuted,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: cq.border),
+          ),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(job.title, style: text.titleMedium),
-                    if (job.companyName.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        job.companyName,
-                        style: text.bodyMedium?.copyWith(color: cq.fgMuted),
-                      ),
-                    ],
-                  ],
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(job.title, style: text.titleMedium),
+                        if (job.companyName.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            job.companyName,
+                            style: text.bodyMedium?.copyWith(color: cq.fgMuted),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Remove',
+                    icon: Icon(Icons.bookmark_remove_outlined, color: cq.fgMuted),
+                    onPressed: onRemove,
+                  ),
+                ],
               ),
-              IconButton(
-                tooltip: 'Remove',
-                icon: Icon(Icons.bookmark_remove_outlined, color: cq.fgMuted),
-                onPressed: onRemove,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Wrap(
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.xs,
             crossAxisAlignment: WrapCrossAlignment.center,
@@ -214,6 +229,8 @@ class _SavedJobCard extends StatelessWidget {
             ],
           ),
         ],
+          ),
+        ),
       ),
     );
   }
@@ -294,8 +311,7 @@ class _EmptySaved extends StatelessWidget {
             Text('No saved jobs yet', style: text.titleLarge),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Jobs you save will show up here. In-app job browsing is coming '
-              'once the backend adds a public jobs API.',
+              'Tap the bookmark on any job to save it here for later.',
               textAlign: TextAlign.center,
               style: text.bodyMedium?.copyWith(color: cq.fgMuted),
             ),

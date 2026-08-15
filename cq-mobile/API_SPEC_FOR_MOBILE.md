@@ -716,3 +716,140 @@ Highest unblock-value first for the app:
 6. **`GET /me/applications` additive fields** — small, improves an existing screen.
 
 Every one is a wrapper over code that already exists in the web app — the notes name the exact file/function to reuse so behaviour stays identical between web and mobile.
+
+---
+
+# ADDENDUM — 2026-08-15 · Round 2 requests
+
+Everything in §1–§4 above has since **shipped** (thank you) and the app is live against it. This addendum is a **new, smaller set of three requests**, written after re-reading the current contract on `origin/develop` (`49b791e`). Each one opens with the evidence that it is genuinely missing, so nobody has to re-investigate.
+
+Nothing here is urgent, and none of it blocks the app's current release.
+
+---
+
+## A. `GET /v1/jobs/suggest` — search type-ahead
+
+### Evidence it is missing
+
+`PublicJobsController` declares exactly two routes — `@Get()` (list) and `@Get(':slug')` (detail). There is no suggest/autocomplete route on the public API. A **working reference implementation already exists**, but only in the website: `apps/web/app/api/search/suggest/route.ts` — a Next.js route handler, not on the `/v1` surface, so the app cannot reach it.
+
+**This should be a small change**: `suggestJobTitles` / `suggestCompanyNames` are already exported from `packages/search` over Elasticsearch completion suggesters. The ask is a thin controller method over proven code, not new search engineering.
+
+> Skill / city / industry type-ahead is **already live** at `/v1/skills?q=`, `/v1/cities?q=` and `/v1/industries?q=`, and the app uses them. This request is only about job titles and companies.
+
+### Route
+
+```
+GET /v1/jobs/suggest?q=fli&limit=8&type=jobs
+```
+
+> **Declaration order matters.** `@Get('suggest')` must be declared **above** the existing `@Get(':slug')`. Nest matches in declaration order, so a later declaration is swallowed by the `:slug` route and `/v1/jobs/suggest` resolves to `detail('suggest')` — a 404.
+
+### Params (a `.strict()` Zod DTO, like the rest of that file)
+
+| Param | Type | Notes |
+|---|---|---|
+| `q` | string, trimmed, 1–80 | required |
+| `limit` | int 1–20, default 8 | matches the web handler's clamp |
+| `type` | `jobs` or `companies`, default `jobs` | picks the suggester |
+
+### Response
+
+```json
+{ "suggestions": ["Flutter Developer", "Flipkart", "Flutter Engineer"] }
+```
+
+Plain strings — matching `SuggestResult` in `packages/search/src/types.ts` and the existing web handler, so no change to `packages/search` is needed.
+
+### Decisions we are asking you to make deliberately
+
+1. **Fail soft.** On any Elasticsearch error, return `200 {"suggestions": []}` — not a 5xx, and not the `ServiceUnavailableException` the main jobs route uses. A type-ahead that errors mid-keystroke is worse than one that quietly returns nothing.
+2. **Short timeout (~1s).** The shared ES client timeout is 10s; a suggestion request that hangs for ten seconds is useless, because the user has finished typing.
+3. **Rate limit.** Please add an explicit `@Throttle` override. The global limit is 100 req/60s **per IP** across *all* endpoints, and on Indian mobile carrier NAT many users share one egress IP — an un-overridden type-ahead could 429 a user's whole session, job list and detail included. The app will debounce ~200ms and cancel in-flight requests regardless.
+4. **Cache**: `Cache-Control: public, s-maxage=300, stale-while-revalidate=60` (the `/v1/home` precedent). No per-user field in the payload.
+
+### Three limitations we would rather have documented than fixed
+
+- **The `jobs` suggester returns a mixed list.** `title_suggest` is fed both the job title *and* the company name, so results interleave the two with nothing to tell them apart. The app will render them as one undifferentiated list. If you would rather they were separable, that needs a type discriminator in the response (and a reindex).
+- **Prefix-only matching.** The completion suggester matches from the start of each input, so typing `developer` will *not* surface `Senior Developer`. We will write the UX copy accordingly. Infix matching would be a mapping/analyzer change plus a reindex — not worth it for this.
+- **No status filter on suggestions.** Unlike `searchJobs` (which pins `status=ACTIVE`), the suggester has none, and de-indexing on job close is fire-and-forget. A failed de-index leaves a closed job's title suggestible indefinitely. Low stakes — a suggestion leads to a search, not to a dead job page — but worth knowing.
+
+---
+
+## B. `GET /v1/career-advice/topics` — the topic list, with counts
+
+### Evidence it is missing
+
+`PublicArticlesService.list` returns exactly `{ hits, total, page, pageSize }` — no facet or topics block — and `PublicArticlesController` has only `@Get()` and `@Get(':slug')`.
+
+### The app-side defect this fixes
+
+The app currently builds its topic chips by accumulating tags from whichever articles happen to have loaded. That is wrong the moment there is more than one page: topics that appear only on page 3 are invisible until the user pages that far, and the chip set shifts as they scroll.
+
+### Route
+
+```
+GET /v1/career-advice/topics
+```
+
+> Same declaration-order requirement: **above** `@Get(':slug')`, or it resolves to `detail('topics')`.
+
+No query params — this is the complete list, deliberately unpaginated.
+
+### Response
+
+```json
+{ "topics": [{ "slug": "interview-tips", "count": 12 }], "total": 37 }
+```
+
+`total` is the count of PUBLISHED articles, so the app can render an "All (37)" chip without a second call. Sort by `count` descending, tie-break `localeCompare` on slug — byte-identical to the website's ordering, so the two surfaces show chips in the same order.
+
+### Notes for the implementer
+
+- **Counts should be GLOBAL** — independent of any active tag, `q` or page, mirroring the website. Query-scoped counts would make every chip's number change as the user filters, and the selected chip's count would always equal the result total while every other chip read 0.
+- `Article.tags` is a Postgres `String[]` with a GIN index and **no Tag join table**, so `prisma.groupBy` cannot group by array elements. Recommended: `SELECT unnest(tags) AS slug, count(*) FROM "Article" WHERE status='PUBLISHED' GROUP BY 1` via `Prisma.sql`, which pushes the work to Postgres.
+- **Please return only slug-shaped tags** (`/^[a-z0-9]+(?:-[a-z0-9]+)*$/` — the same `SLUG_RE` the shared parser enforces). A non-slug tag is silently coerced to null by the parser and the filter is then skipped, so such a chip would return *unfiltered* results: a chip that looks like it works and does not.
+- **No display label exists** anywhere in the database or in a shared package; the website derives one with a presentation-only helper the API cannot import. Returning the slug alone is fine — the app will title-case it. Flagging it only because app and website labels may then diverge slightly.
+- `Cache-Control: public, s-maxage=1800, stale-while-revalidate=600`. The payload is identical for every caller and articles publish infrequently.
+
+---
+
+## C. Profile views — currently a dead counter on **both** surfaces
+
+### This one is a bug report first, a feature request second
+
+`Candidate.profileViews` is a non-nullable `Int @default(0)` that **nothing in the repository ever writes**. `git grep -n "profileViews" origin/develop` returns 7 hits: 1 schema field, 1 migration DDL, and 5 reads. There is no `ProfileView` model, no view-event table, and no increment anywhere.
+
+It is already on the wire to us — `GET /me/profile` returns the full `Candidate` row — so the app *could* render it today. **We deliberately have not**, because it would ship a confident, permanent zero.
+
+> **Please also look at `apps/web/app/profile/page.tsx`**, which renders a "Profile views" StatCard bound to this same never-incremented column. Right now it tells every job seeker they have 0 profile views, forever. Either the tracking ships or that card should come out — your call. We are only flagging it because we found it while checking whether the app was behind the website here. It is not.
+
+### If you do build it
+
+**Schema** — a view-event table rather than only a counter, so "last 30 days" is answerable:
+
+```prisma
+model CandidateProfileView {
+  id              Int       @id @default(autoincrement())
+  candidateId     Int
+  candidate       Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  recruiterUserId Int
+  companyId       Int?
+  viewedAt        DateTime  @default(now())
+  @@index([candidateId, viewedAt])
+}
+```
+
+> Named `CandidateProfileView`, **not** `ProfileView` — there is already an exported TypeScript interface called `ProfileView` in `apps/api/src/profile/profile.service.ts`, and a Prisma model of that name would collide with it on import.
+
+**Write hook** — record where a recruiter demonstrably looks at *one* person. Please do **not** hook the applicants *list* route; a single page render would inflate 20 candidates at once. The single-applicant surfaces (the resume view, for example) are the right place. De-duplicate per recruiter/candidate/day.
+
+**Read endpoint** — `GET /v1/me/profile-views`, JWT-guarded, candidate-only. Note it must declare `@Controller({ path: 'me/profile-views', version: '1' })` explicitly, or it lands unversioned.
+
+```json
+{ "totalViews": 42, "last30Days": 9, "lastViewedAt": "2026-08-14T09:12:00.000Z" }
+```
+
+**Privacy** — please expose **company-level attribution only** (company name / logo), never the viewing recruiter's name, email or user id.
+
+**The one thing we most need**, whatever shape you choose: **a capability signal.** Because the counter is a non-nullable Int defaulting to 0, the app cannot tell "nobody has viewed you" from "tracking was never implemented" — and those need completely different UI. A boolean (`profileViewsTracked: true` on `GET /me/profile`), or simply the route existing and returning 200, is enough.

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/format/job_format.dart';
+import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../shared/widgets/article_cover_image.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../../../shared/widgets/simple_markdown.dart';
 import '../data/article_models.dart';
@@ -22,6 +25,7 @@ class ArticleDetailScreen extends ConsumerStatefulWidget {
 
 class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
   ArticleDetail? _article;
+  List<ArticleSummary> _related = const [];
   bool _loading = true;
   String? _error;
 
@@ -42,8 +46,13 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
       if (!mounted) return;
       setState(() {
         _article = a;
+        _related = const [];
         _loading = false;
       });
+      // Same-topic reading, derived from the article's own tag. Never throws.
+      final related = await repo.related(a);
+      if (!mounted || _article?.slug != a.slug) return;
+      setState(() => _related = related);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -80,6 +89,10 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.xl2),
       children: [
+        if ((a.coverImageUrl ?? '').isNotEmpty) ...[
+          ArticleCoverImage(url: a.coverImageUrl!, height: 180),
+          const SizedBox(height: AppSpacing.lg),
+        ],
         if (a.tags.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.sm),
@@ -116,8 +129,95 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
             children: [for (final t in a.tags) _tagPill(context, _pretty(t))],
           ),
         ],
+
+        if (_related.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xl),
+          Divider(height: 1, color: cq.border),
+          const SizedBox(height: AppSpacing.lg),
+          Text('More on this topic', style: text.titleMedium),
+          const SizedBox(height: AppSpacing.md),
+          for (final r in _related) ...[
+            _RelatedArticleRow(
+              article: r,
+              // `replace`, so reading through a chain of related articles
+              // doesn't build a deep stack of article screens to back out of.
+              onTap: () => context.replace(AppRoutes.articlePath(r.slug)),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+        ],
         const SizedBox(height: AppSpacing.lg),
       ],
+    );
+  }
+}
+
+/// A compact link to another article on the same topic.
+class _RelatedArticleRow extends StatelessWidget {
+  const _RelatedArticleRow({required this.article, required this.onTap});
+
+  final ArticleSummary article;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    final text = Theme.of(context).textTheme;
+    final meta = [
+      if (article.readTimeMinutes != null) '${article.readTimeMinutes} min read',
+      if (article.publishedAt != null) formatDate(article.publishedAt!),
+    ].join('  ·  ');
+
+    return Material(
+      color: cq.surfaceMuted,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: cq.border),
+          ),
+          child: Row(
+            children: [
+              if ((article.coverImageUrl ?? '').isNotEmpty) ...[
+                SizedBox(
+                  width: 64,
+                  child: ArticleCoverImage(
+                    url: article.coverImageUrl!,
+                    height: 48,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      article.title,
+                      style: text.titleSmall,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (meta.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        meta,
+                        style: text.labelSmall?.copyWith(color: cq.fgSubtle),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, size: 18, color: cq.fgSubtle),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

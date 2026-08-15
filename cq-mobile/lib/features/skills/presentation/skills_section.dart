@@ -7,6 +7,47 @@ import '../../catalogs/data/catalog_models.dart';
 import '../../catalogs/presentation/catalog_picker.dart';
 import '../data/skills_repository.dart';
 
+/// Open the skills picker and persist the result — the same flow as the
+/// section's own "Add skills" button, exposed so the profile "Next steps"
+/// checklist can start it without the section being on screen.
+///
+/// Loads the current set first and passes it as the picker's initial selection,
+/// because `PATCH /me/skills` is a full-set REPLACE: saving the picker's result
+/// without seeding it would silently wipe skills the candidate already has.
+///
+/// Returns true if anything was saved.
+Future<bool> addSkillsFlow(BuildContext context, WidgetRef ref) async {
+  try {
+    final repo = await ref.read(skillsRepositoryProvider.future);
+    final current = await repo.current();
+    if (!context.mounted) return false;
+    final picked = await showCatalogPicker(
+      context: context,
+      kind: CatalogKind.skills,
+      title: 'Add skills',
+      multi: true,
+      initial: current,
+    );
+    if (picked == null || picked.isEmpty) return false;
+    await repo.save(
+      skillIds: [for (final c in picked) if (c.id > 0) c.id],
+      customSkills: [for (final c in picked) if (c.id <= 0) c.name],
+    );
+    return true;
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e is SkillsException ? e.message : 'Could not save skills.',
+          ),
+        ),
+      );
+    }
+    return false;
+  }
+}
+
 /// Profile card: the candidate's skills. Chips are removable; "Add skills" opens
 /// the catalog picker (multi) and a free-text field adds custom skills. Every
 /// change persists as a full-set replace via `PATCH /me/skills`.

@@ -1,10 +1,10 @@
-/// One saved job, as returned by `GET /me/saved-jobs`. The API joins Job +
-/// Company but (deliberately) doesn't include city/salary/logo, and there's no
-/// public job-detail endpoint — so the app shows title, company, saved date,
-/// and application state, without a tap-through to the full job yet.
+/// One saved job, as returned by `GET /me/saved-jobs`. Joins Job + Company and
+/// carries the job's [canonicalSlug], so each row taps through to the full job
+/// detail (`/v1/jobs/:slug`).
 class SavedJob {
   const SavedJob({
     required this.jobId,
+    required this.canonicalSlug,
     required this.savedAt,
     required this.title,
     required this.companyName,
@@ -14,6 +14,7 @@ class SavedJob {
   });
 
   final int jobId;
+  final String canonicalSlug;
   final DateTime savedAt;
   final String title;
   final String companyName;
@@ -32,6 +33,7 @@ class SavedJob {
     final company = (job['company'] as Map?)?.cast<String, dynamic>() ?? const {};
     return SavedJob(
       jobId: (j['jobId'] as num?)?.toInt() ?? 0,
+      canonicalSlug: job['canonicalSlug'] as String? ?? '',
       savedAt: DateTime.tryParse(j['savedAt'] as String? ?? '') ?? DateTime(2000),
       title: job['title'] as String? ?? 'Job',
       companyName: company['name'] as String? ?? '',

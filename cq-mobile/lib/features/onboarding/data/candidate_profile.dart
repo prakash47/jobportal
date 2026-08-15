@@ -16,6 +16,11 @@ class CandidateProfile {
     this.headline,
     this.expectedSalaryMinPaise,
     this.gender,
+    this.summary,
+    this.industryId,
+    this.expectedSalaryMaxPaise,
+    this.preferredCityIds = const [],
+    this.skillIds = const [],
   });
 
   final String? name;
@@ -38,6 +43,15 @@ class CandidateProfile {
   /// 'MALE' | 'FEMALE' | 'PREFER_NOT_TO_SAY'
   final String? gender;
 
+  final String? summary;
+  final int? industryId;
+  final int? expectedSalaryMaxPaise;
+  final List<int> preferredCityIds;
+
+  /// The candidate's skills as bare catalogue ids — resolve them through
+  /// `CatalogsRepository.resolve` to get names/slugs.
+  final List<int> skillIds;
+
   factory CandidateProfile.fromJson(Map<String, dynamic> json) {
     final user = (json['user'] as Map?)?.cast<String, dynamic>() ?? const {};
     final c = (json['candidate'] as Map?)?.cast<String, dynamic>() ?? const {};
@@ -55,6 +69,17 @@ class CandidateProfile {
       headline: c['headline'] as String?,
       expectedSalaryMinPaise: (c['expectedSalaryMinPaise'] as num?)?.toInt(),
       gender: c['gender'] as String?,
+      summary: c['summary'] as String?,
+      industryId: (c['industryId'] as num?)?.toInt(),
+      expectedSalaryMaxPaise: (c['expectedSalaryMaxPaise'] as num?)?.toInt(),
+      preferredCityIds: ((c['preferredCityIds'] as List?) ?? const [])
+          .whereType<num>()
+          .map((n) => n.toInt())
+          .toList(),
+      skillIds: ((c['skillIds'] as List?) ?? const [])
+          .whereType<num>()
+          .map((n) => n.toInt())
+          .toList(),
     );
   }
 }

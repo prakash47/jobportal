@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../shell/presentation/app_drawer.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -433,6 +435,37 @@ class _TimelineSheet extends StatelessWidget {
             if (app.companyName.isNotEmpty) ...[
               const SizedBox(height: 2),
               Text(app.companyName, style: text.bodyMedium?.copyWith(color: cq.fgMuted)),
+            ],
+            if (app.jobPath != null || app.companyHandle != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  if (app.jobPath != null)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          context.push(AppRoutes.jobDetailPath(app.jobPath!));
+                        },
+                        icon: const Icon(Icons.work_outline_rounded, size: 18),
+                        label: const Text('View job'),
+                      ),
+                    ),
+                  if (app.jobPath != null && app.companyHandle != null)
+                    const SizedBox(width: AppSpacing.md),
+                  if (app.companyHandle != null)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          context.push(AppRoutes.companyPath(app.companyHandle!));
+                        },
+                        icon: const Icon(Icons.business_outlined, size: 18),
+                        label: const Text('Company'),
+                      ),
+                    ),
+                ],
+              ),
             ],
             const SizedBox(height: AppSpacing.xl),
             for (var i = 0; i < events.length; i++)

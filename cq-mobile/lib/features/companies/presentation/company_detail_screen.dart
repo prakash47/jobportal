@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/format/job_format.dart';
+import '../../../core/network/external_link.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -32,6 +33,14 @@ class _CompanyDetailScreenState extends ConsumerState<CompanyDetailScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<void> _openWebsite(String url) async {
+    final opened = await openExternalLink(url);
+    if (!mounted || opened) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('Could not open this link')));
   }
 
   Future<void> _load() async {
@@ -129,6 +138,16 @@ class _CompanyDetailScreenState extends ConsumerState<CompanyDetailScreen> {
               _fact(context, Icons.flag_rounded, 'Founded ${c.foundedYear}'),
             if (c.activeJobs > 0)
               _fact(context, Icons.work_outline_rounded, '${c.activeJobs} open roles'),
+            // Only rendered when the URL survives validation, so a hostile or
+            // malformed value shows nothing rather than a chip that refuses to
+            // work when tapped.
+            if (safeWebUri(c.websiteUrl) != null)
+              _linkFact(
+                context,
+                Icons.open_in_new_rounded,
+                hostLabel(c.websiteUrl!),
+                () => _openWebsite(c.websiteUrl!),
+              ),
           ],
         ),
 
@@ -146,11 +165,27 @@ class _CompanyDetailScreenState extends ConsumerState<CompanyDetailScreen> {
         ],
 
         if (c.openings.isNotEmpty) ...[
-          _sectionTitle(context, 'Open roles (${c.openings.length})'),
+          // `activeJobs` is the real count; `openings` is a server-capped
+          // sample of at most 10. Using the list length here made a company
+          // with 43 live roles read "43 open roles" in the facts row and
+          // "Open roles (10)" six lines below it.
+          _sectionTitle(context, 'Open roles (${c.activeJobs})'),
           for (final o in c.openings)
             _OpeningRow(
               opening: o,
               onTap: () => context.push(AppRoutes.jobDetailPath(o.canonicalSlug)),
+            ),
+          if (c.activeJobs > c.openings.length)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.sm),
+              child: Center(
+                child: Text(
+                  // No "see all" action: /v1/jobs has no company filter, so
+                  // there is no endpoint to send them to.
+                  'Showing ${c.openings.length} of ${c.activeJobs}.',
+                  style: text.labelSmall?.copyWith(color: cq.fgMuted),
+                ),
+              ),
             ),
         ],
 
@@ -162,8 +197,10 @@ class _CompanyDetailScreenState extends ConsumerState<CompanyDetailScreen> {
         if (c.relatedCompanies.isNotEmpty) ...[
           _sectionTitle(context, 'Similar companies'),
           SizedBox(
-            height: (132 * MediaQuery.textScalerOf(context).scale(1.0))
-                .clamp(132.0, 205.0),
+            // Taller than before: a rated company that is also hiring now
+            // renders both lines, where it used to render only one.
+            height: (152 * MediaQuery.textScalerOf(context).scale(1.0))
+                .clamp(152.0, 232.0),
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: c.relatedCompanies.length,
@@ -211,6 +248,47 @@ Widget _fact(BuildContext context, IconData icon, String label) {
           style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cq.fg),
         ),
       ],
+    ),
+  );
+}
+
+/// A fact chip that is also a link — same shape as [_fact], tinted with the
+/// accent so it reads as the one tappable item in the row.
+Widget _linkFact(
+  BuildContext context,
+  IconData icon,
+  String label,
+  VoidCallback onTap,
+) {
+  final cq = context.cq;
+  return Material(
+    color: cq.surfaceMuted,
+    borderRadius: BorderRadius.circular(AppRadius.sm),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: cq.accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: cq.accent),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium
+                  ?.copyWith(color: cq.accent),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 }
@@ -414,9 +492,12 @@ class _RelatedCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 2),
+              // Rating and open roles are independent facts, not alternatives —
+              // an either/or hid the hiring signal on every rated company,
+              // which is the more useful of the two to a job seeker.
               if (related.averageRating != null)
-                RatingPill(rating: related.averageRating!)
-              else
+                RatingPill(rating: related.averageRating!),
+              if (related.openRoles > 0)
                 Text(
                   '${related.openRoles} open roles',
                   style: text.labelSmall?.copyWith(color: cq.fgMuted),

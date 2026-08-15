@@ -10,6 +10,9 @@ import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../../../shared/widgets/theme_toggle_button.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../education/presentation/education_editor_sheet.dart';
+import '../../education/presentation/education_section.dart';
+import '../../experience/presentation/experience_editor_sheet.dart';
 import '../../experience/presentation/experience_section.dart';
 import '../../languages/presentation/languages_section.dart';
 import '../../projects/presentation/projects_section.dart';
@@ -17,6 +20,7 @@ import '../../resume/presentation/resume_section.dart';
 import '../../skills/presentation/skills_section.dart';
 import '../data/profile_overview.dart';
 import '../data/profile_repository.dart';
+import 'profile_details_editor_screen.dart';
 
 String _expLabel(int? months) {
   final m = months ?? 0;
@@ -53,6 +57,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _loading = true;
   String? _error;
 
+  /// Bumped when a "Next steps" shortcut saves something, to remount the
+  /// section cards below so they refetch. They own their state and load once on
+  /// mount, so without this an item added from the checklist would not appear
+  /// in its own section until the tab was rebuilt.
+  int _sectionsToken = 0;
+
   @override
   void initState() {
     super.initState();
@@ -82,9 +92,53 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _edit() async {
-    await context.push(AppRoutes.onboarding);
-    if (mounted) _load(); // refresh after editing
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const ProfileDetailsEditorScreen()),
+    );
+    if (mounted && saved == true) _load(); // refresh after editing
   }
+
+  /// Run a checklist shortcut that may have saved something, then refresh the
+  /// completeness figure and the affected section card.
+  Future<void> _afterShortcut(Future<bool?> action) async {
+    final saved = await action;
+    if (!mounted || saved != true) return;
+    setState(() => _sectionsToken++);
+    await _load();
+  }
+
+  /// What's still missing, most-valuable first. Each entry opens the editor
+  /// that fixes it directly — scrolling to the section below would be the
+  /// obvious alternative, but those cards are inside a lazily-built list and
+  /// may not exist yet when the shortcut is tapped, which would make the tap
+  /// silently do nothing. An empty list hides the block: a checklist that stays
+  /// visible after you finish it is just nagging.
+  List<_NextStep> _nextSteps(ProfileOverview p) => [
+    if ((p.headline ?? '').isEmpty)
+      _NextStep('Add a headline', 'Recruiters see it first', _edit),
+    if (p.skillCount == 0)
+      _NextStep(
+        'Add your skills',
+        'They drive your job matches',
+        () => _afterShortcut(addSkillsFlow(context, ref)),
+      ),
+    if (p.experienceCount == 0 && p.workStatus == 'EXPERIENCED')
+      _NextStep(
+        'Add work experience',
+        'Your roles and what you did',
+        () => _afterShortcut(showExperienceEditor(context)),
+      ),
+    if (p.educationCount == 0)
+      _NextStep(
+        'Add your education',
+        'Degree, college and year',
+        () => _afterShortcut(showEducationEditor(context)),
+      ),
+    if (p.lookingFor == null)
+      _NextStep('Set what you\'re looking for', 'Job, internship or both', _edit),
+    if (p.expectedSalaryMinPaise == null)
+      _NextStep('Add expected salary', 'Filters out mismatched roles', _edit),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +170,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final p = _profile!;
     final cq = context.cq;
     final text = Theme.of(context).textTheme;
+    final steps = _nextSteps(p);
 
     final rows = <(IconData, String, String)>[
       (Icons.badge_outlined, 'Headline', p.headline ?? 'Not added'),
@@ -233,6 +288,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     valueColor: AlwaysStoppedAnimation<Color>(cq.accent),
                   ),
                 ),
+
+                // ── Next steps ──
+                if (steps.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'Next steps',
+                    style: text.labelLarge?.copyWith(color: cq.fgMuted),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  // Capped at three: a wall of to-dos reads as failure, three
+                  // reads as a nudge. The rest surface as these get done.
+                  for (final s in steps.take(3)) _NextStepTile(step: s),
+                ],
               ],
             ),
           ),
@@ -251,11 +319,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: AppSpacing.xl),
 
           // ── Work experience ──
-          const WorkExperienceSection(),
+          KeyedSubtree(
+            key: ValueKey('experience-$_sectionsToken'),
+            child: const WorkExperienceSection(),
+          ),
           const SizedBox(height: AppSpacing.xl),
 
           // ── Skills ──
-          const SkillsSection(),
+          KeyedSubtree(
+            key: ValueKey('skills-$_sectionsToken'),
+            child: const SkillsSection(),
+          ),
           const SizedBox(height: AppSpacing.xl),
 
           // ── Projects ──
@@ -264,6 +338,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
           // ── Languages ──
           const LanguagesSection(),
+          const SizedBox(height: AppSpacing.xl),
+
+          // ── Education ──
+          KeyedSubtree(
+            key: ValueKey('education-$_sectionsToken'),
+            child: const EducationSection(),
+          ),
           const SizedBox(height: AppSpacing.xl),
 
           // ── Details ──
@@ -294,6 +375,51 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             label: const Text('Log out'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One outstanding profile item and the action that completes it.
+class _NextStep {
+  const _NextStep(this.title, this.hint, this.onTap);
+  final String title;
+  final String hint;
+  final VoidCallback onTap;
+}
+
+class _NextStepTile extends StatelessWidget {
+  const _NextStepTile({required this.step});
+  final _NextStep step;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    final text = Theme.of(context).textTheme;
+    return InkWell(
+      onTap: step.onTap,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: Row(
+          children: [
+            Icon(Icons.radio_button_unchecked_rounded, size: 17, color: cq.accent),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(step.title, style: text.bodyMedium),
+                  Text(
+                    step.hint,
+                    style: text.labelSmall?.copyWith(color: cq.fgSubtle),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 18, color: cq.fgSubtle),
+          ],
+        ),
       ),
     );
   }

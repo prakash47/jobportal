@@ -49,6 +49,40 @@ class JobIndustry {
       JobIndustry(slug: j['slug'] as String? ?? '', name: j['name'] as String? ?? '');
 }
 
+/// Today's application allowance (`GET /me/applications/quota` — note: NO `/v1`
+/// prefix, the applications controller is version-neutral).
+///
+/// Two traps live in this payload, both handled by [remaining]'s callers rather
+/// than here:
+///  * `unlimited: true` forces `count: 0` server-side — it is a literal, not the
+///    user's real usage — so any number must be suppressed when unlimited.
+///  * `count` degrades to 0 if the server's Redis is unavailable, so this is a
+///    hint only. The server's 429 remains the sole real enforcement.
+class ApplyQuota {
+  const ApplyQuota({
+    required this.count,
+    required this.limit,
+    this.unlimited = false,
+    this.upgradeAvailable = false,
+  });
+
+  final int count;
+  final int limit;
+  final bool unlimited;
+  final bool upgradeAvailable;
+
+  int get remaining => (limit - count).clamp(0, limit);
+
+  factory ApplyQuota.fromJson(Map<String, dynamic> j) => ApplyQuota(
+    count: (j['count'] as num?)?.toInt() ?? 0,
+    // Never defaulted to a hardcoded 10: the limit is environment-configurable
+    // server-side, so a guess here would silently disagree with staging.
+    limit: (j['limit'] as num?)?.toInt() ?? 0,
+    unlimited: j['unlimited'] as bool? ?? false,
+    upgradeAvailable: j['upgradeAvailable'] as bool? ?? false,
+  );
+}
+
 /// A job as it appears in the search results list (`GET /jobs` hit). Salary is
 /// paise, experience is months, `postedAt` is a timestamp. `isSaved`/`isApplied`
 /// are the bulk per-user markers the backend is adding to the list response.

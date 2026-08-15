@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/network/api_error.dart';
 import '../../../core/network/network_providers.dart';
+import '../../catalogs/data/catalog_models.dart';
 import 'job_filters.dart';
 import 'job_models.dart';
 import 'jobs_mock.dart';
@@ -58,6 +59,38 @@ class JobsRepository {
     }
   }
 
+  /// Jobs similar to [job] — matched on its skills, newest first, falling back
+  /// to a title query when the job carries no skills.
+  ///
+  /// There is no "more like this" route in the contract, so this is an ordinary
+  /// `/v1/jobs` query; the current job and its own company are dropped on the
+  /// device (the endpoint has no company param). Same-company hits are kept
+  /// only when excluding them would leave the section nearly empty.
+  ///
+  /// Best-effort: any failure returns an empty list. This is a secondary
+  /// section and must never take down the job it sits under.
+  Future<List<JobSummary>> similar(JobDetail job, {int limit = 4}) async {
+    try {
+      final skills = job.skills
+          .where((s) => s.slug.isNotEmpty)
+          .take(3)
+          .map((s) => CatalogItem(id: s.id, slug: s.slug, name: s.name))
+          .toList();
+      final page = await search(
+        q: skills.isEmpty ? job.title : null,
+        sort: skills.isEmpty ? 'relevance' : 'recent',
+        filters: JobFilters(skills: skills),
+      );
+      final others = page.hits.where((h) => h.id != job.id).toList();
+      final elsewhere =
+          others.where((h) => h.company.id != job.company.id).toList();
+      final picked = elsewhere.length >= 2 ? elsewhere : others;
+      return picked.take(limit).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<JobDetail> detail(String slug) async {
     if (AppConfig.useMockData) {
       final d = await JobsMock.detail(slug);
@@ -105,11 +138,41 @@ class JobsRepository {
         throw const JobsException('Please verify your email before applying.');
       }
       if (code == 429) {
-        throw const JobsException(
-          "You've reached today's application limit. Please try again tomorrow.",
+        // Not every 429 here is the apply quota — a global 100/min throttle
+        // guards every route and emits its own. The quota's body carries a
+        // numeric `limit`; the throttler's does not, so that is the tell.
+        final isQuota = data is Map && data['limit'] is num;
+        final serverMessage = data is Map ? data['message'] as String? : null;
+        throw JobsException(
+          serverMessage ??
+              (isQuota
+                  ? "You've reached today's application limit. Please try again tomorrow."
+                  : 'Too many requests just now. Please try again in a minute.'),
+          code: isQuota ? 'QUOTA_EXCEEDED' : null,
         );
       }
       throw JobsException(friendlyDioMessage(e));
+    }
+  }
+
+  /// Today's application allowance (`GET /me/applications/quota`).
+  ///
+  /// **The path carries no `/v1`** — unlike `/v1/jobs/:slug` and
+  /// `/v1/me/job-state` above. The applications controller is version-neutral,
+  /// so a `/v1` here 404s, and because this method swallows errors the feature
+  /// would just silently never appear.
+  ///
+  /// Returns null rather than throwing: the hint is decoration on the apply
+  /// bar, and a signed-out or rate-limited read must not disturb the screen.
+  Future<ApplyQuota?> applyQuota() async {
+    if (AppConfig.useMockData) return null;
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/me/applications/quota',
+      );
+      return ApplyQuota.fromJson(res.data ?? const {});
+    } on DioException {
+      return null;
     }
   }
 

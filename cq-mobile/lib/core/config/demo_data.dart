@@ -15,6 +15,7 @@ abstract final class DemoData {
         'applied': false,
         'job': {
           'title': 'Senior Flutter Engineer',
+          'canonicalSlug': 'senior-flutter-engineer-lumen-labs-12001',
           'status': 'ACTIVE',
           'company': {'name': 'Lumen Labs'},
         },
@@ -26,6 +27,7 @@ abstract final class DemoData {
         'appliedStatus': 'IN_REVIEW',
         'job': {
           'title': 'Android Engineer',
+          'canonicalSlug': 'android-engineer-playverse-12006',
           'status': 'ACTIVE',
           'company': {'name': 'Playverse'},
         },
@@ -36,6 +38,7 @@ abstract final class DemoData {
         'applied': false,
         'job': {
           'title': 'DevOps Engineer',
+          'canonicalSlug': 'devops-engineer-cloudspur-12007',
           'status': 'ACTIVE',
           'company': {'name': 'Cloudspur'},
         },
@@ -55,7 +58,8 @@ abstract final class DemoData {
         'updatedAt': _daysAgo(1),
         'job': {
           'title': 'Android Engineer',
-          'company': {'name': 'Playverse'},
+          'canonicalSlug': 'android-engineer-playverse-90001',
+          'company': {'id': 5001, 'slug': 'playverse', 'name': 'Playverse'},
         },
         'statusHistory': [
           {'from': 'APPLIED', 'to': 'IN_REVIEW', 'at': _daysAgo(1), 'by': 'RECRUITER'},
@@ -68,7 +72,8 @@ abstract final class DemoData {
         'updatedAt': _daysAgo(4),
         'job': {
           'title': 'Backend Engineer (Node.js)',
-          'company': {'name': 'Finixo'},
+          'canonicalSlug': 'backend-engineer-node-js-finixo-90002',
+          'company': {'id': 5002, 'slug': 'finixo', 'name': 'Finixo'},
         },
         'statusHistory': [
           {'from': 'APPLIED', 'to': 'IN_REVIEW', 'at': _daysAgo(7), 'by': 'RECRUITER'},
@@ -82,7 +87,8 @@ abstract final class DemoData {
         'updatedAt': _daysAgo(12),
         'job': {
           'title': 'Data Analyst',
-          'company': {'name': 'Kite Retail'},
+          'canonicalSlug': 'data-analyst-kite-retail-90003',
+          'company': {'id': 5003, 'slug': 'kite-retail', 'name': 'Kite Retail'},
         },
         'statusHistory': [
           {'from': 'APPLIED', 'to': 'IN_REVIEW', 'at': _daysAgo(17), 'by': 'RECRUITER'},

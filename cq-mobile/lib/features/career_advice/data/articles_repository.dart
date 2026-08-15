@@ -41,6 +41,27 @@ class ArticlesRepository {
     }
   }
 
+  /// Other articles on the same topic as [article].
+  ///
+  /// The detail resource carries no related list, so this is derived: query the
+  /// list endpoint by the article's own first tag and drop the article itself.
+  /// Best-effort — a failure just hides the section.
+  Future<List<ArticleSummary>> related(
+    ArticleDetail article, {
+    int limit = 3,
+  }) async {
+    if (article.tags.isEmpty) return const [];
+    try {
+      final page = await list(tag: article.tags.first);
+      return page.hits
+          .where((a) => a.slug != article.slug)
+          .take(limit)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Future<ArticleDetail> detail(String slug) async {
     if (AppConfig.useMockData) {
       final a = await ArticlesMock.detail(slug);
