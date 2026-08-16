@@ -51,6 +51,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `bugfix/sadmin-login-bounce` | **Sign-in on `/sadmin` silently bounces back to `/login` for teammates.** A successful admin login lands back on the form with no error, because `apps/sadmin/lib/auth/server-session.ts`'s bare `catch` turns `JWT_ACCESS_SECRET is not set` into "you are anonymous" and `requireSuperAdmin()` redirects. Fix = classify the catch (expired/not-before/bad-signature → anonymous; missing secret → rethrow), a boot-time env assert in `instrumentation.ts` (**nodejs branch only** — asserting on edge breaks `middleware.ts`), an `error.tsx` for the `(authed)` group, and the setup docs that cause it (`TEAM_QUICKSTART.md` step 3 omits `apps/sadmin`). Scope is **sadmin only** by owner ruling; `apps/web` + `apps/recruiter` carry the same bare catch and are deliberately left. | **None of the §15.3 locks.** One additive re-export of the `jsonwebtoken` error classes from `packages/auth/src/index.ts` (sadmin has no `jsonwebtoken` dep of its own and must not gain one). No schema, no migration, no flag, no theme/types/keys/barrel edits. |
 
 ---
 
