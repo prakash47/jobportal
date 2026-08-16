@@ -241,7 +241,9 @@ SADMIN_URL="http://localhost:3003"
 API_URL="http://localhost:4000"
 ```
 
-Each developer copies this to `.env` (gitignored). Each app may also have its own `.env.local` for app-specific overrides.
+Each developer copies this to `.env` (gitignored) at the root **and then copies that same file into each runtime app** — `apps/api`, `apps/web`, `apps/recruiter`, `apps/sadmin`. This is required, not optional: Next.js and NestJS load `.env` from their own directory and never see the monorepo root. (`apps/services` reads no env and needs none.) Copy the file rather than generating secrets per app — a `JWT_ACCESS_SECRET` that differs between `apps/api` and `apps/sadmin` makes Super Admin sign-in succeed and then bounce back to the login page. Full instructions: [ONBOARDING.md](./ONBOARDING.md) Part C.1.
+
+An app may additionally carry its own `.env.local` for app-specific overrides.
 
 **Never commit `.env` or `.env.local`** — only `.env.example`.
 
