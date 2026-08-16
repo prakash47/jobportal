@@ -89,7 +89,9 @@ cp .env apps/api/.env
 
 **The defaults work as-is for local development.** The `.env.example` ships with working localhost values for Postgres, Redis, Elasticsearch, and dev JWT secrets. Third-party keys (Resend, Stripe, Sentry, R2) are intentionally blank — those features simply no-op locally (e.g. emails print to the console instead of sending).
 
-*Optional:* to regenerate the JWT secrets, run `openssl rand -base64 48` and paste the output into `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` in `.env`, then re-copy the file to each app.
+*Optional:* to regenerate the JWT secrets, run `openssl rand -base64 48` and paste the output into `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` in `.env`, then re-copy the file to **every** app.
+
+> **Re-copy to all four, or none.** `apps/api` signs the session cookie and the three Next apps verify it, so the moment one app's `JWT_ACCESS_SECRET` differs from the API's, that app rejects every token the API issues. On `/sadmin` this looks like a sign-in that works and then returns you to the login form. Don't generate secrets per app.
 
 ### C.2 — Install dependencies
 
@@ -272,7 +274,8 @@ Your seeded data persists in Docker volumes between `stop`/`start`. Only `docker
 
 | Symptom | Cause & fix |
 |---|---|
-| `SASL: client password must be a string` | A `.env` is missing. Confirm `.env` exists at the **root AND** in `apps/web`, `apps/recruiter`, `apps/api` (Part C.1). |
+| `SASL: client password must be a string` | A `.env` is missing. Confirm `.env` exists at the **root AND** in `apps/web`, `apps/recruiter`, `apps/api`, `apps/sadmin` (Part C.1). |
+| **Super Admin sign-in succeeds but returns you to the login page** (no error text, URL ends `?next=%2Fdashboard`) | `apps/sadmin/.env` is missing, or its `JWT_ACCESS_SECRET` differs from the one `apps/api` is running with — the API mints a token this app then cannot verify. Copy the **same** root `.env` into `apps/sadmin` and restart it. Since 2026-08-16 the missing-file case refuses to start and names the variable instead; a *drifted* secret still logs `[sadmin] access_token rejected (invalid signature)` in the sadmin terminal. |
 | Demo seed errors: *"Reference data not seeded"* | You ran `pnpm --filter @jobportal/db db:seed:demo:full` before `pnpm db:seed`. Run `pnpm db:seed` first (Part E step 3). |
 | Every route returns **404** (even `/login`, `/jobs`) on a Next app | Stale/corrupt Turbopack cache — common after a hard kill. Stop the app, delete its cache, restart: `pnpm --filter @jobportal/web clean` (removes `.next` + `.turbo`), then `pnpm --filter @jobportal/web dev`. The same applies to `@jobportal/recruiter`. |
 | `pnpm install` fails on Windows with a C++/node-gyp error | Install the VS Build Tools "Desktop development with C++" workload, then re-run (the `argon2` native module needs it). |

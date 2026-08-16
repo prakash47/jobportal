@@ -96,12 +96,30 @@ pnpm install
 cp .env.example .env
 ```
 
-Generate development secrets:
+Generate development secrets — into the root `.env`, **before** copying it out:
 
 ```bash
 echo "JWT_ACCESS_SECRET=$(openssl rand -base64 48)" >> .env
 echo "JWT_REFRESH_SECRET=$(openssl rand -base64 48)" >> .env
 ```
+
+Then copy that **same** file into each runtime app. Next.js and NestJS load `.env`
+from their own directory, never the monorepo root, so this step is required — see
+[ONBOARDING.md](./ONBOARDING.md) Part C.1:
+
+```bash
+cp .env apps/api/.env
+cp .env apps/web/.env
+cp .env apps/recruiter/.env
+cp .env apps/sadmin/.env
+```
+
+`apps/services` needs none — it reads no environment variables.
+
+> Copy the file; never generate secrets per app. If `apps/sadmin`'s
+> `JWT_ACCESS_SECRET` differs from `apps/api`'s, the API mints a token the Super
+> Admin portal cannot verify, and sign-in appears to succeed and then returns you
+> to the login page.
 
 ### Run
 

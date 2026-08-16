@@ -27,12 +27,12 @@ Full detail in **[ONBOARDING.md](./ONBOARDING.md)**. The short version:
 
 1. Install: **Node 24**, **pnpm 10**, **Docker Desktop**, **Git**, **Claude Code**, (optional) **GitHub CLI**.
 2. Get added as a collaborator on the GitHub repo; `gh auth login` (or set up git credentials).
-3. Clone → `git checkout develop` → create `.env` at root **and** copy into `apps/web`, `apps/recruiter`, `apps/api`.
+3. Clone → `git checkout develop` → create `.env` at root **and copy the SAME file into all four runtime apps**: `apps/api`, `apps/web`, `apps/recruiter`, **`apps/sadmin`**. (`apps/services` needs none — it reads no env.) Every app loads `.env` from its own directory, never the repo root. **Do not generate a fresh `JWT_ACCESS_SECRET` per app** — if `apps/sadmin`'s differs from `apps/api`'s, the Super Admin sign-in succeeds and then drops you straight back on the login page.
 4. `pnpm install`
 5. `docker compose -f infra/docker-compose.yml up -d`
 6. Database, **in this order**: `pnpm db:generate` → `pnpm db:migrate:dev` → `pnpm db:seed` → `pnpm --filter @jobportal/db db:seed:demo:full`
-7. Run (3 terminals): `pnpm --filter @jobportal/api dev` · `pnpm --filter @jobportal/web dev` · `pnpm --filter @jobportal/recruiter dev`
-8. Open http://localhost:3000
+7. Run (4 terminals): `pnpm --filter @jobportal/api dev` · `pnpm --filter @jobportal/web dev` · `pnpm --filter @jobportal/recruiter dev` · `pnpm --filter @jobportal/sadmin dev`
+8. Open http://localhost:3000 (Super Admin: http://localhost:3003/sadmin)
 
 > If anything fails, the **Troubleshooting** table in ONBOARDING.md Part J covers every gotcha we've hit.
 
