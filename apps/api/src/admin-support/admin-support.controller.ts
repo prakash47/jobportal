@@ -4,7 +4,6 @@ import {
   Controller,
   Get,
   Param,
-  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -13,8 +12,10 @@ import {
 import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AdminGuard } from '../feature-flags/admin.guard';
+import { ParseInt32IdPipe } from '../common/parse-int32-id.pipe';
 import { AdminSupportService } from './admin-support.service';
 import {
+  AddNoteDto,
   ListContactMessagesQueryDto,
   ListTicketsQueryDto,
   StaffReplyDto,
@@ -38,15 +39,21 @@ export class AdminSupportController {
     return this.service.listTickets(parsed.data);
   }
 
+  // ParseInt32IdPipe, not Nest's ParseIntPipe, on every :id below. ParseIntPipe
+  // accepts any JS-safe integer, so `2147483648` reaches Prisma, overflows
+  // Postgres int4 and surfaces as a 500 — a bug this repo has now shipped three
+  // times (job-postings, billing, reports) and fixed with this pipe twice. A
+  // nonexistent ticket must 404, and an unrepresentable id must 400; neither is
+  // a server error.
   @Get('tickets/:id')
-  detail(@Param('id', ParseIntPipe) id: number) {
+  detail(@Param('id', ParseInt32IdPipe) id: number) {
     return this.service.getTicketDetail(id);
   }
 
   @Patch('tickets/:id')
   async updateStatus(
     @CurrentUser() admin: AccessClaims,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseInt32IdPipe) id: number,
     @Body() body: unknown,
   ) {
     const parsed = UpdateTicketStatusDto.safeParse(body);
@@ -57,12 +64,32 @@ export class AdminSupportController {
   @Post('tickets/:id/messages')
   async reply(
     @CurrentUser() admin: AccessClaims,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseInt32IdPipe) id: number,
     @Body() body: unknown,
   ) {
     const parsed = StaffReplyDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
     return this.service.staffReply(admin.sub, id, parsed.data);
+  }
+
+  // Internal notes: staff-only text, never shown to the raiser and never
+  // notified. There is deliberately no GET — notes come back on the ticket
+  // detail above, which keeps them behind exactly one AdminGuard'd read rather
+  // than adding a second surface that could later be exposed on its own.
+  //
+  // There is also no PATCH and no DELETE. A note is a contemporaneous record of
+  // what staff knew and when; making it editable would let the account that
+  // wrote it rewrite its own trail after the fact, and the audit row only
+  // attests that a note was added.
+  @Post('tickets/:id/notes')
+  async addNote(
+    @CurrentUser() admin: AccessClaims,
+    @Param('id', ParseInt32IdPipe) id: number,
+    @Body() body: unknown,
+  ) {
+    const parsed = AddNoteDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return this.service.addNote(admin.sub, id, parsed.data);
   }
 
   @Get('contact-messages')
