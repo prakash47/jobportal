@@ -233,6 +233,22 @@ export function canReply(status: SupportTicketStatus): boolean {
 }
 
 /**
+ * How the console names a person — the ticket raiser, or a note's author.
+ *
+ * ⚠ A blank or whitespace-only `User.name` is a REACHABLE state, not a
+ * defensive hypothetical: `apps/api/src/recruiter-profile/dto.ts` validates the
+ * name as `z.string().min(1).max(120)` with **no `.trim()`**, so `"   "` passes
+ * and is written straight through. Printing it raw yields an empty cell in the
+ * "Raised by" column and a header reading "raised by  (p@acme.com)", plus a
+ * problem statement headed "  wrote" — the console silently losing the identity
+ * of the person it is about. Falling back to the email is what every other
+ * identity-rendering surface in this portal does.
+ */
+export function formatPersonName(person: { name: string; email: string }): string {
+  return person.name.trim() || person.email;
+}
+
+/**
  * How the console names a note's author.
  *
  * `null` means the User id on the note no longer resolves — the admin account
@@ -242,7 +258,7 @@ export function canReply(status: SupportTicketStatus): boolean {
  */
 export function formatNoteAuthor(author: { name: string; email: string } | null): string {
   if (author == null) return 'Unknown admin';
-  return author.name.trim() || author.email;
+  return formatPersonName(author);
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   contactMessagesHref,
   formatNoteAuthor,
   formatNotesSummary,
+  formatPersonName,
   formatSupportCategory,
   formatSupportStatus,
   formatTicketsSummary,
@@ -231,6 +232,36 @@ describe('formatTicketsSummary', () => {
 
   it('only claims "none have been raised" on the unfiltered ALL tab', () => {
     expect(formatTicketsSummary(0, 'ALL')).toBe('No tickets have been raised yet.');
+  });
+});
+
+describe('formatPersonName', () => {
+  it('prefers the name', () => {
+    expect(formatPersonName({ name: 'Priya Sharma', email: 'p@acme.com' })).toBe('Priya Sharma');
+  });
+
+  // The reachable case, not a defensive hypothetical: recruiter-profile's DTO is
+  // z.string().min(1) with NO .trim(), so "   " passes validation and is stored.
+  // Rendering it raw produced an empty "Raised by" cell and a header reading
+  // "raised by  (p@acme.com)".
+  it('falls back to the email for a whitespace-only name', () => {
+    expect(formatPersonName({ name: '   ', email: 'p@acme.com' })).toBe('p@acme.com');
+    expect(formatPersonName({ name: '', email: 'p@acme.com' })).toBe('p@acme.com');
+    expect(formatPersonName({ name: '\t\n', email: 'p@acme.com' })).toBe('p@acme.com');
+  });
+
+  it('never returns an empty string for a person with an email', () => {
+    for (const name of ['', ' ', '\t', '\n', '  \t  ']) {
+      expect(formatPersonName({ name, email: 'p@acme.com' })).not.toBe('');
+    }
+  });
+
+  // The note-author formatter must route through this, or the two disagree on
+  // the same blank name in the same page.
+  it('is what formatNoteAuthor uses for a present author', () => {
+    expect(formatNoteAuthor({ name: '  ', email: 'a@x.com' })).toBe(
+      formatPersonName({ name: '  ', email: 'a@x.com' }),
+    );
   });
 });
 

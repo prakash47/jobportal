@@ -8,6 +8,7 @@ import {
   clampPage,
   contactMessagesHref,
   firstParam,
+  formatPersonName,
   formatSupportCategory,
   formatSupportStatus,
   formatTicketsSummary,
@@ -248,7 +249,7 @@ function TicketRow({
       </td>
       <td className="px-4 py-3 text-[var(--color-fg-muted)]">{item.company.name}</td>
       <td className="px-4 py-3">
-        <span className="block text-[var(--color-fg)]">{item.user.name}</span>
+        <span className="block text-[var(--color-fg)]">{formatPersonName(item.user)}</span>
         <span className="block text-xs text-[var(--color-fg-muted)]">{item.user.email}</span>
       </td>
       <td className="px-4 py-3 text-[var(--color-fg-muted)]">

@@ -41,6 +41,13 @@ export function InternalNoteForm({ ticketId }: { ticketId: number }) {
   const [errorNonce, setErrorNonce] = useState(0);
   const [loading, setLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // The only confirmation a screen-reader user gets that the note saved. The
+  // notes list and its count line are re-rendered by router.refresh() into plain
+  // elements in no live region, and the route announcer says nothing because the
+  // pathname and <title> are unchanged — so without this, adding a note
+  // completes in total silence (WCAG 4.1.3). Same construction as
+  // ReportDecisionForm, which documents the identical requirement.
+  const [status, setStatus] = useState('');
 
   const noteId = useId();
   const headingId = useId();
@@ -70,6 +77,10 @@ export function InternalNoteForm({ ticketId }: { ticketId: number }) {
       // losing a paragraph a staff member just wrote because the API blipped is
       // its own bug, and there is no draft store to recover it from.
       setBody('');
+      // Names the audience again, because this is the sentence that confirms
+      // what was just committed and "note added" alone would not say who can
+      // read it.
+      setStatus('Internal note added. Visible to staff only.');
       startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the note. Try again.');
@@ -128,6 +139,13 @@ export function InternalNoteForm({ ticketId }: { ticketId: number }) {
           <span className="text-xs text-[var(--color-fg-muted)]">Not visible to the recruiter.</span>
         </div>
       </div>
+
+      {/* ALWAYS mounted, text-only changes. A role="status" that mounts together
+          with its message is not announced — the queue page documents the same
+          construction for its result summary. */}
+      <p role="status" className="sr-only">
+        {status}
+      </p>
 
       {error && (
         <p

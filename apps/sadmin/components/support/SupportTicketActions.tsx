@@ -58,9 +58,18 @@ export function SupportTicketActions({
   const [errorNonce, setErrorNonce] = useState(0);
   const [loading, setLoading] = useState<'status' | 'reply' | null>(null);
   const [isPending, startTransition] = useTransition();
+  // The only confirmation a screen-reader user gets. Everything a successful
+  // mutation changes — the header pill, the resolved/closed line, the thread —
+  // is re-rendered by router.refresh() into plain elements in no live region,
+  // and the route announcer says nothing because the pathname and <title> are
+  // unchanged. Without this, moving a ticket to CLOSED or sending a message to a
+  // recruiter completes in silence (WCAG 4.1.3). Same construction as
+  // ReportDecisionForm, which documents the identical requirement.
+  const [announcement, setAnnouncement] = useState('');
 
   const statusId = useId();
   const replyId = useId();
+  const headingId = useId();
 
   // ONE in-flight flag covering the request AND the router.refresh() that
   // follows it. Gating every control is what makes the shared `error` state
@@ -86,7 +95,13 @@ export function SupportTicketActions({
     setErrorNonce((n) => n + 1);
   }
 
-  async function send(path: string, body: unknown, kind: 'status' | 'reply', onOk: () => void) {
+  async function send(
+    path: string,
+    body: unknown,
+    kind: 'status' | 'reply',
+    onOk: () => void,
+    done: string,
+  ) {
     setLoading(kind);
     setError(null);
     try {
@@ -103,6 +118,7 @@ export function SupportTicketActions({
         );
       }
       onOk();
+      setAnnouncement(done);
       startTransition(() => router.refresh());
     } catch (err) {
       fail(err instanceof Error ? err.message : 'Something went wrong. Try again.');
@@ -115,14 +131,16 @@ export function SupportTicketActions({
 
   return (
     <section
-      aria-labelledby={`${statusId}-heading`}
+      aria-labelledby={headingId}
       className="space-y-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-6"
     >
       <div className="space-y-1">
-        <h2
-          id={`${statusId}-heading`}
-          className="text-sm font-semibold text-[var(--color-fg)]"
-        >
+        {/* Its own useId rather than a `${statusId}-heading` string. Deriving one
+            id from another works only while the base id contains no character
+            that is invalid in a fragment, which is a property of React's
+            generator rather than a guarantee — and two ids from two useId calls
+            cost nothing. */}
+        <h2 id={headingId} className="text-sm font-semibold text-[var(--color-fg)]">
           Respond to the recruiter
         </h2>
         {/* Stated here rather than only on the notes panel. Both halves have to
@@ -162,6 +180,11 @@ export function SupportTicketActions({
                 { status: nextStatus },
                 'status',
                 () => undefined,
+                // Names the NEW state rather than saying "updated" — the header
+                // pill that shows it is not in a live region, so this sentence
+                // is the only place a screen-reader user learns where the
+                // ticket landed.
+                `Ticket status changed to ${SUPPORT_STATUS_LABEL[nextStatus]}.`,
               )
             }
           >
@@ -200,6 +223,10 @@ export function SupportTicketActions({
                   { body: replyText },
                   'reply',
                   () => setReply(''),
+                  // Says the reply REACHED the recruiter, not merely that it
+                  // saved: the box clearing is the only visual feedback, and
+                  // that alone could equally mean the text was lost.
+                  'Reply sent. The recruiter can see it on their ticket.',
                 )
               }
             >
@@ -208,6 +235,13 @@ export function SupportTicketActions({
           </>
         )}
       </div>
+
+      {/* ALWAYS mounted, text-only changes. A role="status" that mounts together
+          with its message is not announced — the queue page documents the same
+          construction for its result summary. */}
+      <p role="status" className="sr-only">
+        {announcement}
+      </p>
 
       {error && (
         <p

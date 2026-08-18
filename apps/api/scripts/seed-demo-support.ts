@@ -276,7 +276,11 @@ async function main(): Promise<void> {
   });
 
   console.log('Seeded 4 demo tickets (OPEN / IN_PROGRESS / RESOLVED / CLOSED), 3 messages,');
-  console.log('4 internal notes (one by a deleted author) and 2 contact messages.');
+  // 3, not 4: two notes on the IN_PROGRESS ticket and one on the CLOSED one.
+  // The count matters more here than in most log lines — this script exists so a
+  // developer can check the console against known data, so an inflated number
+  // sends them hunting for a dropped row in the notes query.
+  console.log('3 internal notes (one by a deleted author) and 2 contact messages.');
   console.log('Open http://localhost:3003/sadmin/support to see them.');
   await prisma.$disconnect();
 }

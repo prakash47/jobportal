@@ -8,6 +8,7 @@ import {
   firstParam,
   formatNoteAuthor,
   formatNotesSummary,
+  formatPersonName,
   formatSupportCategory,
   formatSupportStatus,
   normalizeQuery,
@@ -111,7 +112,8 @@ export default async function SupportTicketDetailPage({ params, searchParams }: 
         </div>
         <p className="text-sm text-[var(--color-fg-muted)]">
           #{ticket.id} · {formatSupportCategory(ticket.category)} · {ticket.company.name} · raised by{' '}
-          {ticket.user.name} ({ticket.user.email}) · {formatDateTimeIst(ticket.createdAt)}
+          {formatPersonName(ticket.user)} ({ticket.user.email}) ·{' '}
+          {formatDateTimeIst(ticket.createdAt)}
         </p>
         <Lifecycle ticket={ticket} />
       </header>
@@ -122,7 +124,7 @@ export default async function SupportTicketDetailPage({ params, searchParams }: 
           what the thread visibly shows. */}
       <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4">
         <h2 className="text-xs font-medium uppercase tracking-wide text-[var(--color-fg-muted)]">
-          {ticket.user.name} wrote
+          {formatPersonName(ticket.user)} wrote
         </h2>
         <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--color-fg)]">
           {ticket.description}
@@ -134,7 +136,7 @@ export default async function SupportTicketDetailPage({ params, searchParams }: 
           <h2 className="text-sm font-semibold text-[var(--color-fg)]">Conversation</h2>
           <ul className="space-y-4">
             {messages.map((m) => (
-              <MessageItem key={m.id} message={m} raiserName={ticket.user.name} />
+              <MessageItem key={m.id} message={m} raiserName={formatPersonName(ticket.user)} />
             ))}
           </ul>
         </section>
