@@ -4,10 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@jobportal/ui';
 
+// Support is deliberately ABSENT: it moved to /sadmin/support in
+// feature/sadmin-support-console and this subtree's copy was deleted, so a row
+// here would 404. The remaining three move in feature/sadmin-admin-migration,
+// which is what finally deletes this console.
 const ITEMS = [
   { href: '/admin/feature-flags', label: 'Feature flags' },
   { href: '/admin/kyc-review', label: 'KYC review' },
-  { href: '/admin/support', label: 'Support' },
   { href: '/admin/audit-log?type=feature_flag', label: 'Audit log' },
 ] as const;
 

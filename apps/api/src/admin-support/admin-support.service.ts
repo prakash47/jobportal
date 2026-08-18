@@ -1,7 +1,14 @@
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { prisma, Prisma } from '@jobportal/db';
+// Prisma's `contains` compiles to an unescaped LIKE, so an un-escaped `?q=%`
+// matches every ticket — the bug class this repo has already shipped twice
+// (/sadmin/job-postings and /sadmin/candidates). Imported from @jobportal/domain
+// rather than given a fourth definition: PROGRESS.md already carries the
+// two-definitions problem as an open follow-up, and apps/api can reach packages.
+import { escapeLikePattern } from '@jobportal/domain/txn-log-params';
 import { NotificationsProducerService } from '../recruiter-notifications/notifications-producer.service';
 import type {
+  AddNoteInput,
   ListContactMessagesQueryInput,
   ListTicketsQueryInput,
   StaffReplyInput,
@@ -17,12 +24,32 @@ export class AdminSupportService {
   constructor(private readonly notifications: NotificationsProducerService) {}
 
   // Ticket queue. Unlike KYC there is no junk state, so the unfiltered view
-  // shows every ticket; a status filter narrows it.
+  // shows every ticket; a status filter narrows it, and `?q` narrows it further.
+  //
+  // Status and search COMPOSE (AND, not OR): narrowing the search must not throw
+  // the admin off the tab they are looking at, which is the same rule the
+  // console's own href builder enforces on the URL side.
   async listTickets(query: ListTicketsQueryInput) {
     const page = query.page ?? 1;
-    const where: Prisma.SupportTicketWhereInput = query.status
-      ? { status: query.status }
-      : {};
+    const where: Prisma.SupportTicketWhereInput = {};
+    if (query.status) where.status = query.status;
+
+    if (query.q) {
+      // Escaped, then `mode: 'insensitive'` — Postgres LIKE is case-sensitive by
+      // default, and a search where "acme" misses "Acme" reads as broken.
+      //
+      // Subject + company name only. Deliberately NOT `description` or message
+      // bodies: staff search this queue to FIND a ticket they already know of
+      // ("the Acme billing one"), and full-text over every body would surface a
+      // ticket because a word appears buried in a recruiter's paragraph, which
+      // is noise rather than a match. The raiser's own name/email is likewise
+      // out — company is the identifier staff actually work in.
+      const needle = escapeLikePattern(query.q);
+      where.OR = [
+        { subject: { contains: needle, mode: 'insensitive' } },
+        { company: { name: { contains: needle, mode: 'insensitive' } } },
+      ];
+    }
 
     const [total, rows] = await Promise.all([
       prisma.supportTicket.count({ where }),
@@ -67,6 +94,13 @@ export class AdminSupportService {
   // Full ticket thread for the reviewing admin. Tickets are creator-scoped, so
   // every non-staff message is by ticket.user — the UI labels a message
   // fromSupport ? 'Support' : user.name.
+  //
+  // ⚠ `notes` is STAFF-ONLY and this method is the reason that is safe: it is
+  // reachable only through AdminSupportController, which is AdminGuard'd whole.
+  // The recruiter's equivalent read lives in RecruiterSupportService and in the
+  // recruiter portal's own RSC, and NEITHER selects this relation. If this
+  // method ever gains a non-admin caller, the notes include must move behind a
+  // parameter — see the warning on SupportTicketNote in schema.prisma.
   async getTicketDetail(ticketId: number) {
     const ticket = await prisma.supportTicket.findUnique({
       where: { id: ticketId },
@@ -74,10 +108,31 @@ export class AdminSupportService {
         user: { select: { id: true, name: true, email: true } },
         company: { select: { id: true, name: true, slug: true } },
         messages: { orderBy: { createdAt: 'asc' } },
+        notes: { orderBy: { createdAt: 'asc' } },
       },
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
-    return ticket;
+
+    // Note authors are loose ids (no FK), so they are resolved separately rather
+    // than joined. An id that no longer resolves keeps its note and renders as
+    // "Unknown admin" client-side — the note outliving the account is the point.
+    const authorIds = [...new Set(ticket.notes.map((n) => n.authorId))];
+    const authors =
+      authorIds.length === 0
+        ? []
+        : await prisma.user.findMany({
+            where: { id: { in: authorIds } },
+            select: { id: true, name: true, email: true },
+          });
+    const byId = new Map(authors.map((a) => [a.id, a]));
+
+    return {
+      ...ticket,
+      notes: ticket.notes.map((n) => ({
+        ...n,
+        author: byId.get(n.authorId) ?? null,
+      })),
+    };
   }
 
   async updateStatus(adminUserId: number, ticketId: number, input: UpdateTicketStatusInput) {
@@ -93,15 +148,42 @@ export class AdminSupportService {
     }
 
     const newStatus = input.status;
+
+    // resolvedAt is CLEARED on a reopen and PRESERVED on a close.
+    //
+    // The obvious `=== 'RESOLVED' ? now : null` nulls it on every other
+    // transition, including RESOLVED → CLOSED — the normal end of a ticket's
+    // life. That destroyed the resolution timestamp for exactly the tickets
+    // whose lifecycle completed, so time-to-resolution was recoverable only for
+    // tickets still sitting in RESOLVED.
+    //
+    // "Leave the column alone" is expressed by OMITTING THE KEY, not by setting
+    // it to undefined: tsconfig has `exactOptionalPropertyTypes: true`, under
+    // which an explicit `resolvedAt: undefined` is a type error rather than an
+    // absent property. Building the object in two steps is what makes the
+    // distinction sayable, and it is also the more honest shape — the update
+    // genuinely does not mention the column on that branch.
+    //
+    // closedAt takes the mirror-image treatment: cleared when the ticket leaves
+    // CLOSED (it is demonstrably not closed any more), stamped on entry.
+    // RESOLVED is not an exception the way CLOSED is above, because
+    // RESOLVED → CLOSED is a real progression whereas CLOSED → RESOLVED is a
+    // reopen.
+    const data: Prisma.SupportTicketUpdateInput = {
+      status: newStatus,
+      closedAt: newStatus === 'CLOSED' ? new Date() : null,
+    };
+    if (newStatus === 'RESOLVED') {
+      data.resolvedAt = new Date();
+    } else if (newStatus !== 'CLOSED') {
+      // OPEN / IN_PROGRESS — a reopened ticket is genuinely not resolved, and a
+      // stale timestamp claiming otherwise is worse than an empty one. It will
+      // be re-stamped when the ticket is resolved again.
+      data.resolvedAt = null;
+    }
+
     await prisma.$transaction(async (tx) => {
-      await tx.supportTicket.update({
-        where: { id: ticketId },
-        data: {
-          status: newStatus,
-          resolvedAt: newStatus === 'RESOLVED' ? new Date() : null,
-          closedAt: newStatus === 'CLOSED' ? new Date() : null,
-        },
-      });
+      await tx.supportTicket.update({ where: { id: ticketId }, data });
       await tx.profileAuditLog.create({
         data: {
           userId: adminUserId,
@@ -179,6 +261,59 @@ export class AdminSupportService {
       });
 
     return message;
+  }
+
+  /**
+   * Add a staff-only note to a ticket.
+   *
+   * Three things this deliberately does NOT do, each of which the staff-reply
+   * path above DOES do, and each of which would turn a private note into a
+   * disclosure:
+   *
+   *  1. **No notification.** `notifyTicketUpdate` would ring the recruiter's
+   *     bell with "your ticket was updated" for a note they cannot see — an
+   *     alert pointing at nothing, and a signal that staff are discussing them.
+   *  2. **No status change.** A reply on an OPEN ticket engages it to
+   *     IN_PROGRESS because support has answered. Writing a note to yourself is
+   *     not an answer, and flipping the queue state on one would make the tab an
+   *     admin works from lie about what has been responded to.
+   *  3. **No `updatedAt` touch.** That column drives the recruiter's own
+   *     "Last update" column, so bumping it advertises activity on a ticket
+   *     nothing visible happened to.
+   *
+   * Notes ARE allowed on a CLOSED ticket, unlike replies (which 409). Recording
+   * why something was closed is most useful immediately after closing it, and
+   * since a note reaches nobody there is no reopen semantics to get wrong.
+   */
+  async addNote(adminUserId: number, ticketId: number, input: AddNoteInput) {
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { id: ticketId },
+      select: { id: true },
+    });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+
+    // Note + audit row commit together. Prisma interactive transactions commit
+    // on return and roll back only on throw, so there is no path where the note
+    // exists without its audit row.
+    const note = await prisma.$transaction(async (tx) => {
+      const created = await tx.supportTicketNote.create({
+        data: { ticketId, authorId: adminUserId, body: input.body },
+      });
+      await tx.profileAuditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'SUPPORT_TICKET_NOTE_ADDED',
+          // ids ONLY — never the note body. A note is the candid staff
+          // assessment of a customer; copying it here would put the module's
+          // most sensitive free text into the one table kept body-free by rule.
+          diff: { ticketId, noteId: created.id } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return created;
+    });
+
+    this.logger.log(`admin=${adminUserId} noted ticket=${ticketId}`);
+    return note;
   }
 
   async listContactMessages(query: ListContactMessagesQueryInput) {

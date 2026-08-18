@@ -333,6 +333,10 @@ const PROFILE_AUDIT_ACTION_LABEL: Record<ProfileAuditAction, string> = {
   BILLING_SUBSCRIPTION_CANCELLED: 'Cancelled a comped subscription',
   BILLING_TRANSACTIONS_EXPORTED: 'Exported the transaction ledger',
   SUPPORT_TICKET_STATUS_CHANGED: 'Changed a support ticket status',
+  // Says "internal note" rather than just "note" because the audience is the
+  // whole point of the action, and the label is all a reader of the timeline
+  // gets — the diff carries only { ticketId, noteId }, never the body.
+  SUPPORT_TICKET_NOTE_ADDED: 'Added an internal note to a support ticket',
   OTP_CODE_REVEALED: 'Revealed a signup OTP',
   CONTENT_REPORT_ACTIONED: 'Upheld a content report',
   CONTENT_REPORT_DISMISSED: 'Dismissed a content report',

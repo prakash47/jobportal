@@ -12,15 +12,18 @@ import {
   Flag,
   IndianRupee,
   LayoutDashboard,
+  MessageCircle,
   ShieldCheck,
   Users,
 } from '@jobportal/ui/icons';
 
 type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
-// The Super Admin portal's navigation. The remaining surfaces (KYC & business
-// verification, support tickets) still live in the older /admin console inside
-// apps/web and each add one entry here when they move. The structure is the
+// The Super Admin portal's navigation. The remaining surface (KYC & business
+// verification) still lives in the older /admin console inside apps/web and adds
+// one entry here when it moves — as support did in
+// feature/sadmin-support-console, which also deleted its half of that subtree.
+// The structure is the
 // recruiter rail's, so adding an item is a one-line change and adding a
 // collapsible group follows that portal's existing disclosure pattern.
 //
@@ -61,6 +64,21 @@ const NAV_ITEMS: readonly { href: string; label: string; icon: NavIcon }[] = [
   // admin in the wrong console, which is the same reasoning the Job review /
   // Job Postings pair records above.
   { href: '/transactions', label: 'Transaction & Revenue Log', icon: IndianRupee as NavIcon },
+  // Support closes the rail, after the money block. It is placed LAST rather
+  // than beside Content reports despite both being inbound queues, because the
+  // two answer opposite questions: a content report is a THIRD PARTY complaining
+  // about someone else's posting, while a support ticket is the raiser's own
+  // problem — different subject, different lever, and filing them next to each
+  // other invites working the wrong queue.
+  //
+  // The label is the SHORT form the owner asked for. "Support Ticket/Query
+  // Management" is the accurate description but is twice the width of every
+  // other row and would wrap in a 256px rail.
+  //
+  // `MessageCircle` is free in the icons barrel and is the only conversational
+  // glyph there — Flag is already Content reports, and reusing it would pair the
+  // two surfaces this comment exists to keep apart.
+  { href: '/support', label: 'Support & Communication', icon: MessageCircle as NavIcon },
 ];
 
 function isActive(pathname: string, href: string): boolean {

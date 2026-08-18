@@ -331,6 +331,23 @@ enum ProfileAuditAction {
   // need no audit action — the SupportTicket / SupportTicketMessage rows are
   // the record. Never write message bodies to the diff — only ids + statuses.
   SUPPORT_TICKET_STATUS_CHANGED
+  // An internal note added to a ticket on /sadmin/support/[id], written with the
+  // AUTHORING ADMIN's User id.
+  //
+  // A note gets its own action even though a staff REPLY does not, and the
+  // asymmetry is the point: a reply is already visible to the recruiter, who is
+  // therefore a second witness to it. A note is visible to staff ONLY
+  // (SupportTicketNote is a separate table precisely so it cannot leak into the
+  // raiser's thread), so this row is the only record outside the notes list that
+  // one was written at all.
+  //
+  // The diff carries { ticketId, noteId } and NOTHING else. A note is where a
+  // staff member writes the candid version — "this employer has been abusive",
+  // "refund already promised on the phone" — so copying its body here would
+  // duplicate the most sensitive free text in the module into the one table this
+  // repo is otherwise careful to keep body-free (see SUPPORT_TICKET_STATUS_CHANGED
+  // above, and BILLING_TRANSACTIONS_EXPORTED's `hadQuery` boolean).
+  SUPPORT_TICKET_NOTE_ADDED
   // Signup OTP relay (SRS §4.9). Written with the REVEALING ADMIN's User id
   // when a staff member reveals a live code on /sadmin/otp-sessions in order to
   // relay it to the person signing up.
@@ -1756,9 +1773,14 @@ model UsageRecord {
 
 // A tracked support issue raised by a recruiter (Help & Support → Raise a
 // ticket). Creator-scoped: the raising recruiter sees + replies to their own
-// tickets; support staff (ADMIN) work the queue in /admin/support. The initial
+// tickets; support staff (ADMIN) work the queue in /sadmin/support. The initial
 // problem statement lives in `description`; the back-and-forth lives in
-// SupportTicketMessage rows.
+// SupportTicketMessage rows, and staff-only annotations in SupportTicketNote.
+//
+// ⚠ RECRUITER-ONLY, and `companyId` is what enforces it: a candidate has no
+// Company row, so a candidate literally cannot own a ticket. There is also no
+// candidate-facing contact form anywhere in apps/web. Opening this to candidates
+// is a nullable `companyId` plus an intake surface, deliberately not done here.
 model SupportTicket {
   id          Int                   @id @default(autoincrement())
   userId      Int
@@ -1777,6 +1799,7 @@ model SupportTicket {
   updatedAt   DateTime              @updatedAt
 
   messages SupportTicketMessage[]
+  notes    SupportTicketNote[]
 
   // "My tickets" list: WHERE userId = ? ORDER BY createdAt DESC.
   @@index([userId, createdAt(sort: Desc)])
@@ -1789,6 +1812,10 @@ model SupportTicket {
 // pattern as CompanyKyc.reviewedById): the raising recruiter for their own
 // replies, the admin's id when fromSupport is true. Bodies are user content —
 // never copied into audit diffs or logs.
+//
+// ⚠ EVERY row here is visible to the raising recruiter. `fromSupport` is a
+// LABEL ("Support" vs the recruiter's name in the thread), NOT a visibility
+// flag. Staff-only text belongs in SupportTicketNote — see the warning there.
 model SupportTicketMessage {
   id          Int           @id @default(autoincrement())
   ticketId    Int
@@ -1798,6 +1825,40 @@ model SupportTicketMessage {
   body        String
   createdAt   DateTime      @default(now())
 
+  @@index([ticketId, createdAt])
+}
+
+// A staff-only annotation on a ticket: the working note support leaves for the
+// next person to pick it up. Written from /sadmin/support/[id]; never shown to
+// the raiser and never emailed or bell-notified to them.
+//
+// ⚠ WHY THIS IS A SEPARATE TABLE RATHER THAN AN `internal` FLAG ON
+// SupportTicketMessage. The obvious design — one thread, one boolean, filter on
+// read — puts the raiser one forgotten `where` clause away from reading staff's
+// private assessment of them. That is not hypothetical here: the recruiter's own
+// thread page reads this data with Prisma DIRECTLY, bypassing apps/api entirely
+// (apps/recruiter/app/(authed)/support/tickets/[id]/page.tsx loads
+// `messages: { orderBy: … }` with NO where clause), so the filter would have to
+// be duplicated into a surface that no API guard, DTO or service test protects.
+// A note in its own table cannot appear in a messages query by construction —
+// the failure mode becomes a missing feature, which is visible, instead of a
+// privacy leak, which is silent. Same reasoning as ContentReport.reporterIp
+// being cut at the SELECT rather than hidden at render.
+//
+// authorId is a loose User id, deliberately matching SupportTicketMessage
+// rather than a real FK: the note is a durable record of what staff knew, and it
+// must outlive the staff account that wrote it. Rendered as "Unknown admin"
+// when the id no longer resolves.
+model SupportTicketNote {
+  id        Int           @id @default(autoincrement())
+  ticketId  Int
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  Int
+  body      String
+  createdAt DateTime      @default(now())
+
+  // The detail screen's notes list: WHERE ticketId = ? ORDER BY createdAt.
+  // Mirrors SupportTicketMessage's index because it is read the same way.
   @@index([ticketId, createdAt])
 }
 

@@ -96,9 +96,11 @@ export const FLAG = {
   // Recruiter Help & Support (the "Help & Support" sidebar group: searchable
   // FAQ, Contact Us form, Raise a Ticket + reply thread). Emergency stop for
   // the whole recruiter-facing surface: when ON, the /support/* pages 404 (L2)
-  // and every /recruiter/support mutation rejects with 503 (L3). The admin
-  // /admin/support console is deliberately NOT gated — staff can keep working
-  // existing tickets while the switch is on. Seeded enabled:false, so the
+  // and every /recruiter/support mutation rejects with 503 (L3). The staff
+  // console at /sadmin/support is deliberately NOT gated — staff can keep
+  // working existing tickets while the switch is on, which is also why this
+  // branch added no killswitch.admin_support_* key of its own. Seeded
+  // enabled:false, so the
   // feature is LIVE by default; an admin flipping this ON disables it without
   // a redeploy. As a `killswitch.*` key it is auto-classified critical
   // (Slack + confirm modal).
