@@ -38,8 +38,8 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | — free — | | | Released 2026-08-15 after `feature/sadmin-subscriptions-billing` merged. Append-only edits are safe; reorders need the lock. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | Released 2026-08-15 after `feature/sadmin-subscriptions-billing` merged (`killswitch.admin_subscription_write`). |
+| **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | Claude/Prakash | `feature/sadmin-content-reports` | 2026-08-18 | Adding a `Content reports` row. Inserted mid-array (next to the two job rows), not appended, so it takes the lock. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | Claude/Prakash | `feature/sadmin-content-reports` | 2026-08-18 | Adding `killswitch.admin_report_write`. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -51,6 +51,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/sadmin-content-reports` | **Content reports — PR B of 2: the console.** `/sadmin/reports` + `/sadmin/reports/[id]` (Open/Reviewing/Actioned/Dismissed/All tabs, `?q` over job title + company, per-job open-report count). New `apps/api/src/admin-reports/` on the existing `AdminGuard`: `PATCH /admin/reports/:id` with `CLAIM` / `ACTION` / `DISMISS`, plus an **admin takedown** (guarded force-close of a reported ACTIVE job → `CLOSED` + ES de-index + Cloudflare purge) so `ACTIONED` does something. New killswitch `killswitch.admin_report_write` (L2+L3, no L1). Also carries the `apps/web/app/admin` sidebar-scroll fix. **No new Prisma model** — `ContentReport` + all four statuses + `CONTENT_REPORT_ACTIONED`/`DISMISSED` already shipped in PR A. | 🔒 `packages/feature-flags/src/keys.ts` · 🔒 `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) · `packages/db/prisma/seed/flags.ts` · `apps/api/src/app.module.ts` (append) · `apps/api/src/cache-purge/cache-purge.service.ts` (`PATH_MAP`) · `apps/web/app/admin/layout.tsx` · ⚠️ 🔒 `schema.prisma` **only if** the owner picks the separate `JOB_CLOSED_BY_ADMIN` audit action (decision 2 in the plan) |
 
 ---
 
@@ -60,7 +61,6 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Feature | Notes |
 |---|---|---|
-| Claude/Prakash | **Content reports — PR B (`feature/sadmin-content-reports`)** | Deferred by the owner on 2026-08-15 in favour of the billing console; **not started, no branch exists**. **Content reports — PR B of 2: the console.** `/sadmin/reports` + `/sadmin/reports/[id]` with Claim / Action / Dismiss, `GET|PATCH /admin/reports` on the existing `AdminGuard`, and an **admin takedown** (guarded force-close of a reported ACTIVE job to `CLOSED` + ES de-index + purge) so `ACTIONED` actually does something. Also carries the sidebar-scroll fix. Starts after PR A merges. Shared surfaces when it resumes: `SidebarNav.tsx` `NAV_ITEMS` (⚠️ not yet a §15.3 lock — this PR adds the row) · `packages/ui/src/icons.ts` (append-only) · `apps/api/src/app.module.ts` (append) |
 | Claude/Prakash | **Admin console migration — PR 3 (`feature/sadmin-admin-migration`)** | Moves feature-flags · audit-log · kyc-review · support out of `apps/web/app/admin` into `/sadmin` and deletes the old subtree. **Must land after PR 2**: `/admin/feature-flags` is the only surface that can turn moderation OFF, and a raw DB update can't substitute (`invalidateFlag()` is only called from `setFlag()`, so the 30s cache keeps serving the stale value). Also takes the `keys.ts` lock for the moderation-flag criticality change. |
 
 ---
