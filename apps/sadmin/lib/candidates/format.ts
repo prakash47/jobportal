@@ -331,6 +331,7 @@ const PROFILE_AUDIT_ACTION_LABEL: Record<ProfileAuditAction, string> = {
   BILLING_SUBSCRIPTION_PLAN_CHANGED: 'Changed a comped subscription’s plan',
   BILLING_SUBSCRIPTION_EXTENDED: 'Extended a comped subscription',
   BILLING_SUBSCRIPTION_CANCELLED: 'Cancelled a comped subscription',
+  BILLING_TRANSACTIONS_EXPORTED: 'Exported the transaction ledger',
   SUPPORT_TICKET_STATUS_CHANGED: 'Changed a support ticket status',
   OTP_CODE_REVEALED: 'Revealed a signup OTP',
   CONTENT_REPORT_ACTIONED: 'Upheld a content report',
