@@ -10,6 +10,7 @@ import { AdminJobsModule } from './admin-jobs/admin-jobs.module';
 import { AdminKycModule } from './admin-kyc/admin-kyc.module';
 import { AdminOtpSessionsModule } from './admin-otp-sessions/admin-otp-sessions.module';
 import { AdminReportsModule } from './admin-reports/admin-reports.module';
+import { AdminTransactionsModule } from './admin-transactions/admin-transactions.module';
 import { AdminSupportModule } from './admin-support/admin-support.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { AppController } from './app.controller';
@@ -79,6 +80,7 @@ import { StorageModule } from './storage/storage.module';
     ReportsModule,
     AdminReportsModule,
     AdminBillingModule,
+    AdminTransactionsModule,
     AdminJobsModule,
     AdminKycModule,
     AdminOtpSessionsModule,
