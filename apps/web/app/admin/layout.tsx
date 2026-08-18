@@ -17,14 +17,18 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)]">
-      {/* Sticky, so the console keeps an anchor while a long page scrolls. It
-          needs an explicit background: without one, content scrolls through a
-          transparent bar. This is the document-scroll shell, deliberately NOT
-          apps/sadmin's locked viewport (h-screen + overflow-hidden) — adopting
-          that here would also remove the mobile rail, since sadmin's aside is
-          `hidden md:flex` with no drawer, and this console still has four live
-          surfaces that render below md. */}
-      <header className="sticky top-0 z-10 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
+      {/* Deliberately NOT sticky, and that is a reversal worth recording.
+          Making it sticky does remove the strip of blank page above the rail at
+          md+, but an opaque bar pinned at y=0 covers a control that browser
+          scroll-into-view has just brought flush to the top — measured at 45px
+          tall against a 19px control, i.e. ENTIRELY hidden, which fails WCAG
+          2.4.11 Focus Not Obscured (Minimum, AA) whose bar is only "not
+          entirely hidden". Compensating needs scroll-padding-top on the
+          VIEWPORT, and the only hook for that here is a global rule on <html>
+          that would leak to the marketing site. Trading an AA focus failure on
+          a page of production feature switches for a cosmetic gap is the wrong
+          way round. */}
+      <header className="border-b border-[var(--color-border)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <div className="flex items-center gap-3">
             <Link
@@ -41,27 +45,37 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </header>
 
       <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-6 py-8 md:grid-cols-[180px_minmax(0,1fr)]">
-        {/* The rail used to ride the page away. Two separate defects:
-            (1) every positioning utility was md:-gated, so BELOW 768px the aside
-                computed to `position: static` inside a single-column grid — an
-                ordinary flow block stacked above main that simply scrolled off;
-            (2) at md+ the sticky did engage, but against a non-sticky header, so
-                the rail parked 2rem down with blank page above it.
-            Ungating the three utilities fixes (1); the sticky header above fixes
-            (2), and `top-16` clears its ~3rem height.
+        {/* ⚠ The positioning stays md:-GATED. Ungating it looks like the
+            obvious fix for "the rail scrolls away on a phone" and is actively
+            harmful: below md the grid is single-column, so the aside is a
+            FULL-CONTENT-WIDTH block, and a sticky in-flow grid item is bounded
+            by the grid CONTAINER's content box rather than by its own row — so
+            it pins at the top while <main> scrolls underneath it. With no
+            background and no z-index that is a transparent band of nav text
+            superimposed on the page, and elementFromPoint over it returns the
+            nav's own <a>, so taps meant for a flag toggle navigate away
+            instead. Below md a stacked rail scrolling off with the page is the
+            correct behaviour, not the bug.
 
-            `self-start` is load-bearing and must stay ungated alongside
-            `sticky`: a grid item defaults to `align-self: stretch`, which makes
-            the aside as tall as the row, and a sticky box that fills its
-            containing block has zero travel and never appears to stick.
+            What IS added here is the bounded height: without it a nav longer
+            than the viewport has its tail pinned off-screen with no way to
+            reach it — the same job sadmin's `flex-1 overflow-y-auto` wrapper
+            does. Latent with today's four links; free to fix now.
 
-            The bounded height plus its own overflow keeps a nav longer than the
-            viewport scrollable instead of running off the bottom — the same job
-            sadmin's `flex-1 overflow-y-auto` nav wrapper does. Safe on the
-            sticky element itself; it is overflow on an ANCESTOR that would kill
-            sticky, and there is none (body carries only `font-sans antialiased`,
-            and neither globals.css nor theme.css declares an overflow rule). */}
-        <aside className="sticky top-16 self-start max-h-[calc(100vh-5rem)] overflow-y-auto">
+            `md:self-start` is load-bearing next to `md:sticky`: a grid item
+            defaults to `align-self: stretch`, which makes the aside as tall as
+            the row, and a sticky box filling its containing block has zero
+            travel and never appears to stick. The overflow is safe ON the
+            sticky element — only overflow on an ANCESTOR would kill it, and
+            there is none (body carries just `font-sans antialiased`, and
+            neither globals.css nor theme.css declares an overflow rule).
+
+            The remaining cosmetic gap — the rail parks 2rem down with blank
+            page above it, because the header scrolls away — is left alone on
+            purpose; see the header comment for why the sticky-header fix costs
+            more than it buys. `feature/sadmin-admin-migration` retires this
+            shell into sadmin's locked viewport, which solves it structurally. */}
+        <aside className="md:sticky md:top-8 md:self-start md:max-h-[calc(100vh-4rem)] md:overflow-y-auto">
           <AdminNav />
         </aside>
         <main className="min-w-0">{children}</main>

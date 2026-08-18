@@ -240,7 +240,22 @@ export class AdminReportsService {
       // returns while ES and Cloudflare run), so the log line above is the only
       // operator record if the de-index fails.
       const closedJob = await prisma.job.findUnique({ where: { id: jobId } });
-      if (closedJob) this.effects.fireRemoveSideEffects(closedJob);
+      if (closedJob) {
+        this.effects.fireRemoveSideEffects(closedJob);
+      } else {
+        // The row vanished between the commit and this read — only a concurrent
+        // admin hard-delete can do that, and it makes the ES document
+        // unreachable through the normal path. Deleting a job fires its own
+        // remove side effects, so the index is almost certainly already clean;
+        // this is logged rather than silently skipped because it is the one
+        // case where nothing else will reconcile it, and the alternative
+        // (findUniqueOrThrow) would turn a committed, successful decision into
+        // a 500.
+        this.logger.warn(
+          `report=${reportId} closed job=${jobId} but the row was gone before de-index; ` +
+            `verify the job is absent from the Elasticsearch jobs index`,
+        );
+      }
     }
 
     return { id: reportId, status: nextStatus, jobClosed };

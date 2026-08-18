@@ -140,14 +140,24 @@ describe('AdminReportsService', () => {
     expect(m.contentReport.updateMany).not.toHaveBeenCalled();
   });
 
-  it('never selects the reporter IP or the reporter free text', async () => {
+  // reporterIp is abuse-triage data no surface may render, and `details` is the
+  // reporter's untrusted prose, which must never be able to reach a
+  // ProfileAuditLog diff. Both are cut at the SELECT rather than hidden
+  // downstream — the treatment GSTIN and PAN already get.
+  //
+  // ⚠ Pinned POSITIVELY, on the exact key set. The first version of this test
+  // read `...?.select ?? {}` and asserted `.not.toHaveProperty(...)`, which an
+  // empty object satisfies for free — so it passed in precisely the case it
+  // existed to catch. Verified: swapping `select:` for `include:` in the
+  // service (which loads every scalar column, reporterIp and details included)
+  // left all 37 tests in this file green. An exact-equality assertion fails on
+  // a removed projection AND on a newly added sensitive column.
+  it('reads only the four non-sensitive columns — never the IP or the free text', async () => {
     await service.update(ADMIN, REPORT, { action: 'CLAIM' });
-    const select = m.contentReport.findUnique.mock.calls[0]?.[0]?.select ?? {};
-    // reporterIp is abuse-triage data no surface may render, and `details` must
-    // never be able to reach a ProfileAuditLog diff. Cut at the SELECT rather
-    // than hidden downstream, the same treatment GSTIN/PAN get.
-    expect(select).not.toHaveProperty('reporterIp');
-    expect(select).not.toHaveProperty('details');
+    const arg = m.contentReport.findUnique.mock.calls[0]?.[0];
+    expect(arg).toBeDefined();
+    expect(Object.keys(arg.select ?? {}).sort()).toEqual(['id', 'job', 'jobId', 'status']);
+    expect(arg).not.toHaveProperty('include');
   });
 
   // --- CLAIM ---------------------------------------------------------------
@@ -250,6 +260,34 @@ describe('AdminReportsService', () => {
         where: { id: REPORT, status: 'REVIEWING' },
         data: expect.objectContaining({ status: 'ACTIONED' }),
       });
+    });
+
+    // The admin's own words are the one part of the record a later reader
+    // cannot reconstruct from the data. Asserted explicitly because the spread
+    // that writes it is conditional: deleting `...(note ? { note } : {})`
+    // entirely left every other test in this file green.
+    it('records the admin note in the audit diff, and omits the key when there is none', async () => {
+      await service.update(ADMIN, REPORT, { action: 'DISMISS', note: 'listing checks out' });
+      expect(m.profileAuditLog.create.mock.calls[0]?.[0]?.data?.diff).toMatchObject({
+        note: 'listing checks out',
+      });
+
+      vi.clearAllMocks();
+      m.contentReport.findUnique.mockResolvedValue(openReport());
+      m.contentReport.updateMany.mockResolvedValue({ count: 1 });
+      m.profileAuditLog.create.mockResolvedValue({});
+      await service.update(ADMIN, REPORT, { action: 'ACTION' });
+      expect(m.profileAuditLog.create.mock.calls[0]?.[0]?.data?.diff).not.toHaveProperty('note');
+    });
+
+    // Never the REPORTER's words — only the admin's. The schema comment on
+    // CONTENT_REPORT_ACTIONED forbids `details` reaching the diff, and the
+    // in-transaction read does not even select it.
+    it('never puts the reporter free text in the audit diff', async () => {
+      await service.update(ADMIN, REPORT, { action: 'ACTION', note: 'confirmed scam' });
+      const diff = m.profileAuditLog.create.mock.calls[0]?.[0]?.data?.diff;
+      expect(diff).not.toHaveProperty('details');
+      expect(JSON.stringify(diff)).not.toContain('registration fee');
     });
 
     it('records the observed transition in the audit diff', async () => {

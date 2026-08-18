@@ -8,6 +8,7 @@ import { formatDateTimeIst } from '../../../../lib/jobs/format';
 import {
   clampPage,
   firstParam,
+  formatJobPostingStatus,
   formatOtherOpenReports,
   formatReportReason,
   formatReportStatus,
@@ -112,7 +113,13 @@ export default async function ReportDetailPage({ params, searchParams }: PagePro
             <dt className="text-[var(--color-fg-muted)]">Reported by</dt>
             <dd className="mt-0.5 text-[var(--color-fg)]">
               {formatReporter(report.reporter)}
-              {report.reporter && (
+              {/* Gated on the NAME, not on the reporter: formatReporter already
+                  falls back to the email when the name is blank, so an
+                  unconditional append renders "p@x.com · p@x.com". Blank names
+                  are real here — lib/reports/format.test.ts pins that fallback
+                  because the candidate console shipped the whitespace-name bug
+                  and had to fix it. */}
+              {report.reporter && report.reporter.name.trim() !== '' && (
                 <span className="text-[var(--color-fg-muted)]"> · {report.reporter.email}</span>
               )}
             </dd>
@@ -153,7 +160,14 @@ export default async function ReportDetailPage({ params, searchParams }: PagePro
             </div>
             <div>
               <dt className="text-[var(--color-fg-muted)]">Current status</dt>
-              <dd className="mt-0.5 text-[var(--color-fg)]">{report.job.status}</dd>
+              {/* Through the shared label map, never the raw enum. The takedown
+                  hint two cards below says "this posting is not live" in
+                  English, and the queue row this page was opened from says
+                  "Under review" — printing PENDING_MODERATION here would make
+                  three surfaces describe one job three different ways. */}
+              <dd className="mt-0.5 text-[var(--color-fg)]">
+                {formatJobPostingStatus(report.job.status)}
+              </dd>
             </div>
             <div className="flex flex-wrap gap-4 pt-1">
               <Link

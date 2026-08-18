@@ -17,6 +17,14 @@ export { firstParam, normalizeQuery } from '../candidates/format';
 // report. Shared with the job-postings console for the same reason.
 export { escapeLikePattern } from '../job-postings/format';
 
+// The REPORTED POSTING's status, which this console also has to render. Taken
+// from the job-postings map rather than given a second one here: two label sets
+// for JobStatus would let the same job read "Under review" on one screen and
+// "Pending moderation" on another, and this repo already carries three live
+// spellings of ACTIVE as a logged follow-up — adding a fourth is the wrong
+// direction. Re-exported so the page has a single import site for its labels.
+export { formatJobPostingStatus } from '../job-postings/format';
+
 /**
  * The status tabs, in the order they render.
  *
