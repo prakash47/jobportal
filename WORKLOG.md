@@ -33,13 +33,13 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-18 after `feature/sadmin-content-reports` merged (`20260818052645_add_job_closed_by_admin_audit_action`). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/sadmin-transaction-log` | 2026-08-18 | One additive `ALTER TYPE` only: `ProfileAuditAction.BILLING_TRANSACTIONS_EXPORTED` (+ a `PaymentOrder.@@index([createdAt])`). No new table, no new column. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
 | **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | — free — | | | Released 2026-08-18 after `feature/sadmin-content-reports` merged. Append-only edits are safe; reorders need the lock. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | Released 2026-08-18 after `feature/sadmin-content-reports` merged (`killswitch.admin_report_write`). |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | Claude/Prakash | `feature/sadmin-transaction-log` | 2026-08-18 | Adding `killswitch.admin_transaction_export` (gates the CSV export only, never the read). |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -51,6 +51,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/sadmin-transaction-log` | **Transaction & Revenue Log — `/sadmin/transactions` (+ `/[id]`) and its CSV export.** Searchable ledger of every payment attempt, spined on **`PaymentOrder` LEFT JOIN `SubscriptionInvoice`** (invoice-first would hide FAILED and abandoned attempts). Status tabs · IST date range · search over company / invoice no. / gateway ids. **New:** `packages/domain/src/txn-log-params.ts` (shared `transactionWhere` + `TRANSACTION_SELECT`, so the CSV and the screen cannot drift), `apps/api/src/admin-transactions/` (`POST /admin/transactions/export` on the existing `AdminGuard`), `apps/sadmin/app/(authed)/transactions/{page,[id]/page}.tsx`, `apps/sadmin/lib/transactions/{queries,format}.ts`, `apps/sadmin/components/transactions/{DateRangeFilter,ExportCsvButton,TransactionSearchBar}.tsx`. **No new model, no new table, no new column.** | 🔒 `schema.prisma` (one additive `ALTER TYPE`) · 🔒 `keys.ts` (`killswitch.admin_transaction_export`) · `SidebarNav.NAV_ITEMS` (**append-only** — lock deliberately not taken, per that row's own note) · `packages/domain` (new file + `exports` map) · `apps/sadmin/package.json` (adds `@jobportal/domain` workspace dep) |
 
 ---
 
