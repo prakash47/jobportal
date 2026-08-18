@@ -45,6 +45,7 @@ describe('pathsForFlag', () => {
     expect(pathsForFlag('killswitch.admin_subscription_write')).toEqual([]);
     expect(pathsForFlag('killswitch.admin_report_write')).toEqual([]);
     expect(pathsForFlag('killswitch.admin_job_delete')).toEqual([]);
+    expect(pathsForFlag('killswitch.admin_transaction_export')).toEqual([]);
   });
 
   it('the two report flags are distinct keys and both purge nothing', () => {

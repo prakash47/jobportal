@@ -10,6 +10,7 @@ import {
   ClipboardList,
   CreditCard,
   Flag,
+  IndianRupee,
   LayoutDashboard,
   ShieldCheck,
   Users,
@@ -50,6 +51,16 @@ const NAV_ITEMS: readonly { href: string; label: string; icon: NavIcon }[] = [
   // "which employer is on which plan", so it follows Employer management rather
   // than opening the rail.
   { href: '/subscriptions', label: 'Subscriptions & Billing', icon: CreditCard as NavIcon },
+  // Closes the money block, and sits AFTER Subscriptions & Billing because it is
+  // the ledger BEHIND it: that console answers "who is on which plan", this one
+  // answers "what was actually charged, and when". Reading them the other way
+  // round is confusing — the plan is the thing, the payments are its history.
+  //
+  // `CreditCard` is deliberately NOT reused despite both being billing surfaces:
+  // two adjacent rail rows carrying the same glyph is the fastest way to land an
+  // admin in the wrong console, which is the same reasoning the Job review /
+  // Job Postings pair records above.
+  { href: '/transactions', label: 'Transaction & Revenue Log', icon: IndianRupee as NavIcon },
 ];
 
 function isActive(pathname: string, href: string): boolean {
