@@ -194,6 +194,14 @@ const flags: FlagSeed[] = [
   // Turning intake off must still leave staff able to clear the existing queue,
   // which is why these are two keys and not one.
   { key: 'killswitch.admin_report_write', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable admin content-report actions (kill)' },
+  // Gates the CSV export on /sadmin/transactions ONLY — the list and the detail
+  // page keep serving. Killing the export stops the platform's entire payment
+  // ledger leaving in a file without blinding staff to what was paid.
+  //
+  // ⚠ Deliberately NOT folded into `killswitch.admin_subscription_write`: that
+  // one stops staff MOVING money (comp / change / extend / cancel). An operator
+  // stopping an extraction has no reason to also freeze comps.
+  { key: 'killswitch.admin_transaction_export', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable transaction CSV export (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {

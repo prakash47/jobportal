@@ -306,6 +306,26 @@ enum ProfileAuditAction {
   BILLING_SUBSCRIPTION_PLAN_CHANGED
   BILLING_SUBSCRIPTION_EXTENDED
   BILLING_SUBSCRIPTION_CANCELLED
+  // CSV export of the Transaction & Revenue Log (/sadmin/transactions →
+  // Export). Written with the EXPORTING ADMIN's User id.
+  //
+  // The SECOND action in this enum to record a READ rather than a mutation,
+  // after OTP_CODE_REVEALED — and for the same reason. One click produces a
+  // file containing every company's payment history, every statutory invoice
+  // number and every GST place of supply on the platform, which then leaves the
+  // building entirely: it can be mailed, copied and kept long after the session
+  // that made it. Who pulled the ledger, and over what window, is the only trace
+  // that survives that. A log line is not equivalent — logs rotate, and this
+  // table is where every other admin action is answerable from.
+  //
+  // The diff carries ONLY the shape of the extraction: { from, to, tab,
+  // hadQuery, rowCount, grossInPaise, taxableInPaise, nullTaxableRows }. Never
+  // company names, never invoice numbers, never the buyer snapshot, and never
+  // the admin's raw `q` text — the diff must not become a second, uncontrolled
+  // copy of the export it is meant to police. `hadQuery` is a boolean for
+  // exactly that reason: whether a search narrowed the file is auditable, while
+  // the search terms themselves would leak the company being investigated.
+  BILLING_TRANSACTIONS_EXPORTED
   // Recruiter Help & Support. Written with the reviewing ADMIN's User id when
   // support staff moves a ticket through its lifecycle. Ticket create/reply
   // need no audit action — the SupportTicket / SupportTicketMessage rows are
@@ -1659,6 +1679,13 @@ model PaymentOrder {
 
   @@index([companyId, createdAt(sort: Desc)])
   @@index([status])
+  // Platform-wide date-range scan, the primary access path of the Transaction &
+  // Revenue Log (/sadmin/transactions). The composite above LEADS with
+  // companyId, so a query with no company predicate provably cannot use it, and
+  // @@index([status]) does not order. Added while the schema lock was already
+  // held for BILLING_TRANSACTIONS_EXPORTED rather than paying a second lock
+  // cycle later; correctness-neutral on a table that is empty today.
+  @@index([createdAt(sort: Desc)])
 }
 
 // Idempotency ledger for provider webhooks (CLAUDE.md §3.2: signature-verified,

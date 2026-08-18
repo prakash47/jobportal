@@ -116,6 +116,18 @@ const PATH_MAP: Record<string, string[]> = {
   // operator toggled an admin-only killswitch — a page the flag cannot affect,
   // and the single most expensive path on the site to evict.
   'killswitch.admin_job_delete': [],
+  // Gates the CSV export on /sadmin/transactions. Same reasoning as the three
+  // above: every surface it touches lives in apps/sadmin, behind auth and
+  // noindex, served by a different app than the Cloudflare-cached seeker site.
+  //
+  // Mapped explicitly rather than left to the defensive ['/'] default. That
+  // omission has now shipped TWICE on admin-only killswitches — first
+  // 'moderation.reports.enabled', then 'killswitch.admin_job_delete' — and both
+  // times the effect was to evict the job-seeker HOMEPAGE, the most expensive
+  // path on the site, every time an operator toggled a switch that cannot
+  // change it. A new admin flag with no entry here is a regression, not an
+  // oversight; cache-purge.service.test.ts asserts this key is present.
+  'killswitch.admin_transaction_export': [],
 };
 
 export function pathsForFlag(flagKey: string): string[] {

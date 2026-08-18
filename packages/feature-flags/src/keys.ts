@@ -209,6 +209,38 @@ export const FLAG = {
   // modal) by isCriticalFlag below — no NON_KILLSWITCH_CRITICAL entry needed.
   KILL_ADMIN_REPORT_WRITE: 'killswitch.admin_report_write',
 
+  // Emergency stop for the CSV export on the Transaction & Revenue Log
+  // (/sadmin/transactions → Export). Gates the EXPORT ONLY — never the list,
+  // never the detail page.
+  //
+  // That split is the whole point of a separate key. The thing an operator
+  // reaches for here is "stop the platform's entire payment ledger leaving the
+  // building in a file" — during an investigation, a suspected credential
+  // compromise, or while a data-handling question is open. None of those are
+  // reasons to blind staff to what was paid; if anything they are reasons to
+  // need the screen more. So the read stays up and only the extraction stops.
+  //
+  // ⚠ Do NOT fold this into KILL_ADMIN_SUBSCRIPTION_WRITE. That key stops the
+  // four money-MOVING actions on /sadmin/subscriptions (comp / change plan /
+  // extend / cancel). Sharing one key would mean an operator who wants to stop
+  // data leaving must also freeze staff's ability to comp an account, and an
+  // operator who wants to freeze comps must also stop accounting getting its
+  // month-end file. The two emergencies have nothing to do with each other.
+  //
+  // ⚠ Nor SUBSCRIPTION_SYSTEM: that is the customer-facing master purchase
+  // switch, read by both quota services to decide whether to render "upgrade"
+  // CTAs. Reusing it for a staff gate would change what CUSTOMERS see.
+  //
+  // There is deliberately NO middleware route gate (L1), matching
+  // KILL_ADMIN_JOB_DELETE, KILL_ADMIN_SUBSCRIPTION_WRITE and
+  // KILL_ADMIN_REPORT_WRITE. The gated thing is an ACTION, not a route: 404ing
+  // /sadmin/transactions in order to stop a download would take down the only
+  // surface in the product that can see the payment ledger at all.
+  //
+  // As a `killswitch.*` key it is auto-classified critical (Slack + confirm
+  // modal) by isCriticalFlag below — no NON_KILLSWITCH_CRITICAL entry needed.
+  KILL_ADMIN_TRANSACTION_EXPORT: 'killswitch.admin_transaction_export',
+
   // Moderation
   //
   // User-submitted content reports (the "Report this job" control on the public

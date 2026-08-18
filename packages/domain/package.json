@@ -15,7 +15,8 @@
     "./company-highlights": "./src/company-highlights.ts",
     "./article-params": "./src/article-params.ts",
     "./home-queries": "./src/home-queries.ts",
-    "./asset-url": "./src/asset-url.ts"
+    "./asset-url": "./src/asset-url.ts",
+    "./txn-log-params": "./src/txn-log-params.ts"
   },
   "scripts": {
     "lint": "echo 'no lint configured yet'",
