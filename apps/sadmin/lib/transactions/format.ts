@@ -204,8 +204,14 @@ export function formatTransactionsSummary(
  */
 export function taxableCaveat(paidCount: number, nullTaxableCount: number): string | null {
   if (nullTaxableCount === 0) return null;
-  const rows = nullTaxableCount === 1 ? 'payment has' : 'payments have';
-  return `${nullTaxableCount.toLocaleString('en-IN')} of ${paidCount.toLocaleString('en-IN')} captured ${rows} no taxable figure recorded, so the taxable total below excludes them.`;
+  const one = nullTaxableCount === 1;
+  const subject = one ? 'payment has' : 'payments have';
+  // The object has to agree with the subject too. "1 … payment has … excludes
+  // them" reads as a typo, and a sentence that reads as a typo is one a reader
+  // skims past — on the one line whose whole job is to stop them trusting a
+  // total that is missing rows.
+  const object = one ? 'it' : 'them';
+  return `${nullTaxableCount.toLocaleString('en-IN')} of ${paidCount.toLocaleString('en-IN')} captured ${subject} no taxable figure recorded, so the taxable total below excludes ${object}.`;
 }
 
 /** Basis points as a percentage string: 1800 → "18%". */

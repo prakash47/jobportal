@@ -57,10 +57,16 @@ function dataRows(csv: string): string[] {
 }
 
 describe('toTransactionsCsv', () => {
-  it('emits the BOM, the header and CRLF terminators', () => {
+  it('emits the BOM as a real U+FEFF, the header and CRLF terminators', () => {
     const csv = toTransactionsCsv([]);
-    expect(csv.startsWith('﻿')).toBe(true);
-    expect(csv).toBe(`﻿${CSV_COLUMNS.map((c) => `"${c}"`).join(',')}\r\n`);
+    // ⚠ Asserted on the CODE POINT, not by comparing against a BOM literal in
+    // this file. Two literals can be corrupted together — a shell round-trip
+    // that re-encodes both source and test leaves `startsWith('<bom>')` passing
+    // while the emitted bytes are the mojibake "ï»¿". This assertion cannot
+    // pass unless the real byte-order mark is there.
+    expect(csv.codePointAt(0)).toBe(0xfeff);
+    expect(Buffer.from(csv, 'utf8').subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf]));
+    expect(csv.slice(1)).toBe(`${CSV_COLUMNS.map((c) => `"${c}"`).join(',')}\r\n`);
   });
 
   it('names the GST treatment in the money headers', () => {

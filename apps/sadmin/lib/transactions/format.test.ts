@@ -153,9 +153,9 @@ describe('taxableCaveat', () => {
     );
   });
 
-  it('uses the singular for one row', () => {
+  it('agrees in number throughout the sentence for one row', () => {
     expect(taxableCaveat(10, 1)).toBe(
-      '1 of 10 captured payment has no taxable figure recorded, so the taxable total below excludes them.',
+      '1 of 10 captured payment has no taxable figure recorded, so the taxable total below excludes it.',
     );
   });
 });

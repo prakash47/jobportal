@@ -66,6 +66,16 @@ async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,
+    // ⚠ Without this, a cross-origin fetch can read only the CORS-safelisted
+    // response headers (Content-Type, Content-Length, and four others) — every
+    // other header reads as null with no error. That silently broke the CSV
+    // download on /sadmin/transactions: the button parses the server's filename
+    // out of Content-Disposition precisely so the "-gross-of-refunds" caveat
+    // baked into it cannot drift from what the server generated, and the parse
+    // was returning null on every call and falling through to a client-side
+    // reconstruction. Measured, not assumed: res.headers.keys() returned exactly
+    // ['content-length', 'content-type'].
+    exposedHeaders: ['Content-Disposition'],
   });
 
   // Global Sentry exception filter — captures every unhandled exception
