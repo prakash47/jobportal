@@ -84,6 +84,18 @@ export default async function SupportTicketDetailPage({ params, searchParams }: 
 
   const ticket = result.data;
 
+  // ⚠ Defensive, and NOT hypothetical. These wire types are hand-written (see
+  // lib/support/types.ts) and apps/sadmin and apps/api deploy independently —
+  // Vercel and Render do not ship atomically, so during any rollout this console
+  // can be talking to an API that predates it. That exact state was hit while
+  // building this branch: a dev server started before the notes work returned a
+  // ticket with NO `notes` key at all, and `ticket.notes.length` on a missing
+  // array is a TypeError that takes down the whole detail page — including the
+  // thread and the status controls, which have nothing to do with notes.
+  // Degrading to "no notes yet" loses a feature; not degrading loses the page.
+  const notes = ticket.notes ?? [];
+  const messages = ticket.messages ?? [];
+
   return (
     <div className="space-y-8">
       <BackLink href={backHref} />
@@ -117,11 +129,11 @@ export default async function SupportTicketDetailPage({ params, searchParams }: 
         </p>
       </section>
 
-      {ticket.messages.length > 0 && (
+      {messages.length > 0 && (
         <section className="space-y-4">
           <h2 className="text-sm font-semibold text-[var(--color-fg)]">Conversation</h2>
           <ul className="space-y-4">
-            {ticket.messages.map((m) => (
+            {messages.map((m) => (
               <MessageItem key={m.id} message={m} raiserName={ticket.user.name} />
             ))}
           </ul>
@@ -134,7 +146,7 @@ export default async function SupportTicketDetailPage({ params, searchParams }: 
           the customer-visible action first, so the staff-only panel is arrived at
           as a distinct second thing rather than as another field of the form
           above it. */}
-      <NotesSection notes={ticket.notes} />
+      <NotesSection notes={notes} />
       <InternalNoteForm ticketId={ticket.id} />
     </div>
   );

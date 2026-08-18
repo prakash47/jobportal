@@ -84,8 +84,22 @@ export interface TicketDetail {
   updatedAt: string;
   user: { id: number; name: string; email: string };
   company: { id: number; name: string; slug: string };
-  messages: TicketMessage[];
-  notes: TicketNote[];
+  /**
+   * ⚠ Both collections are typed as POSSIBLY UNDEFINED even though a current API
+   * always sends them, and that is deliberate rather than defensive noise.
+   *
+   * apps/sadmin and apps/api deploy independently (Vercel and Render), so during
+   * any rollout this console can be reading an API that predates it. That state
+   * was hit for real while building this branch — a dev server started before
+   * the notes work returned a ticket carrying no `notes` key at all — and
+   * `ticket.notes.length` on a missing array is a TypeError that takes down the
+   * entire detail page, thread and status controls included.
+   *
+   * Declaring them honestly is what makes the `?? []` in the page a checked
+   * necessity rather than dead code the next reader deletes as redundant.
+   */
+  messages: TicketMessage[] | undefined;
+  notes: TicketNote[] | undefined;
 }
 
 /**
