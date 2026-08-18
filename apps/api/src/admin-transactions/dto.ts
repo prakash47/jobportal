@@ -17,10 +17,27 @@ import {
  * the API and the screen cannot disagree about what a valid day is. The regex
  * alone would accept `2026-02-31`; parseIstDay round-trips the parsed date and
  * rejects the rollover.
+ *
+ * ⚠ TRANSFORM, NOT REFINE, and that distinction is load-bearing. `parseIstDay`
+ * trims internally, so `.refine(v => parseIstDay(v) !== undefined)` ACCEPTS a
+ * whitespace-padded day and then hands the RAW padded string downstream, where
+ * three separate things break at once:
+ *
+ *   1. `istDayStartUtc(' 2026-08-01')` builds `new Date(' 2026-08-01T00:00…')`,
+ *      which is an Invalid Date. Prisma rejects it and the throw escapes the
+ *      controller as a 500 — where every other malformed range answers 400.
+ *   2. `istDaySpan` returns NaN, and `NaN > 366` is false, so the span cap
+ *      below silently never fires.
+ *   3. A LEADING space defeats the lexicographic `from > to` check, because
+ *      0x20 sorts below every digit.
+ *
+ * Transforming makes `parsed.data` carry the canonical trimmed day, so the two
+ * guards below and the filename all operate on the same value the query does.
  */
 const istDaySchema = z
   .string()
-  .refine((value) => parseIstDay(value) !== undefined, {
+  .transform((value) => parseIstDay(value))
+  .refine((value): value is string => value !== undefined, {
     message: 'Expected a real calendar day in YYYY-MM-DD form',
   });
 

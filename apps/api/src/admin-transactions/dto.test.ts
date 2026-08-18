@@ -23,6 +23,61 @@ describe('ExportTransactionsDto', () => {
     expect(ExportTransactionsDto.safeParse({}).success).toBe(false);
   });
 
+  describe('whitespace-padded days', () => {
+    // ⚠ The regression: parseIstDay trims INTERNALLY, so a `.refine` that only
+    // asks "would this be valid after trimming?" accepts the padded string and
+    // then passes it on raw. Downstream that is an Invalid Date in the Prisma
+    // where (a 500 where every other malformed range gives 400), a NaN span
+    // that silently defeats the 366-day cap, and — with a LEADING space — a
+    // backwards range that sails past the lexicographic from > to check,
+    // because 0x20 sorts below every digit.
+    it('CANONICALISES padding rather than passing it through', () => {
+      const parsed = ExportTransactionsDto.safeParse({
+        from: '2026-08-01 ',
+        to: ' 2026-08-31',
+      });
+      expect(parsed.success).toBe(true);
+      // The value the service sees must be the trimmed one, or the where
+      // clause, the span guard and the filename all disagree with each other.
+      expect(parsed.success && parsed.data.from).toBe('2026-08-01');
+      expect(parsed.success && parsed.data.to).toBe('2026-08-31');
+    });
+
+    it('still enforces the span cap on a padded range', () => {
+      const parsed = ExportTransactionsDto.safeParse({
+        from: ' 2020-01-01',
+        to: '2026-12-31',
+      });
+      expect(parsed.success).toBe(false);
+      expect(parsed.success === false && parsed.error.issues[0]?.message).toMatch(
+        /maximum for one export is 366/,
+      );
+    });
+
+    it('still catches a backwards padded range', () => {
+      const parsed = ExportTransactionsDto.safeParse({
+        from: ' 2026-08-31',
+        to: '2026-08-01',
+      });
+      expect(parsed.success).toBe(false);
+      expect(parsed.success === false && parsed.error.issues[0]?.message).toMatch(
+        /must not be before/,
+      );
+    });
+
+    it('rejects an impossible day even when padded', () => {
+      expect(
+        ExportTransactionsDto.safeParse({ from: ' 2026-02-31 ', to: '2026-03-01' }).success,
+      ).toBe(false);
+    });
+
+    it('rejects interior whitespace, which trimming cannot rescue', () => {
+      expect(
+        ExportTransactionsDto.safeParse({ from: '2026-08- 01', to: '2026-08-31' }).success,
+      ).toBe(false);
+    });
+  });
+
   it('rejects a day that does not exist', () => {
     // Validated through the same parseIstDay the console uses, so the API and
     // the screen cannot disagree about what a valid day is.

@@ -159,7 +159,14 @@ export default async function TransactionsPage({ searchParams }: PageProps) {
         })}
       </nav>
 
-      <DateRangeFilter from={from} to={to} />
+      {/* ⚠ The RAW parsed dates, not the sanitised ones. When the range is
+          backwards the QUERY drops it (from/to become undefined), but the
+          params are still sitting in the admin's address bar — so showing the
+          inputs as empty would leave them looking at an unfiltered page with no
+          visible cause and no control to clear. The summary sentence says the
+          range was ignored; these inputs show WHICH range, and "Clear dates"
+          stays available to fix it. */}
+      <DateRangeFilter from={rawFrom} to={rawTo} />
       <TransactionSearchBar />
 
       {/* ONE always-mounted live region carrying the result summary. The search
