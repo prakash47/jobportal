@@ -33,12 +33,12 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-18 after `feature/sadmin-transaction-log` merged (`20260818110544_add_billing_transactions_exported_audit_action`). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/sadmin-support-console` | 2026-08-18 | One additive migration: new `SupportTicketNote` model + `ProfileAuditAction.SUPPORT_TICKET_NOTE_ADDED`. No existing column altered. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | — free — | | | Released 2026-08-18 after `feature/sadmin-content-reports` merged. Append-only edits are safe; reorders need the lock. |
+| **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | Claude/Prakash | `feature/sadmin-support-console` | 2026-08-18 | Adding the "Support & Communication" row. Taken rather than treated as append-only because the row is being PLACED in the rail's semantic order, not appended to the end. |
 | **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | Released 2026-08-18 after `feature/sadmin-transaction-log` merged (`killswitch.admin_transaction_export`). |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
@@ -51,6 +51,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/sadmin-support-console` | **Support & Communication — the support console moves to `/sadmin`, and gains internal notes.** Ports `apps/web/app/admin/support/{page,[id]/page,messages/page}.tsx` → `apps/sadmin/app/(authed)/support/*` and **deletes the old subtree** (the other three `/admin` surfaces stay — this is the support slice of PR 3, peeled off). New `apps/sadmin/lib/support/{format,types}.ts` + `components/support/{SupportTicketActions,InternalNoteForm,SupportSearchBar}.tsx`. **New model `SupportTicketNote`** (a separate table, NOT a flag on `SupportTicketMessage`: the recruiter's own thread page reads messages Prisma-direct outside the API at `apps/recruiter/app/(authed)/support/tickets/[id]/page.tsx:37`, so a visibility boolean leaks on any read that forgets to filter). New `ProfileAuditAction.SUPPORT_TICKET_NOTE_ADDED`. `apps/api/src/admin-support/`: **+`POST /admin/support/tickets/:id/notes`**, notes on the detail response, `?q` on `ListTicketsQueryDto`. **No candidate intake** and **no `SupportContactMessage` change** (owner rulings) — the inbox stays recruiter-sourced and the contact list stays read-only. **No killswitch** (owner ruling — honours `admin-support.controller.ts:24-28`). Also fixes `resolvedAt` being wiped on RESOLVED→CLOSED (`admin-support.service.ts:101`). | `packages/db/prisma/schema.prisma` (**locked**), `apps/sadmin/components/SidebarNav.tsx` (**locked**). NOT `keys.ts` — no new flag. Deletes files under `apps/web/app/admin/` + edits `apps/web/components/admin/AdminNav.tsx`. |
 
 ---
 
@@ -60,7 +61,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Feature | Notes |
 |---|---|---|
-| Claude/Prakash | **Admin console migration — PR 3 (`feature/sadmin-admin-migration`)** | Moves feature-flags · audit-log · kyc-review · support out of `apps/web/app/admin` into `/sadmin` and deletes the old subtree. **Must land after PR 2**: `/admin/feature-flags` is the only surface that can turn moderation OFF, and a raw DB update can't substitute (`invalidateFlag()` is only called from `setFlag()`, so the 30s cache keeps serving the stale value). Also takes the `keys.ts` lock for the moderation-flag criticality change. |
+| Claude/Prakash | **Admin console migration — PR 3 (`feature/sadmin-admin-migration`)** | ⚠️ **Scope reduced 2026-08-18: `support` is NO LONGER part of this PR** — it was peeled off into `feature/sadmin-support-console` (in progress above), which moves the support pages and deletes that subtree on its own. This PR now covers **feature-flags · audit-log · kyc-review** and is what finally deletes the remainder of `apps/web/app/admin`. Original scope note follows. ~~Moves feature-flags · audit-log · kyc-review · support out of `apps/web/app/admin` into `/sadmin` and deletes the old subtree.~~ **Must land after PR 2**: `/admin/feature-flags` is the only surface that can turn moderation OFF, and a raw DB update can't substitute (`invalidateFlag()` is only called from `setFlag()`, so the 30s cache keeps serving the stale value). Also takes the `keys.ts` lock for the moderation-flag criticality change. |
 
 ---
 
