@@ -182,6 +182,33 @@ export const FLAG = {
   // matters most precisely while the storefront is shut.
   KILL_ADMIN_SUBSCRIPTION_WRITE: 'killswitch.admin_subscription_write',
 
+  // Emergency stop for the content-report console's write actions
+  // (/sadmin/reports → Claim / Uphold / Dismiss, including the job takedown
+  // that Uphold can perform). One key covers all four, matching
+  // KILL_ADMIN_SUBSCRIPTION_WRITE, which likewise covers four billing
+  // mutations of very different severity: the thing an operator wants in an
+  // emergency is "stop staff writing to this surface", not a per-verb dial.
+  //
+  // ⚠ Do NOT confuse this with MODERATION_REPORTS below, and do NOT reuse that
+  // key here. They gate OPPOSITE HALVES of the same feature and have OPPOSITE
+  // POLARITY. MODERATION_REPORTS gates INTAKE, is seeded ON, and its guard
+  // throws on `!enabled`. This one gates the ADMIN QUEUE, is seeded OFF, and
+  // its guard throws on `enabled` like every other killswitch. Turning intake
+  // off must still let staff clear a queue that already has rows in it — the
+  // rule admin-jobs, admin-support and admin-otp-sessions already follow — so
+  // the two must be able to move independently.
+  //
+  // There is deliberately NO middleware route gate (L1), matching
+  // KILL_ADMIN_JOB_DELETE, KILL_ADMIN_SUBSCRIPTION_WRITE and
+  // MODERATION_REPORTS. The gated thing is an ACTION, not a route: 404ing
+  // /sadmin/reports would take down the only surface that can see what users
+  // have reported, which is exactly what staff need to look at while writes
+  // are switched off. Killing the write must not blind the read.
+  //
+  // As a `killswitch.*` key it is auto-classified critical (Slack + confirm
+  // modal) by isCriticalFlag below — no NON_KILLSWITCH_CRITICAL entry needed.
+  KILL_ADMIN_REPORT_WRITE: 'killswitch.admin_report_write',
+
   // Moderation
   //
   // User-submitted content reports (the "Report this job" control on the public

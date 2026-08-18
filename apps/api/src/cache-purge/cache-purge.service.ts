@@ -102,6 +102,20 @@ const PATH_MAP: Record<string, string[]> = {
   // doesn't hit the defensive ['/'] default and purge the seeker homepage, which
   // it cannot affect.
   'killswitch.admin_subscription_write': [],
+  // Gates the write actions on /sadmin/reports. Same reasoning as the entry
+  // above: every surface it touches is in apps/sadmin, behind auth and noindex,
+  // served by a different app than the Cloudflare-cached seeker site.
+  //
+  // Note this is the ADMIN half. Its intake counterpart is
+  // 'moderation.reports.enabled' above — also [], but for a different reason
+  // (its one surface is a per-posting path that cannot be enumerated).
+  'killswitch.admin_report_write': [],
+  // Admin job deletion. Mapped for the same reason as the two above, and it was
+  // simply MISSED when that flag shipped: without an entry it fell through to
+  // the defensive ['/'] and purged the job-seeker HOMEPAGE every time an
+  // operator toggled an admin-only killswitch — a page the flag cannot affect,
+  // and the single most expensive path on the site to evict.
+  'killswitch.admin_job_delete': [],
 };
 
 export function pathsForFlag(flagKey: string): string[] {

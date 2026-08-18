@@ -240,6 +240,26 @@ enum ProfileAuditAction {
   // deliberately OUTLIVES the job it names, so `jobId` resolves to nothing after
   // the fact; that is the point of the record.
   JOB_DELETED
+  // Admin TAKEDOWN of a live job posting: a force-close from ACTIVE to CLOSED,
+  // written with the ACTING ADMIN's User id. Its only writer today is the
+  // content-report console (/sadmin/reports → Uphold with "close the posting"),
+  // so it is always accompanied by a CONTENT_REPORT_ACTIONED row committed in
+  // the same transaction — but it is a SEPARATE action, for the same reason
+  // JOB_APPROVED and JOB_DELETED are separate from each other: the question
+  // "what has staff done to this employer's postings" must be answerable
+  // without knowing a report was the reason.
+  //
+  // Distinct from JOB_DELETED in kind, not just in degree. A takedown destroys
+  // nothing and is REVERSIBLE — the recruiter's own reopen() can put the job
+  // back — which is precisely why it is the lever available against a posting
+  // that has applications, where deletion is refused outright.
+  //
+  // The diff carries the job id, the owning company id, the status transition
+  // and the report id that prompted it — never the job's title and never the
+  // REPORTER's free-text details, the same minimisation rule KYC, moderation
+  // and billing already follow. The admin's resolution note is recorded on the
+  // accompanying CONTENT_REPORT_ACTIONED row rather than duplicated here.
+  JOB_CLOSED_BY_ADMIN
   // Recruiter self-service password change (Settings → Change Password). Written
   // with the recruiter's own User id. The raw/old/new passwords are never stored
   // in the audit metadata — only the fact of the change.
