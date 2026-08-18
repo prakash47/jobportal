@@ -335,6 +335,11 @@ const PROFILE_AUDIT_ACTION_LABEL: Record<ProfileAuditAction, string> = {
   OTP_CODE_REVEALED: 'Revealed a signup OTP',
   CONTENT_REPORT_ACTIONED: 'Upheld a content report',
   CONTENT_REPORT_DISMISSED: 'Dismissed a content report',
+  // The takedown that can accompany an upheld report. Worded as "Closed" rather
+  // than "Removed" because that is literally what happens — the job moves to
+  // CLOSED and its page stays reachable — and "by staff" because the recruiter
+  // can close their own posting too, which writes no audit row at all.
+  JOB_CLOSED_BY_ADMIN: 'Closed a job posting (staff takedown)',
 };
 
 export function formatProfileAuditAction(action: ProfileAuditAction): string {

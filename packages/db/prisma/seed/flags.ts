@@ -182,6 +182,18 @@ const flags: FlagSeed[] = [
   // never gated, so staff can still see who is on what while writes are stopped.
   // Seeded OFF so the actions are LIVE by default.
   { key: 'killswitch.admin_subscription_write', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable admin subscription changes (kill)' },
+  // Admin content-report writes (/sadmin/reports → Claim / Uphold / Dismiss,
+  // including the job takedown Uphold can perform). When ON the PATCH endpoint
+  // rejects with 503 (L3) and the console renders those controls disabled (L2);
+  // READING the queue is never gated, so staff can still see what users have
+  // reported while writes are stopped. Seeded OFF so the actions are LIVE by
+  // default.
+  //
+  // ⚠ Not to be confused with `moderation.reports.enabled` above, which gates
+  // the opposite half (user INTAKE) and has the opposite polarity (seeded ON).
+  // Turning intake off must still leave staff able to clear the existing queue,
+  // which is why these are two keys and not one.
+  { key: 'killswitch.admin_report_write', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable admin content-report actions (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {
