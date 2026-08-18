@@ -148,35 +148,42 @@ export class AdminSupportService {
     }
 
     const newStatus = input.status;
+
+    // resolvedAt is CLEARED on a reopen and PRESERVED on a close.
+    //
+    // The obvious `=== 'RESOLVED' ? now : null` nulls it on every other
+    // transition, including RESOLVED → CLOSED — the normal end of a ticket's
+    // life. That destroyed the resolution timestamp for exactly the tickets
+    // whose lifecycle completed, so time-to-resolution was recoverable only for
+    // tickets still sitting in RESOLVED.
+    //
+    // "Leave the column alone" is expressed by OMITTING THE KEY, not by setting
+    // it to undefined: tsconfig has `exactOptionalPropertyTypes: true`, under
+    // which an explicit `resolvedAt: undefined` is a type error rather than an
+    // absent property. Building the object in two steps is what makes the
+    // distinction sayable, and it is also the more honest shape — the update
+    // genuinely does not mention the column on that branch.
+    //
+    // closedAt takes the mirror-image treatment: cleared when the ticket leaves
+    // CLOSED (it is demonstrably not closed any more), stamped on entry.
+    // RESOLVED is not an exception the way CLOSED is above, because
+    // RESOLVED → CLOSED is a real progression whereas CLOSED → RESOLVED is a
+    // reopen.
+    const data: Prisma.SupportTicketUpdateInput = {
+      status: newStatus,
+      closedAt: newStatus === 'CLOSED' ? new Date() : null,
+    };
+    if (newStatus === 'RESOLVED') {
+      data.resolvedAt = new Date();
+    } else if (newStatus !== 'CLOSED') {
+      // OPEN / IN_PROGRESS — a reopened ticket is genuinely not resolved, and a
+      // stale timestamp claiming otherwise is worse than an empty one. It will
+      // be re-stamped when the ticket is resolved again.
+      data.resolvedAt = null;
+    }
+
     await prisma.$transaction(async (tx) => {
-      await tx.supportTicket.update({
-        where: { id: ticketId },
-        data: {
-          status: newStatus,
-          // resolvedAt is CLEARED on a reopen and PRESERVED on a close.
-          //
-          // The obvious `=== 'RESOLVED' ? now : null` nulls it on every other
-          // transition, including RESOLVED → CLOSED — the normal end of a
-          // ticket's life. That destroyed the resolution timestamp for exactly
-          // the tickets whose lifecycle completed, so time-to-resolution was
-          // recoverable only for tickets still sitting in RESOLVED. `undefined`
-          // is Prisma's "leave this column alone", which is the distinction the
-          // old ternary could not express.
-          //
-          // OPEN/IN_PROGRESS still null it, and that is deliberate rather than
-          // an oversight: a reopened ticket is genuinely not resolved, and a
-          // stale timestamp claiming otherwise is worse than an empty one. It
-          // will be re-stamped when the ticket is resolved again.
-          resolvedAt:
-            newStatus === 'RESOLVED' ? new Date() : newStatus === 'CLOSED' ? undefined : null,
-          // closedAt takes the mirror-image treatment: cleared when the ticket
-          // leaves CLOSED (it is demonstrably not closed any more), stamped on
-          // entry. RESOLVED is not an exception here the way CLOSED is above,
-          // because RESOLVED → CLOSED is a real progression whereas
-          // CLOSED → RESOLVED is a reopen.
-          closedAt: newStatus === 'CLOSED' ? new Date() : null,
-        },
-      });
+      await tx.supportTicket.update({ where: { id: ticketId }, data });
       await tx.profileAuditLog.create({
         data: {
           userId: adminUserId,

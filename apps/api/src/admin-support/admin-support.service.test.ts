@@ -202,17 +202,16 @@ describe('AdminSupportService', () => {
     // on it — so the resolution timestamp survived only for tickets still
     // sitting in RESOLVED, and was destroyed for every ticket that completed.
     //
-    // `undefined` is the assertion that matters, not "not null": undefined is
-    // Prisma's "leave the column alone". An explicit value here would overwrite
-    // the original resolution time with the close time, which looks correct in a
-    // test that only checks for a Date and is wrong by however long the ticket
-    // sat resolved.
-    it('PRESERVES resolvedAt on RESOLVED -> CLOSED (does not write the column)', async () => {
+    // The KEY MUST BE ABSENT, which is a stronger claim than "not a Date".
+    // Prisma treats a missing key as "leave the column alone" and an explicit
+    // null as "clear it", so `hasOwnProperty` is the only assertion that
+    // distinguishes the fix from the bug — `toBeUndefined()` alone passes for
+    // both, since reading a missing key also yields undefined.
+    it('PRESERVES resolvedAt on RESOLVED -> CLOSED (omits the column entirely)', async () => {
       m.supportTicket.findUnique.mockResolvedValue(ticketRow({ status: 'RESOLVED' }));
       await service.updateStatus(1, 1, { status: 'CLOSED' });
       const data = m.supportTicket.update.mock.calls[0]?.[0].data;
-      expect(data.resolvedAt).toBeUndefined();
-      expect(Object.prototype.hasOwnProperty.call(data, 'resolvedAt')).toBe(true);
+      expect(Object.prototype.hasOwnProperty.call(data, 'resolvedAt')).toBe(false);
       expect(data.closedAt).toBeInstanceOf(Date);
     });
 
