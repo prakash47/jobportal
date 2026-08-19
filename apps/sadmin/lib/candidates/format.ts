@@ -345,6 +345,13 @@ const PROFILE_AUDIT_ACTION_LABEL: Record<ProfileAuditAction, string> = {
   // CLOSED and its page stays reachable — and "by staff" because the recruiter
   // can close their own posting too, which writes no audit row at all.
   JOB_CLOSED_BY_ADMIN: 'Closed a job posting (staff takedown)',
+  // Broadcast Notifications. Both are staff actions, so like most of the map
+  // above they can never appear on a candidate's timeline — they are here
+  // because the record must be exhaustive to compile. "Dispatched" rather than
+  // "Sent" because that is what the row records: the moment the send was handed
+  // to the queue, not the moment the last email landed.
+  BROADCAST_SENT: 'Dispatched a broadcast',
+  BROADCAST_CANCELLED: 'Cancelled a broadcast',
 };
 
 export function formatProfileAuditAction(action: ProfileAuditAction): string {
