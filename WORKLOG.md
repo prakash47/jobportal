@@ -33,13 +33,13 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-19 after `feature/sadmin-support-console` merged (`20260818135551_add_support_ticket_notes`). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/sadmin-broadcast-notifications` | 2026-08-19 | Adding `Broadcast` + `BroadcastRecipient`, four new enums, `NotificationType.PLATFORM_ANNOUNCEMENT`, and two `ProfileAuditAction` members. |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | — free — | | | Released 2026-08-19 after `feature/sadmin-support-console` merged. Append-only edits are safe; reorders need the lock. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | Released 2026-08-19 after `feature/sadmin-support-console` merged (comment-only edit; no key added or renamed).  |
+| **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | Claude/Prakash | `feature/sadmin-broadcast-notifications` | 2026-08-19 | Appending one entry (`/broadcasts`). Append-only, so strictly the lock is optional — taken because the PLANNED PR 3 edits this same array and should see the claim. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | Claude/Prakash | `feature/sadmin-broadcast-notifications` | 2026-08-19 | Adding one `killswitch.admin_broadcast_send` key. PR 3 also wants this file — short-lived, will release on merge. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -51,6 +51,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/sadmin-broadcast-notifications` | **Broadcast Notifications — `/sadmin/broadcasts` (+ `/new` + `/[id]`).** Admin-authored platform-wide or role-segmented announcements. **Models**: `Broadcast`, `BroadcastRecipient` (`@@unique([broadcastId, userId])` — the idempotency/resume key). **Enums**: `BroadcastStatus`, `BroadcastSegment`, `BroadcastCategory`, `BroadcastRecipientStatus`; `NotificationType += PLATFORM_ANNOUNCEMENT`; `ProfileAuditAction += BROADCAST_SENT, BROADCAST_CANCELLED`. **API**: new `apps/api/src/admin-broadcasts/` (`GET /admin/broadcasts`, `GET /:id`, `POST /preview-count`, `POST /`, `POST /:id/test-send`, `POST /:id/send`, `POST /:id/cancel`) + a **dedicated `broadcasts` BullMQ queue/worker** (NOT the concurrency-1 `transactional-emails` queue, which would head-of-line-block password resets and, by design, refuses jobId dedupe). **Flag**: `killswitch.admin_broadcast_send` (L2+L3, no L1). **sadmin**: `lib/broadcasts/*`, `components/broadcasts/*`. **v1 scope**: email + in-app (recruiters only — `apps/web` has no bell, so a candidate in-app row would render nowhere); OPERATIONAL sends only, PROMOTIONAL draftable but 400s on send until the consent/unsubscribe rails exist. | `schema.prisma` 🔒 · `feature-flags/src/keys.ts` 🔒 · `SidebarNav.tsx` 🔒 · `packages/ui/src/icons.ts` (append `Megaphone`; not in the lock table) · `apps/sadmin/lib/candidates/format.ts` (the exhaustive `Record<ProfileAuditAction,string>` — build-breaker) · `apps/api/src/app.module.ts` · `packages/db/prisma/seed/flags.ts` |
 
 ---
 
