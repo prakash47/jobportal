@@ -37,4 +37,14 @@ describe('isCriticalFlag', () => {
     expect(CRITICAL_FLAGS).toContain(FLAG.KILL_RESUME_UPLOADS);
     expect(CRITICAL_FLAGS).toContain(FLAG.KILL_NEW_REGISTRATIONS);
   });
+
+  it('the broadcast send killswitch is critical, so toggling it demands a reason', () => {
+    // Pinned specifically rather than left to the generic prefix test above,
+    // because criticality is what makes the API reject a PATCH without a
+    // `reason` and what makes the console force a confirm modal. Renaming this
+    // key to anything outside the `killswitch.` prefix would silently drop both
+    // guards from the single most irreversible action in the product.
+    expect(isCriticalFlag(FLAG.KILL_ADMIN_BROADCAST_SEND)).toBe(true);
+    expect(CRITICAL_FLAGS).toContain(FLAG.KILL_ADMIN_BROADCAST_SEND);
+  });
 });

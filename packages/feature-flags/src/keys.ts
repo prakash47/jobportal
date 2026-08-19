@@ -243,6 +243,40 @@ export const FLAG = {
   // modal) by isCriticalFlag below — no NON_KILLSWITCH_CRITICAL entry needed.
   KILL_ADMIN_TRANSACTION_EXPORT: 'killswitch.admin_transaction_export',
 
+  // Emergency stop for DISPATCHING a broadcast (/sadmin/broadcasts → POST
+  // /admin/broadcasts/:id/send). This is the highest-blast-radius action in the
+  // product: one click puts a message in front of every recruiter or every
+  // candidate on the platform, and unlike every other admin action here it
+  // cannot be undone — an email that has left cannot be recalled.
+  //
+  // Gates SENDING only. Composing, listing, reading a past broadcast and its
+  // per-recipient ledger all keep working, matching KILL_ADMIN_TRANSACTION_EXPORT
+  // and KILL_ADMIN_JOB_DELETE: stopping the dangerous verb must not blind staff
+  // to what has already gone out — which is exactly what they need to see during
+  // whatever incident made someone reach for this switch.
+  //
+  // It also stops IN-FLIGHT delivery, which is what distinguishes it from the
+  // other admin killswitches. The worker re-reads it before every batch, so
+  // flipping it on halts a send that is already fanning out rather than only
+  // preventing new ones. That is the whole reason a switch exists here: a
+  // broadcast is the one action whose damage keeps accumulating after the
+  // request that started it has returned.
+  //
+  // ⚠ Deliberately NOT folded into `killswitch.transactional_emails`. That key
+  // stops ALL outbound mail including password resets and verification codes;
+  // an operator who needs to stop one bad announcement should not have to lock
+  // every user out of their own account to do it. The broadcast worker
+  // nonetheless honours BOTH, so the global stop still covers this path — the
+  // relationship is "either halts it", not "one replaces the other".
+  //
+  // There is deliberately NO middleware route gate (L1), matching every other
+  // admin console: 404ing /sadmin/broadcasts to stop a send would take down the
+  // only surface that can see what was sent.
+  //
+  // As a `killswitch.*` key it is auto-classified critical (Slack + confirm
+  // modal) by isCriticalFlag below — no NON_KILLSWITCH_CRITICAL entry needed.
+  KILL_ADMIN_BROADCAST_SEND: 'killswitch.admin_broadcast_send',
+
   // Moderation
   //
   // User-submitted content reports (the "Report this job" control on the public

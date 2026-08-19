@@ -202,6 +202,17 @@ const flags: FlagSeed[] = [
   // one stops staff MOVING money (comp / change / extend / cancel). An operator
   // stopping an extraction has no reason to also freeze comps.
   { key: 'killswitch.admin_transaction_export', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable transaction CSV export (kill)' },
+  // Gates DISPATCHING a broadcast on /sadmin/broadcasts — composing, listing and
+  // reading past sends keep working. Unlike the other admin killswitches this
+  // one also halts a send ALREADY IN FLIGHT: the worker re-reads it before every
+  // batch, because a broadcast is the only admin action whose damage keeps
+  // accumulating after the request that started it has returned.
+  //
+  // ⚠ Deliberately NOT folded into `killswitch.transactional_emails`: that one
+  // stops password resets and verification codes too, so stopping one bad
+  // announcement would lock every user out of their own account. The worker
+  // honours both, so the global stop still covers this path.
+  { key: 'killswitch.admin_broadcast_send', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable sending broadcasts (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {
