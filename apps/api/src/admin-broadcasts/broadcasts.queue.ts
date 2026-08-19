@@ -7,6 +7,30 @@ import { BroadcastsProcessor, type BroadcastJob } from './broadcasts.processor';
 const QUEUE_NAME = 'broadcasts';
 
 /**
+ * Build a deterministic BullMQ job id.
+ *
+ * ⚠ HYPHENS, NOT COLONS. BullMQ rejects a custom job id containing `:` —
+ * `Job.addJob` throws "Custom Id cannot contain :" because the colon is Redis's
+ * own key separator. This was found by running a real send, not by a test: every
+ * unit test in this module mocks the enqueue callback, so `broadcast:1:plan`
+ * sailed through the whole suite and then failed in production-shaped code. The
+ * plan job wrote its ledger and its in-app rows, threw on the fan-out, exhausted
+ * its three attempts, and left the broadcast stuck in SENDING with every
+ * recipient PENDING and nothing delivered.
+ *
+ * (Its silver lining: the plan job genuinely ran three times, and the in-app
+ * idempotency key held — 11 bell rows, not 33.)
+ *
+ * `jobId` is pinned by a unit test for exactly this reason; the format is not
+ * cosmetic.
+ */
+export function broadcastJobId(job: BroadcastJob): string {
+  return job.kind === 'plan'
+    ? `broadcast-${job.broadcastId}-plan`
+    : `broadcast-${job.broadcastId}-recipient-${job.recipientId}`;
+}
+
+/**
  * Retry budget per RECIPIENT.
  *
  * Slower and longer than the transactional queue's 1s base, on purpose: the
@@ -188,7 +212,7 @@ export class BroadcastsQueueService implements OnModuleInit, OnApplicationShutdo
       // over the same broadcast. The transactional queue deliberately does the
       // opposite (random ids, because collapsing two genuine password resets
       // would swallow the second) — here collapsing is exactly what is wanted.
-      { jobId: `broadcast:${broadcastId}:plan` },
+      { jobId: broadcastJobId({ kind: 'plan', broadcastId }) },
     );
   }
 
@@ -198,14 +222,11 @@ export class BroadcastsQueueService implements OnModuleInit, OnApplicationShutdo
       jobs.map((job) => ({
         name: job.kind,
         data: job,
-        opts:
-          job.kind === 'deliver'
-            ? // One job per (broadcast, recipient). Layered on top of the DB's
-              // @@unique([broadcastId, userId]) rather than instead of it: this
-              // stops a duplicate job existing, the row status stops a duplicate
-              // SEND even if one did.
-              { jobId: `broadcast:${job.broadcastId}:recipient:${job.recipientId}` }
-            : {},
+        // One job per (broadcast, recipient). Layered on top of the DB's
+        // @@unique([broadcastId, userId]) rather than instead of it: this stops
+        // a duplicate job existing, the row status stops a duplicate SEND even
+        // if one did.
+        opts: { jobId: broadcastJobId(job) },
       })),
     );
   }
