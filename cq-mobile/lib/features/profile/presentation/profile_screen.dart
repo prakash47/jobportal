@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/refresh_failure.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../shell/presentation/app_drawer.dart';
@@ -87,8 +88,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      final message = e is ProfileException ? e.message : 'Could not load your profile.';
+        _loading = false;
+      // A refresh that fails keeps what is already on screen — see
+      // core/ui/refresh_failure.dart.
+      if (keepContentOnFailure(context, message, hasContent: _profile != null)) {
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
-        _error = e is ProfileException ? e.message : 'Could not load your profile.';
+        _error = message;
         _loading = false;
       });
     }

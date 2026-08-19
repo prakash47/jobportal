@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/ui/refresh_failure.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/cq_buttons.dart';
@@ -63,8 +64,16 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      final message = e is AlertsException ? e.message : 'Could not load your alerts.';
+        _loading = false;
+      // A refresh that fails keeps what is already on screen — see
+      // core/ui/refresh_failure.dart.
+      if (keepContentOnFailure(context, message, hasContent: _alerts != null)) {
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
-        _error = e is AlertsException ? e.message : 'Could not load your alerts.';
+        _error = message;
         _loading = false;
       });
     }

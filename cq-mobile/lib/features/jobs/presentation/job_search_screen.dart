@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/refresh_failure.dart';
 import '../../../core/format/job_format.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -147,13 +148,10 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
     } catch (e) {
       if (!mounted) return;
       final message = e is JobsException ? e.message : 'Could not load jobs.';
-      // Same rule as Home: results already on screen survive a failed refresh.
-      // Only a search that has nothing to show falls back to the error view.
-      if (_page != null) {
+      // A refresh that fails keeps what is already on screen — see
+      // core/ui/refresh_failure.dart.
+      if (keepContentOnFailure(context, message, hasContent: _page != null)) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(message)));
         return;
       }
       setState(() {

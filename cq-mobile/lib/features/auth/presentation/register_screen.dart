@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -266,14 +267,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         loading: _submitting,
                         onPressed: _submit,
                       ),
-                      const SizedBox(height: AppSpacing.xl),
-                      const OrDivider(),
-                      const SizedBox(height: AppSpacing.lg),
-                      CqProviderButton(
-                        icon: googleGIcon(),
-                        label: 'Sign up with Google',
-                        onTap: () => showComingSoon(context, 'Google sign-up'),
-                      ),
+                      // Gated with the rest — see AppConfig.showAuthAlternatives.
+                      // This one outlived the first sweep because the guard test
+                      // mounted only the landing and login screens, and /register
+                      // is two taps from the welcome screen via "Create account".
+                      if (AppConfig.showAuthAlternatives) ...[
+                        const SizedBox(height: AppSpacing.xl),
+                        const OrDivider(),
+                        const SizedBox(height: AppSpacing.lg),
+                        CqProviderButton(
+                          icon: googleGIcon(),
+                          label: 'Sign up with Google',
+                          onTap: () => showComingSoon(context, 'Google sign-up'),
+                        ),
+                      ],
                       const SizedBox(height: AppSpacing.xl2),
 
                       Row(

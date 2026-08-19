@@ -1,7 +1,9 @@
 import 'package:cq_mobile/core/config/app_config.dart';
 import 'package:cq_mobile/core/theme/app_theme.dart';
 import 'package:cq_mobile/features/auth/presentation/auth_landing_screen.dart';
+import 'package:cq_mobile/features/auth/presentation/forgot_password_screen.dart';
 import 'package:cq_mobile/features/auth/presentation/login_screen.dart';
+import 'package:cq_mobile/features/auth/presentation/register_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +32,20 @@ Future<void> _pump(WidgetTester tester, Widget screen) async {
   await tester.pump();
 }
 
+/// Every auth screen a user can actually reach without a dart-define.
+///
+/// The list is the whole point. The first version of this file mounted the
+/// landing and login screens only, and a live "Sign up with Google" survived on
+/// the registration screen for exactly that reason — /register is two taps from
+/// the welcome screen via "Create account". A guard that does not know where the
+/// user can go is not a guard.
+const _authScreensReachableInAStockBuild = <Widget>[
+  AuthLandingScreen(),
+  LoginScreen(),
+  RegisterScreen(),
+  ForgotPasswordScreen(),
+];
+
 void main() {
   test('the alternatives are off unless a build explicitly asks for them', () {
     // A release built with no --dart-define must not show them.
@@ -45,6 +61,16 @@ void main() {
     expect(find.text('Continue with Email'), findsOneWidget);
   });
 
+  testWidgets('the registration screen offers no dead sign-up route',
+      (tester) async {
+    await _pump(tester, const RegisterScreen());
+
+    expect(find.text('Sign up with Google'), findsNothing);
+    expect(find.text('Continue with Google'), findsNothing);
+    // The form itself has to survive the gating.
+    expect(find.text('Create account'), findsWidgets);
+  });
+
   testWidgets('the login screen offers no dead sign-in route', (tester) async {
     await _pump(tester, const LoginScreen());
 
@@ -56,7 +82,7 @@ void main() {
 
   testWidgets('no screen still advertises something as coming soon',
       (tester) async {
-    for (final screen in const <Widget>[AuthLandingScreen(), LoginScreen()]) {
+    for (final screen in _authScreensReachableInAStockBuild) {
       await _pump(tester, screen);
       expect(
         find.textContaining('coming soon', findRichText: true),

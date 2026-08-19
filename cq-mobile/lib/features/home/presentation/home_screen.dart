@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/refresh_failure.dart';
 import '../../../core/format/job_format.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -59,15 +60,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
       final message = e is HomeException ? e.message : 'Could not load your feed.';
-      // A refresh that fails must not take the feed away. _error paints a
-      // full-screen CqErrorView, so a pull-to-refresh in a tunnel used to
-      // replace a perfectly good Home with an error page — the user lost what
-      // they already had by asking for something newer.
-      if (_feed != null) {
+      // A refresh that fails keeps what is already on screen — see
+      // core/ui/refresh_failure.dart.
+      if (keepContentOnFailure(context, message, hasContent: _feed != null)) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(message)));
         return;
       }
       setState(() {

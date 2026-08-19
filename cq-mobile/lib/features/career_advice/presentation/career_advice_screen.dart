@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/ui/refresh_failure.dart';
 import '../../../core/format/job_format.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -79,8 +80,16 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      final message = e is ArticlesException ? e.message : 'Could not load articles.';
+        _loading = false;
+      // A refresh that fails keeps what is already on screen — see
+      // core/ui/refresh_failure.dart.
+      if (keepContentOnFailure(context, message, hasContent: _page != null)) {
+        setState(() => _loading = false);
+        return;
+      }
       setState(() {
-        _error = e is ArticlesException ? e.message : 'Could not load articles.';
+        _error = message;
         _loading = false;
       });
     }

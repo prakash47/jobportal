@@ -19,8 +19,20 @@ observed behaviour is grounds for rejection, and later for removal.
 **Yes.** The app is an account-based job-search product; a candidate builds a
 profile and applies to jobs with it.
 
-Browsing works signed-out — jobs, companies and career advice are public. Data
-collection begins at registration.
+**Nothing in the app works without an account.** The router sends every content
+route to the welcome screen when signed out (`app_router.dart`:
+`AuthUnauthenticated() => onAuth ? null : AppRoutes.welcome`), so a visitor can
+only reach welcome, login, register and forgot-password. Collection begins at
+registration because registration is the only way in.
+
+Two consequences for the forms:
+
+- **"Is data collection optional?" → No.** An account is required to use the app
+  at all, not merely to apply.
+- **A demo account must be supplied to both review teams.** Apple guideline 2.1
+  requires working credentials for anything behind a sign-in wall, and Play's
+  review form asks the same. Without one a reviewer sees only the welcome
+  screen.
 
 ---
 
@@ -48,7 +60,10 @@ no calendar, no photos, no device location, and no advertising identifier.
   permission and calls no location API. "Preferred city" is a name the candidate
   picks from a list; it is a preference, not a device reading.
 - **Contacts, calendar, photos, camera, microphone, SMS, call logs.** The merged
-  release manifest declares exactly one permission: `INTERNET`.
+  release manifest declares `INTERNET` plus the signature-level
+  `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` that AndroidX generates
+  automatically. Neither collects anything, and **no dangerous permission is
+  declared at all**.
 - **Advertising ID, device identifiers, installed apps.**
 - **Crash logs, diagnostics, performance data.** No crash or analytics SDK is
   linked — verified against `pubspec.yaml`. (If Sentry or PostHog is added later,
@@ -88,11 +103,11 @@ contract with employers.
 | Question | Answer | Evidence |
 |---|---|---|
 | Encrypted in transit? | **Yes** | `network_security_config.xml` sets `base-config cleartextTrafficPermitted="false"`. The only cleartext exception is a `domain-config` scoped to `127.0.0.1`, `localhost` and `10.0.2.2` — loopback, for local development; that traffic never leaves the device. The permissive config is confined to the debug variant. |
-| Session material at rest | Keystore-backed | Cookies and the cached identity go through `flutter_secure_storage` (EncryptedSharedPreferences on Android, Keychain on iOS) — `secure_cookie_storage.dart` |
+| Session material at rest | Keystore-backed | Cookies and the cached identity go through `flutter_secure_storage` — Keystore-backed ciphers on Android, Keychain on iOS (`secure_cookie_storage.dart`). Not EncryptedSharedPreferences; that flag is deprecated in v10. |
 | Excluded from OS backup? | **Yes** | `allowBackup=false` and `dataExtractionRules` in the manifest, so session material is not copied to the user's cloud backup |
 | Can a user request deletion? | **Yes, in-app** | Settings › Danger zone, typed "DELETE" confirmation → `DELETE /v1/me/account` (`settings_repository.dart`). This satisfies Google's in-app deletion requirement and Apple 5.1.1(v). |
 | Deletion also reachable from the web? | **NO — OUTSTANDING** | Play additionally wants a **web URL** where deletion can be requested without installing the app. That page does not exist. Website work. |
-| Data collection optional? | Partly | Browsing needs no account. An account is required to apply, save jobs, or set alerts. |
+| Data collection optional? | **No** | Nothing in the app is reachable signed-out — see §1. |
 
 ---
 
@@ -124,6 +139,12 @@ Two that need a real answer rather than a reflex:
   content, which the app has — "Report this job" posts to `POST /v1/reports`
   (`report_job_sheet.dart`), added for exactly this reason.
 - **Does the app share the user's location with other users?** **No.**
+
+> **Before submitting:** the "Report this job" control is the answer given above
+> to the user-generated-content question, and it does post to `POST /v1/reports`.
+> Be aware that reports currently land in a table with **no admin queue to read
+> them** — the reporting path stops at the database. If a reviewer asks how
+> reports are actioned, that is the honest answer.
 
 ---
 
