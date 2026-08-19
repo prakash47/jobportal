@@ -11,7 +11,19 @@ import 'package:google_fonts/google_fonts.dart';
 /// > to kill the first-run network fetch and any font flash.
 abstract final class AppTypography {
   static TextTheme textTheme(Color fg, Color fgMuted) {
-    final base = GoogleFonts.interTextTheme();
+    // `.apply` FIRST, then `copyWith`. This order is load-bearing: `copyWith`
+    // only touches the styles named below, and every style NOT named falls
+    // through to Material's default typography, whose colour is BLACK — so on
+    // the dark theme it renders invisible against the navy surface.
+    //
+    // That is not hypothetical: `headlineSmall` was missing here, and it is the
+    // style used by the job title, the article title, the home greeting and the
+    // OTP field — all four were unreadable in dark mode. Colouring the base
+    // means a style added later can never reintroduce the bug.
+    final base = GoogleFonts.interTextTheme().apply(
+      bodyColor: fg,
+      displayColor: fg,
+    );
     return base.copyWith(
       headlineLarge: GoogleFonts.inter(
         fontSize: 30,
@@ -25,6 +37,16 @@ abstract final class AppTypography {
         fontWeight: FontWeight.w700,
         height: 1.22,
         letterSpacing: -0.3,
+        color: fg,
+      ),
+      // Screen titles — the job title, the article title, the home greeting.
+      // Explicit rather than inherited, so it carries the same tight tracking
+      // as the rest of the headline family instead of Material's looser default.
+      headlineSmall: GoogleFonts.inter(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        height: 1.25,
+        letterSpacing: -0.2,
         color: fg,
       ),
       titleLarge: GoogleFonts.inter(

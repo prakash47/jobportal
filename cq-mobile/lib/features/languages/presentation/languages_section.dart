@@ -204,7 +204,7 @@ class _LanguagesSectionState extends ConsumerState<LanguagesSection> {
     return Row(
       children: [
         Expanded(child: Text(message, style: text.bodySmall?.copyWith(color: cq.fgMuted))),
-        TextButton(onPressed: _load, child: const Text('Retry')),
+        TextButton(onPressed: _load, child: const Text('Try again')),
       ],
     );
   }

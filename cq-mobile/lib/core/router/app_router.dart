@@ -48,6 +48,21 @@ abstract final class AppRoutes {
   static String searchPath(String query) =>
       query.isEmpty ? '/search' : '/search?q=${Uri.encodeQueryComponent(query)}';
 
+  /// Job search pre-filtered by one FACET rather than a keyword.
+  ///
+  /// [kind] is `city` | `skill` | `industry`; [slug] is the catalogue slug and
+  /// [label] the display name for the filter chip. Used by the Home facet
+  /// chips: searching a city as free text matches nothing, because a city name
+  /// never appears in a job title.
+  static String searchFacetPath({
+    required String kind,
+    required String slug,
+    required String label,
+  }) =>
+      '/search?facet=$kind'
+      '&slug=${Uri.encodeQueryComponent(slug)}'
+      '&label=${Uri.encodeQueryComponent(label)}';
+
   /// Screens an unauthenticated user is allowed to sit on.
   static const authPaths = {
     welcome,
@@ -161,8 +176,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/search',
-        builder: (_, state) =>
-            JobSearchScreen(initialQuery: state.uri.queryParameters['q']),
+        builder: (_, state) {
+          final p = state.uri.queryParameters;
+          return JobSearchScreen(
+            initialQuery: p['q'],
+            initialFacet: p['facet'],
+            initialFacetSlug: p['slug'],
+            initialFacetLabel: p['label'],
+          );
+        },
       ),
     ],
   );

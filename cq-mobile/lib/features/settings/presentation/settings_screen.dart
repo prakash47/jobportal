@@ -8,6 +8,7 @@ import '../../../shared/widgets/cq_loader.dart';
 import '../../auth/application/auth_controller.dart';
 import '../data/notification_preferences.dart';
 import '../data/settings_repository.dart';
+import '../../../shared/widgets/cq_states.dart';
 
 /// Settings — currently the email notification preferences (`/me/notifications`),
 /// mirroring the website's Settings › Notification preferences page. Structured
@@ -140,6 +141,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         );
       },
     );
+    // The dialog is gone either way by this point, and the controller outlives
+    // it because it is created here rather than in the dialog's own State.
+    controller.dispose();
     if (confirmed != true) return;
 
     setState(() => _deleting = true);
@@ -186,7 +190,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return const Center(child: CqLoader(message: 'Loading your settings…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _load);
+      return CqErrorView(message: _error!, onRetry: _load);
     }
     final cq = context.cq;
     final text = Theme.of(context).textTheme;
@@ -355,28 +359,3 @@ class _ToggleRow extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

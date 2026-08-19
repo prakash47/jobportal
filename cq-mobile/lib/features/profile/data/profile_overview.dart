@@ -19,6 +19,7 @@ class ProfileOverview {
     this.currentCityName,
     this.headline,
     this.expectedSalaryMinPaise,
+    this.expectedSalaryMaxPaise,
     this.gender,
   });
 
@@ -41,6 +42,10 @@ class ProfileOverview {
   final String? currentCityName;
   final String? headline;
   final int? expectedSalaryMinPaise;
+
+  /// The editor lets the candidate set a RANGE; the overview used to read only
+  /// the minimum and silently drop this, so the screen contradicted the form.
+  final int? expectedSalaryMaxPaise;
   final String? gender;
 
   factory ProfileOverview.fromJson(Map<String, dynamic> j) {
@@ -64,6 +69,7 @@ class ProfileOverview {
       currentCityName: c['currentCityName'] as String?,
       headline: c['headline'] as String?,
       expectedSalaryMinPaise: (c['expectedSalaryMinPaise'] as num?)?.toInt(),
+      expectedSalaryMaxPaise: (c['expectedSalaryMaxPaise'] as num?)?.toInt(),
       gender: c['gender'] as String?,
     );
   }

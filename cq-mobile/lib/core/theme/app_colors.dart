@@ -11,12 +11,18 @@ abstract final class AppPalette {
   static const Color blue = Color(0xFF2563EB);
 
   /// Deep brand navy — headers, the CQ mark, dark brand surfaces.
-  /// Exact value from the official logo SVG.
-  static const Color navy = Color(0xFF192349);
+  ///
+  /// Matches the website's design system exactly
+  /// (`packages/ui/src/styles/theme.css`: `--color-primary-600` = #192249).
+  /// The app used #192349 until Aug 2026 — one digit out, invisible on its own
+  /// but enough that the two products drew different logos, and the ported
+  /// brand loader disagreed with the app's own palette.
+  static const Color navy = Color(0xFF192249);
 
   /// Logo-arrow accent cyan — links, selected states, highlights.
-  /// Exact value from the official logo SVG.
-  static const Color cyan = Color(0xFF24A0DB);
+  ///
+  /// The website's `--color-accent-500` = #22A0DA. See the note on [navy].
+  static const Color cyan = Color(0xFF22A0DA);
 
   // ── Semantic ─────────────────────────────────────────────────────────────
   static const Color success = Color(0xFF15A34A);

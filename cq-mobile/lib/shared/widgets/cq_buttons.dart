@@ -30,9 +30,11 @@ class CqPrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cq = context.cq;
-    return SizedBox(
-      height: 54,
-      width: double.infinity,
+    return ConstrainedBox(
+      // A minimum rather than a fixed height: at the 2.0x font size Android
+      // and iOS both allow, a 54px box clipped the label outright. The button
+      // grows instead, and never shrinks below the 54px touch target.
+      constraints: const BoxConstraints(minHeight: 54, minWidth: double.infinity),
       child: Material(
         color: cq.accent,
         borderRadius: BorderRadius.circular(AppRadius.md),
@@ -53,22 +55,35 @@ class CqPrimaryButton extends StatelessWidget {
               : Stack(
             alignment: Alignment.center,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (icon != null) ...[
-                    Icon(icon, size: 20, color: cq.onAccent),
-                    const SizedBox(width: AppSpacing.md),
-                  ],
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: cq.onAccent,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+              Padding(
+                // Keeps a long label clear of the trailing arrow.
+                padding: EdgeInsets.symmetric(
+                  horizontal: showArrow ? AppSpacing.xl2 : AppSpacing.lg,
+                  vertical: AppSpacing.sm,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (icon != null) ...[
+                      Icon(icon, size: 20, color: cq.onAccent),
+                      const SizedBox(width: AppSpacing.md),
+                    ],
+                    Flexible(
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: cq.onAccent,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               if (showArrow)
                 Positioned(
@@ -104,24 +119,37 @@ class CqProviderButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cq = context.cq;
-    return SizedBox(
-      height: 54,
-      width: double.infinity,
+    return ConstrainedBox(
+      // Minimum, not fixed — see CqPrimaryButton. "Continue with Google" is on
+      // the first screen of the app and was clipped at the largest font size.
+      constraints: const BoxConstraints(minHeight: 54, minWidth: double.infinity),
       child: OutlinedButton(
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
           foregroundColor: cq.fg,
           side: BorderSide(color: cq.border),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.sm,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.md),
           ),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             icon,
             const SizedBox(width: AppSpacing.md),
-            Text(label),
+            Flexible(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
       ),

@@ -10,12 +10,20 @@ import 'job_models.dart';
 import 'jobs_mock.dart';
 
 class JobsException implements Exception {
-  const JobsException(this.message, {this.code});
+  const JobsException(this.message, {this.code, this.quota});
   final String message;
 
   /// The contract's error `code` when one applies (e.g. `RESUME_REQUIRED`), so
   /// callers can react without string-matching the prose message.
   final String? code;
+
+  /// The quota the server reported alongside a QUOTA_EXCEEDED refusal.
+  ///
+  /// Carried because the refusal itself is the most reliable place to learn the
+  /// limit: the separate quota GET shares the same 100/min budget, so the
+  /// moment a candidate is being refused is exactly the moment that read is
+  /// most likely to have failed.
+  final ApplyQuota? quota;
 
   @override
   String toString() => message;
@@ -135,20 +143,42 @@ class JobsRepository {
         throw const JobsException('You have already applied to this job.');
       }
       if (code == 403) {
-        throw const JobsException('Please verify your email before applying.');
+        // The two 403s that carry a `code` are handled above. The rest are
+        // code-less and the API raises them for THREE different reasons:
+        // 'Verify your email before applying.', 'This job is not open for
+        // applications yet.' (draft or awaiting moderation) and 'This job is
+        // no longer accepting applications.' (closed or expired). Answering
+        // all three with the verify-email line told a candidate whose email
+        // was verified to go and verify it, about a job that had simply
+        // closed.
+        throw JobsException(
+          serverMessage(e) ?? 'Please verify your email before applying.',
+          code: 'FORBIDDEN',
+        );
       }
       if (code == 429) {
         // Not every 429 here is the apply quota — a global 100/min throttle
         // guards every route and emits its own. The quota's body carries a
         // numeric `limit`; the throttler's does not, so that is the tell.
         final isQuota = data is Map && data['limit'] is num;
-        final serverMessage = data is Map ? data['message'] as String? : null;
-        throw JobsException(
-          serverMessage ??
-              (isQuota
-                  ? "You've reached today's application limit. Please try again tomorrow."
-                  : 'Too many requests just now. Please try again in a minute.'),
-          code: isQuota ? 'QUOTA_EXCEEDED' : null,
+        if (isQuota) {
+          // The quota's message is real prose written for a candidate, and its
+          // body carries the numbers the apply bar needs to grey itself out.
+          throw JobsException(
+            serverMessage(e) ??
+                "You've reached today's application limit. Please try again tomorrow.",
+            code: 'QUOTA_EXCEEDED',
+            quota: ApplyQuota.fromJson(data.cast<String, dynamic>()),
+          );
+        }
+        // The throttler's is not. @nestjs/throttler raises its default
+        // exception, whose message is the literal string 'ThrottlerException:
+        // Too Many Requests', and the shared envelope passes it through
+        // unchanged — so preferring the server here put a Java-looking class
+        // name in a red snackbar under the primary button, and made the copy
+        // below dead for the exact case it was written for.
+        throw const JobsException(
+          'Too many requests just now. Please try again in a minute.',
         );
       }
       throw JobsException(friendlyDioMessage(e));
@@ -176,20 +206,28 @@ class JobsRepository {
     }
   }
 
-  /// Save / unsave a job (`/me/saved-jobs`). Live today; a no-op in mock mode
-  /// (the sample ids aren't real). Confirm the exact save endpoint shape when
-  /// switching this to live.
+  /// Save / unsave a job.
+  ///
+  /// **The job id goes in the PATH on both verbs, and neither carries a body.**
+  /// The server routes are `@Post(':jobId')` and `@Delete(':jobId')`
+  /// (`apps/api/src/saved-jobs/saved-jobs.controller.ts`). Posting to the
+  /// collection with `{jobId}` in the body — which this did until it was caught
+  /// by an audit — matches no route at all, so every save 404'd silently the
+  /// moment the app came off mock data.
+  ///
+  /// Save is idempotent server-side: a duplicate hits the unique constraint and
+  /// returns the existing row rather than erroring, so there is no 409 to
+  /// handle on this path.
   Future<void> setSaved(int jobId, bool saved) async {
     if (AppConfig.useMockData) return;
     try {
       if (saved) {
-        await _dio.post<void>('/me/saved-jobs', data: {'jobId': jobId});
+        await _dio.post<void>('/me/saved-jobs/$jobId');
       } else {
         await _dio.delete<void>('/me/saved-jobs/$jobId');
       }
     } on DioException catch (e) {
       final code = e.response?.statusCode;
-      if (saved && code == 409) return; // already saved
       if (!saved && code == 404) return; // already removed
       throw JobsException(friendlyDioMessage(e));
     }

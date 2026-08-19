@@ -98,7 +98,7 @@ class _SplashScreenState extends State<SplashScreen>
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
-                        colors: [Color(0x4D24A0DB), Color(0x0024A0DB)],
+                        colors: [Color(0x4D22A0DA), Color(0x0022A0DA)],
                         stops: [0.0, 0.72],
                       ),
                     ),

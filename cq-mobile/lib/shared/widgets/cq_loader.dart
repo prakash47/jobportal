@@ -1,45 +1,22 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
-import 'brand_logo.dart';
+import 'cq_brand_loader.dart';
 
-/// The CQ branded loader — the logo above a row of dots that pulse in a wave.
+/// The app's standard loading state: the CQ mark with the arrow advancing into
+/// it, optionally over a line of text.
 ///
-/// Themed (the logo swaps for light/dark automatically) and safe on every device
-/// (the dots animate by **scale**, never opacity-from-zero, which Vivo/BBK drop).
-/// Show it wherever a real load happens — signing in now, data screens later —
-/// via [LoadingOverlay]. This is the CQ answer to Naukri's launch loader.
-class CqLoader extends StatefulWidget {
-  const CqLoader({super.key, this.message, this.logoHeight = 46});
+/// The animation is [CqBrandLoader] — the website's own loader, ported number
+/// for number, so a wait feels like the same product on both surfaces. It
+/// replaced a logo-plus-pulsing-dots spinner, which read as generic.
+class CqLoader extends StatelessWidget {
+  const CqLoader({super.key, this.message, this.logoHeight = 52});
 
   final String? message;
+
+  /// Height of the mark. Width follows the 400:178 aspect of the logo.
   final double logoHeight;
-
-  @override
-  State<CqLoader> createState() => _CqLoaderState();
-}
-
-class _CqLoaderState extends State<CqLoader>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1100),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,37 +24,15 @@ class _CqLoaderState extends State<CqLoader>
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        BrandLogo(height: widget.logoHeight),
-        const SizedBox(height: AppSpacing.xl),
-        AnimatedBuilder(
-          animation: _c,
-          builder: (_, _) => Row(
-            mainAxisSize: MainAxisSize.min,
-            children: List.generate(5, (i) {
-              // Each dot peaks a little after the one before → a travelling wave.
-              final t = (_c.value - i * 0.16) % 1.0;
-              final wave = (math.sin(t * 2 * math.pi) + 1) / 2; // 0..1
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Transform.scale(
-                  scale: 0.6 + 0.5 * wave,
-                  child: Container(
-                    width: 9,
-                    height: 9,
-                    decoration: BoxDecoration(
-                      color: cq.accent,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
+        CqBrandLoader(
+          width: logoHeight * 400 / 178,
+          semanticLabel: message ?? 'Loading',
         ),
-        if (widget.message != null) ...[
+        if (message != null) ...[
           const SizedBox(height: AppSpacing.lg),
           Text(
-            widget.message!,
+            message!,
+            textAlign: TextAlign.center,
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: cq.fgMuted),

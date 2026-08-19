@@ -5,9 +5,14 @@
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
-    <!-- DEBUG-ONLY: allow plain-HTTP ("cleartext") traffic to the local dev API
-         (localhost:4000 via `adb reverse`, or a LAN IP over Wi-Fi). Release
-         builds are unaffected and stay HTTPS-only, since this merges only into
-         debug builds. -->
-    <application android:usesCleartextTraffic="true" />
+    <!-- Cleartext for debug builds is granted by
+         src/debug/res/xml/network_security_config.xml, which overrides the
+         strict release policy in src/main for this variant only.
+
+         `android:usesCleartextTraffic` is deliberately NOT set here: Android
+         ignores that attribute whenever android:networkSecurityConfig is
+         present (which it is, from the main manifest), so it would be dead
+         config that looks protective. The XML file is the single source of
+         truth for this.
+    -->
 </manifest>

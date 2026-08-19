@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/format/patch_body.dart';
+import '../../../core/format/salary_input.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/cq_loader.dart';
@@ -10,8 +12,6 @@ import '../../catalogs/data/catalogs_repository.dart';
 import '../../catalogs/presentation/catalog_picker.dart';
 import '../../onboarding/data/onboarding_repository.dart';
 
-const _paisePerLpa = 10000000;
-const _salaryLpa = <int>[3, 5, 7, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100];
 
 /// Edit every profile detail in one place — the standalone replacement for
 /// re-running the onboarding wizard. Loads the current profile, then PATCHes
@@ -38,12 +38,17 @@ class _ProfileDetailsEditorScreenState
   String? _lookingFor; // JOB | INTERNSHIP | BOTH
   int _expYears = 0;
   int _expMonths = 0;
+  int? _loadedMinPaise, _loadedMaxPaise;
   int? _expMinLpa;
   int? _expMaxLpa;
   int? _noticeDays;
   String? _gender;
   CatalogItem? _industry;
   List<CatalogItem> _cities = [];
+
+  /// Whether [_cities] reflects the server or is just its initial empty value.
+  /// Sending `[]` because a lookup failed would wipe real preferences.
+  bool _citiesLoaded = false;
 
   bool _loading = true;
   bool _saving = false;
@@ -84,9 +89,16 @@ class _ProfileDetailsEditorScreenState
         final hits = await catalogs.resolve(CatalogKind.industries, [p.industryId!]);
         industry = hits.isNotEmpty ? hits.first : null;
       }
+      // throwOnError: an empty list here would render as "Any location" and
+      // the next save would then overwrite the real list with whatever the user
+      // picked from that false starting point.
       final cities = p.preferredCityIds.isEmpty
           ? <CatalogItem>[]
-          : await catalogs.resolve(CatalogKind.cities, p.preferredCityIds);
+          : await catalogs.resolve(
+              CatalogKind.cities,
+              p.preferredCityIds,
+              throwOnError: true,
+            );
 
       if (!mounted) return;
       _name.text = p.name ?? '';
@@ -101,24 +113,32 @@ class _ProfileDetailsEditorScreenState
         _lookingFor = p.lookingFor;
         _expYears = ((p.experienceMonths ?? 0) ~/ 12).clamp(0, 40);
         _expMonths = ((p.experienceMonths ?? 0) % 12).clamp(0, 11);
-        _expMinLpa = _toLpa(p.expectedSalaryMinPaise);
-        _expMaxLpa = _toLpa(p.expectedSalaryMaxPaise);
+        _loadedMinPaise = p.expectedSalaryMinPaise;
+        _loadedMaxPaise = p.expectedSalaryMaxPaise;
+        _expMinLpa = lpaFromPaise(p.expectedSalaryMinPaise);
+        _expMaxLpa = lpaFromPaise(p.expectedSalaryMaxPaise);
         _noticeDays = p.noticePeriodDays;
         _gender = p.gender;
         _industry = industry;
         _cities = cities;
+        _citiesLoaded = true;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _loadError = e is OnboardingException ? e.message : 'Could not load your profile.';
+        _loadError = switch (e) {
+          OnboardingException(:final message) => message,
+          // The catalogue lookup for industry / preferred cities failed. Say so
+          // rather than opening the form with those fields falsely blank.
+          CatalogsException(:final message) => message,
+          _ => 'Could not load your profile.',
+        };
         _loading = false;
       });
     }
   }
 
-  int? _toLpa(int? paise) => paise == null ? null : (paise / _paisePerLpa).round();
 
   Future<void> _pickIndustry() async {
     final res = await showCatalogPicker(
@@ -154,12 +174,12 @@ class _ProfileDetailsEditorScreenState
     }
 
     final body = <String, dynamic>{'name': name};
-    void putStr(String k, TextEditingController c) {
-      final v = c.text.trim();
-      if (v.isNotEmpty) body[k] = v;
-    }
+    // See patch_body.dart for why an emptied field is SENT rather than
+    // skipped, and why phone is the one exception.
+    void putStr(String k, TextEditingController c) =>
+        putClearable(body, k, c.text);
 
-    putStr('phone', _phone);
+    putNonEmpty(body, 'phone', _phone.text);
     putStr('headline', _headline);
     putStr('summary', _summary);
     body['workStatus'] = _workStatus;
@@ -171,10 +191,18 @@ class _ProfileDetailsEditorScreenState
     }
     putStr('currentCityName', _currentCity);
     if (_industry != null) body['industryId'] = _industry!.id;
-    if (_expMinLpa != null) body['expectedSalaryMinPaise'] = _expMinLpa! * _paisePerLpa;
-    if (_expMaxLpa != null) body['expectedSalaryMaxPaise'] = _expMaxLpa! * _paisePerLpa;
+    final minPaise = paiseForLpa(_expMinLpa, unchangedFrom: _loadedMinPaise);
+    final maxPaise = paiseForLpa(_expMaxLpa, unchangedFrom: _loadedMaxPaise);
+    if (minPaise != null) body['expectedSalaryMinPaise'] = minPaise;
+    if (maxPaise != null) body['expectedSalaryMaxPaise'] = maxPaise;
     if (_noticeDays != null) body['noticePeriodDays'] = _noticeDays;
-    if (_cities.isNotEmpty) body['preferredCityIds'] = [for (final c in _cities) c.id];
+    // Written whenever the list was genuinely read first — including when the
+    // user has emptied it, which the old `isNotEmpty` guard made impossible to
+    // save. Still never written on a failed load: `[]` would erase preferences
+    // the user still has.
+    if (_citiesLoaded) {
+      body['preferredCityIds'] = [for (final c in _cities) c.id];
+    }
     if (_gender != null) body['gender'] = _gender;
 
     setState(() {
@@ -349,7 +377,7 @@ class _ProfileDetailsEditorScreenState
   }
 
   Widget _salaryDropdown(int? value, String label, ValueChanged<int?> onChanged) {
-    final opts = <int>{?value, ..._salaryLpa}.toList()..sort();
+    final opts = <int>{?value, ...salaryLpaOptions}.toList()..sort();
     return DropdownButtonFormField<int?>(
       initialValue: value,
       isExpanded: true,

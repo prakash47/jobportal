@@ -7,6 +7,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/cq_loader.dart';
+import '../../settings/data/notification_preferences.dart';
+import '../../settings/data/settings_repository.dart';
 import '../application/auth_controller.dart';
 import '../data/auth_repository.dart';
 import 'auth_validators.dart';
@@ -67,10 +69,41 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             phone: _phone.text.trim(),
           );
       // Success → the API auto-logs-in and the router sends us to /home.
+      await _applyMarketingChoice();
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  /// Honour the consent box the form just collected.
+  ///
+  /// It used to be captured and dropped: a candidate who unticked it was
+  /// signed up opted-in anyway, and the code comment blamed a backend field
+  /// that does in fact exist (PATCH /me/notifications). Ticked needs no call —
+  /// the server's own defaults already are job alerts on, product news off.
+  ///
+  /// Application-status mail is deliberately left on. It reports what happened
+  /// to something the candidate did, so it is not the marketing this box is
+  /// about.
+  ///
+  /// Best-effort: registration has already succeeded and the user is signed in,
+  /// so a failure here must not throw them back to the form. Settings shows the
+  /// same switches if it does not land.
+  Future<void> _applyMarketingChoice() async {
+    if (_updates) return;
+    try {
+      final repo = await ref.read(settingsRepositoryProvider.future);
+      await repo.save(
+        const NotificationPreferences(
+          jobAlerts: false,
+          applicationUpdates: true,
+          productNews: false,
+        ),
+      );
+    } catch (_) {
+      // Swallowed on purpose — see above.
     }
   }
 
@@ -193,8 +226,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       ),
                       const SizedBox(height: AppSpacing.lg),
 
-                      // Marketing consent — captured now, honoured once
-                      // notifications ship (the backend has no field for it yet).
+                      // Marketing consent. Applied against
+                      // PATCH /me/notifications right after signup — see
+                      // _applyMarketingChoice.
                       InkWell(
                         onTap: () => setState(() => _updates = !_updates),
                         borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -207,7 +241,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             ),
                             Expanded(
                               child: Text(
-                                'Send me job alerts & updates by email or SMS.',
+                                'Send me job alerts and updates by email.',
                                 style: text.bodyMedium?.copyWith(
                                   color: context.cq.fg,
                                 ),

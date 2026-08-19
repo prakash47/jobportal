@@ -24,11 +24,11 @@ String applicationStatusLabel(String s) => switch (s) {
 
 /// One transition in an application's history (`statusHistory[]`).
 class StatusEvent {
-  const StatusEvent({required this.to, this.from, required this.at, this.by});
+  const StatusEvent({required this.to, this.from, this.at, this.by});
 
   final String to;
   final String? from;
-  final DateTime at;
+  final DateTime? at;
 
   /// CANDIDATE | RECRUITER | SYSTEM
   final String? by;
@@ -36,7 +36,7 @@ class StatusEvent {
   factory StatusEvent.fromJson(Map<String, dynamic> j) => StatusEvent(
     from: j['from'] as String?,
     to: j['to'] as String? ?? 'APPLIED',
-    at: DateTime.tryParse(j['at'] as String? ?? '') ?? DateTime(2000),
+    at: DateTime.tryParse(j['at'] as String? ?? ''),
     by: j['by'] as String?,
   );
 }
@@ -49,8 +49,8 @@ class Application {
   const Application({
     required this.id,
     required this.status,
-    required this.appliedAt,
-    required this.updatedAt,
+    this.appliedAt,
+    this.updatedAt,
     required this.jobTitle,
     required this.companyName,
     this.jobSlug = '',
@@ -64,8 +64,8 @@ class Application {
   /// APPLIED | IN_REVIEW | SHORTLISTED | INTERVIEWED | OFFERED | HIRED |
   /// REJECTED | WITHDRAWN
   final String status;
-  final DateTime appliedAt;
-  final DateTime updatedAt;
+  final DateTime? appliedAt;
+  final DateTime? updatedAt;
   final String jobTitle;
   final String companyName;
   final String jobSlug;
@@ -115,8 +115,8 @@ class Application {
     return Application(
       id: (j['id'] as num?)?.toInt() ?? 0,
       status: j['status'] as String? ?? 'APPLIED',
-      appliedAt: DateTime.tryParse(j['appliedAt'] as String? ?? '') ?? DateTime(2000),
-      updatedAt: DateTime.tryParse(j['updatedAt'] as String? ?? '') ?? DateTime(2000),
+      appliedAt: DateTime.tryParse(j['appliedAt'] as String? ?? ''),
+      updatedAt: DateTime.tryParse(j['updatedAt'] as String? ?? ''),
       jobTitle: job['title'] as String? ?? 'Job',
       companyName: company['name'] as String? ?? '',
       jobSlug: job['canonicalSlug'] as String? ?? '',

@@ -111,20 +111,20 @@ class CompanyOpening {
     required this.title,
     required this.canonicalSlug,
     this.primaryCityName,
-    required this.postedAt,
+    this.postedAt,
   });
   final int id;
   final String title;
   final String canonicalSlug;
   final String? primaryCityName;
-  final DateTime postedAt;
+  final DateTime? postedAt;
 
   factory CompanyOpening.fromJson(Map<String, dynamic> j) => CompanyOpening(
     id: (j['id'] as num?)?.toInt() ?? 0,
     title: j['title'] as String? ?? '',
     canonicalSlug: j['canonicalSlug'] as String? ?? '',
     primaryCityName: j['primaryCityName'] as String?,
-    postedAt: DateTime.tryParse(j['postedAt'] as String? ?? '') ?? DateTime.now(),
+    postedAt: DateTime.tryParse(j['postedAt'] as String? ?? ''),
   );
 }
 

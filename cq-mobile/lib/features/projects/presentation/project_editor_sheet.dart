@@ -106,7 +106,7 @@ class _ProjectEditorState extends ConsumerState<_ProjectEditor> {
       final repo = await ref.read(projectsRepositoryProvider.future);
       final existing = widget.existing;
       if (existing != null) {
-        await repo.replace(existing.id, body);
+        await repo.replace(existing, body);
       } else {
         await repo.create(body);
       }

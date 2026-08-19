@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/format/patch_body.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/cq_buttons.dart';
@@ -81,11 +82,13 @@ class _EducationEditorState extends ConsumerState<_EducationEditor> {
     final body = <String, dynamic>{
       'institute': institute,
       'degree': degree,
-      if (field.isNotEmpty) 'fieldOfStudy': field,
       'startYear': _startYear,
       'endYear': _pursuing ? null : _endYear,
-      if (grade.isNotEmpty) 'grade': grade,
     };
+    // Editing is a PATCH, so these have to be sent even when emptied or they
+    // cannot be cleared — see patch_body.dart.
+    putClearable(body, 'fieldOfStudy', field);
+    putClearable(body, 'grade', grade);
 
     setState(() {
       _saving = true;

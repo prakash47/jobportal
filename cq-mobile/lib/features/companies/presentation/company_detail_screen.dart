@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../../../core/config/app_config.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -12,6 +15,7 @@ import '../../../shared/widgets/cq_loader.dart';
 import '../data/company_models.dart';
 import '../data/companies_repository.dart';
 import 'companies_screen.dart' show RatingPill;
+import '../../../shared/widgets/cq_states.dart';
 
 /// Company profile (`GET /companies/:handle`) — about, what it's like to work
 /// here, open roles, reviews, and related companies.
@@ -65,10 +69,41 @@ class _CompanyDetailScreenState extends ConsumerState<CompanyDetailScreen> {
     }
   }
 
+  /// Hand the company to the OS share sheet as its website URL.
+  Future<void> _share() async {
+    final company = _company;
+    if (company == null) return;
+    // The website's canonical company permalink is `<slug>-overview-<id>`
+    // (packages/domain/src/slug.ts buildCompanyHandle). A bare slug fails
+    // parseCompanySlug and the page 404s, so the shared link has to carry
+    // the id too.
+    final handle = '${company.slug}-overview-${company.id}';
+    final url = '${AppConfig.webBaseUrl}/company/$handle';
+    final box = context.findRenderObject() as RenderBox?;
+    await SharePlus.instance.share(
+      ShareParams(
+        text: '${company.name}\n$url',
+        subject: company.name,
+        sharePositionOrigin:
+            box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_company?.name ?? 'Company')),
+      appBar: AppBar(
+        title: Text(_company?.name ?? 'Company'),
+        actions: [
+          if (_company != null)
+            IconButton(
+              tooltip: 'Share',
+              icon: const Icon(Icons.share_outlined),
+              onPressed: _share,
+            ),
+        ],
+      ),
       body: SafeArea(child: _body()),
     );
   }
@@ -78,7 +113,7 @@ class _CompanyDetailScreenState extends ConsumerState<CompanyDetailScreen> {
       return const Center(child: CqLoader(message: 'Loading company…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _load);
+      return CqErrorView(message: _error!, onRetry: _load);
     }
     final c = _company!;
     final cq = context.cq;
@@ -137,7 +172,11 @@ class _CompanyDetailScreenState extends ConsumerState<CompanyDetailScreen> {
             if (c.foundedYear != null)
               _fact(context, Icons.flag_rounded, 'Founded ${c.foundedYear}'),
             if (c.activeJobs > 0)
-              _fact(context, Icons.work_outline_rounded, '${c.activeJobs} open roles'),
+              _fact(
+                context,
+                Icons.work_outline_rounded,
+                '${c.activeJobs} open ${c.activeJobs == 1 ? 'role' : 'roles'}',
+              ),
             // Only rendered when the URL survives validation, so a hostile or
             // malformed value shows nothing rather than a chip that refuses to
             // work when tapped.
@@ -357,7 +396,8 @@ class _OpeningRow extends StatelessWidget {
                     Text(
                       [
                         opening.primaryCityName,
-                        'Posted ${postedAgo(opening.postedAt)}',
+                        if (postedAgo(opening.postedAt) case final posted?)
+                          'Posted $posted',
                       ].whereType<String>().where((s) => s.isNotEmpty).join('  ·  '),
                       style: text.bodySmall?.copyWith(color: cq.fgMuted),
                     ),
@@ -510,28 +550,3 @@ class _RelatedCard extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

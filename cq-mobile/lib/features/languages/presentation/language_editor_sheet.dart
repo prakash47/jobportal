@@ -64,7 +64,7 @@ class _LanguageEditorState extends ConsumerState<_LanguageEditor> {
       final repo = await ref.read(languagesRepositoryProvider.future);
       final existing = widget.existing;
       if (existing != null) {
-        await repo.replace(existing.id, body);
+        await repo.replace(existing, body);
       } else {
         await repo.create(body);
       }

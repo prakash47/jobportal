@@ -11,10 +11,14 @@ import '../../../shared/widgets/company_avatar.dart';
 import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../../alerts/data/alerts_repository.dart';
+import '../../catalogs/data/catalog_models.dart';
 import '../data/job_filters.dart';
 import '../data/job_models.dart';
 import '../data/jobs_repository.dart';
 import 'job_filters_sheet.dart';
+import '../../../core/state/data_freshness.dart';
+import '../../../shared/widgets/cq_states.dart';
+import '../../../shared/widgets/cq_chips.dart';
 
 /// "a, b and c" — for naming the filters an alert can't carry.
 String _joinWords(List<String> words) {
@@ -22,15 +26,30 @@ String _joinWords(List<String> words) {
   return '${words.sublist(0, words.length - 1).join(', ')} and ${words.last}';
 }
 
-/// Jobs tab — search + browse the job feed. Reads the public `/jobs` endpoint
-/// (static sample data until the backend ships it). Each result taps through to
-/// the full job detail.
+/// Jobs tab — search + browse the job feed, from the live `GET /v1/jobs`.
+///
+/// (`AppConfig.useMockData` still serves sample data for offline demo builds,
+/// but it defaults to false and the endpoint has been live since Aug 2026.)
+/// Each result taps through to the full job detail.
 class JobSearchScreen extends ConsumerStatefulWidget {
-  const JobSearchScreen({super.key, this.initialQuery});
+  const JobSearchScreen({
+    super.key,
+    this.initialQuery,
+    this.initialFacet,
+    this.initialFacetSlug,
+    this.initialFacetLabel,
+  });
 
-  /// When set (e.g. pushed from Home with a role/city/skill), the screen opens
-  /// pre-filtered to this query.
+  /// When set (e.g. pushed from Home with a role), the screen opens with this
+  /// keyword already searched.
   final String? initialQuery;
+
+  /// When set, the screen opens with ONE filter already applied instead of a
+  /// keyword: `city` | `skill` | `industry`, identified by
+  /// [initialFacetSlug] and shown as [initialFacetLabel].
+  final String? initialFacet;
+  final String? initialFacetSlug;
+  final String? initialFacetLabel;
 
   @override
   ConsumerState<JobSearchScreen> createState() => _JobSearchScreenState();
@@ -55,6 +74,7 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
       _query = q.trim();
       _controller.text = _query;
     }
+    _filters = _facetFromRoute();
     _load(1);
   }
 
@@ -62,6 +82,30 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Turns a `?facet=city&slug=rajkot&label=Rajkot` route into a real filter.
+  ///
+  /// The id is 0 because the home feed sends a slug and a name but no
+  /// catalogue id, and the query only ever serialises the slug. It matters
+  /// nowhere except chip removal, which compares ids within a single facet
+  /// list — and there is at most one route-seeded entry per list.
+  JobFilters _facetFromRoute() {
+    final slug = widget.initialFacetSlug?.trim() ?? '';
+    if (slug.isEmpty) return const JobFilters();
+    final item = CatalogItem(
+      id: 0,
+      slug: slug,
+      name: widget.initialFacetLabel?.trim().isNotEmpty == true
+          ? widget.initialFacetLabel!.trim()
+          : slug,
+    );
+    return switch (widget.initialFacet) {
+      'city' => JobFilters(cities: [item]),
+      'skill' => JobFilters(skills: [item]),
+      'industry' => JobFilters(industry: item),
+      _ => const JobFilters(),
+    };
   }
 
   Future<JobsRepository> _repository() async {
@@ -72,9 +116,17 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
     return repo;
   }
 
-  Future<void> _load(int page) async {
+  Future<void> _load(int page, {bool refresh = false}) async {
     setState(() {
-      if (_page == null) _loading = true; // keep the list mounted during refresh
+      // The list stays mounted ONLY for pull-to-refresh, where the same page is
+      // reloading under the user's finger and the RefreshIndicator is already
+      // the feedback. Every other path — the pager, a new query, a sort or a
+      // filter change — replaces the results wholesale, and staying silent
+      // there made "Next page" look like a dead button: nothing moved until the
+      // network came back, and then the content swapped underneath a user still
+      // scrolled to the bottom, so page 2 opened at its end. Swapping in the
+      // loader also rebuilds the list, which starts it back at the top.
+      if (!refresh || _page == null) _loading = true;
       _error = null;
     });
     try {
@@ -94,10 +146,32 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
       _enrichMarkers(repo, data); // best-effort saved/applied badges
     } catch (e) {
       if (!mounted) return;
+      final message = e is JobsException ? e.message : 'Could not load jobs.';
+      // Same rule as Home: results already on screen survive a failed refresh.
+      // Only a search that has nothing to show falls back to the error view.
+      if (_page != null) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(message)));
+        return;
+      }
       setState(() {
-        _error = e is JobsException ? e.message : 'Could not load jobs.';
+        _error = message;
         _loading = false;
       });
+    }
+  }
+
+  /// Re-read the markers for the page already on screen, after a save or an
+  /// apply somewhere else in the app.
+  Future<void> _refreshMarkers() async {
+    final page = _page;
+    if (page == null || page.hits.isEmpty) return;
+    try {
+      _enrichMarkers(await _repository(), page);
+    } catch (_) {
+      // Badges are decoration; a failure here must not disturb the results.
     }
   }
 
@@ -108,7 +182,10 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
     if (ids.isEmpty) return;
     final state = await repo.jobState(ids);
     if (!mounted || !identical(_page, page)) return;
-    if (state.saved.isEmpty && state.applied.isEmpty) return;
+    // No early return on an empty result. It reads like an optimisation, but
+    // once this also runs as a REFRESH it becomes a bug: unsave your only saved
+    // job and the reply is legitimately empty, so bailing here would leave the
+    // bookmark on this row still filled.
     setState(() {
       _page = JobsPage(
         hits: page.hits
@@ -236,6 +313,7 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
       final repo = await ref.read(alertsRepositoryProvider.future);
       await repo.create(name: name, frequency: frequency, query: alertQuery);
       if (!mounted) return;
+      ref.bumpData(CqData.alerts);
       _snack('Alert created');
     } catch (e) {
       if (!mounted) return;
@@ -261,8 +339,24 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
   @override
   Widget build(BuildContext context) {
     final cq = context.cq;
+    // As the Jobs tab this screen is mounted for the whole session inside the
+    // shell's IndexedStack, so it never rebuilds on its own. Saving or applying
+    // from a job detail pushed on top of it left the bookmark and the "Applied"
+    // badge on these very rows showing the old state until the app restarted.
+    // Only the markers are refetched — one bulk call — rather than re-running
+    // the search, which would lose the user's scroll position for a change to
+    // two booleans.
+    for (final domain in const [CqData.savedJobs, CqData.applications]) {
+      ref.onDataChanged(domain, _refreshMarkers);
+    }
+    // This screen is BOTH the Jobs tab and the pushed `/search` route (Home's
+    // facet chips and search box land here). Pushed, it sits above the shell so
+    // the bottom nav is gone — and the drawer was taking the AppBar's leading
+    // slot, so no back arrow appeared either and the user was stranded. Attach
+    // the drawer only when this really is the tab.
+    final isPushed = Navigator.of(context).canPop();
     return Scaffold(
-      drawer: const AppDrawer(),
+      drawer: isPushed ? null : const AppDrawer(),
       appBar: AppBar(
         title: const Text('Jobs'),
         actions: [
@@ -312,17 +406,17 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
                     runSpacing: AppSpacing.sm,
                     children: [
                       _FilterButton(count: _filters.activeCount, onTap: _openFilters),
-                      _SortChip(
+                      CqChip(
                         label: 'Relevant',
                         selected: _sort == 'relevance',
                         onTap: () => _setSort('relevance'),
                       ),
-                      _SortChip(
+                      CqChip(
                         label: 'Newest',
                         selected: _sort == 'recent',
                         onTap: () => _setSort('recent'),
                       ),
-                      _SortChip(
+                      CqChip(
                         label: 'Highest pay',
                         selected: _sort == 'salary_desc',
                         onTap: () => _setSort('salary_desc'),
@@ -338,15 +432,18 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
             // undo one choice is the friction this exists to remove.
             if (_filters.activeCount > 0)
               SizedBox(
-                height: 44,
+                // Fits the chips' 48dp tap target (CqChip._minTapTarget).
+                height: 52,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                   children: [
                     for (final f in _filters.active) ...[
-                      _ActiveFilterChip(
+                      CqChip(
                         label: f.label,
-                        onRemove: () {
+                        selected: true,
+                        trailing: Icons.close_rounded,
+                        onTap: () {
                           setState(() => _filters = f.without);
                           _load(1);
                         },
@@ -375,7 +472,7 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
       return const Center(child: CqLoader(message: 'Finding jobs…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: () => _load(_currentPage));
+      return CqErrorView(message: _error!, onRetry: () => _load(_currentPage));
     }
     final page = _page!;
     if (page.hits.isEmpty) {
@@ -390,7 +487,7 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => _load(_currentPage),
+      onRefresh: () => _load(_currentPage, refresh: true),
       child: ListView.separated(
         padding: const EdgeInsets.all(AppSpacing.lg),
         itemCount: page.hits.length + 2,
@@ -407,7 +504,7 @@ class _JobSearchScreenState extends ConsumerState<JobSearchScreen> {
               ),
             );
           }
-          if (i == page.hits.length + 1) return _Pager(page: page, onGo: _load);
+          if (i == page.hits.length + 1) return CqPager(page: page.page, totalPages: page.totalPages, onGo: _load);
           final job = page.hits[i - 1];
           return _JobCard(
             job: job,
@@ -498,7 +595,8 @@ class _JobCard extends StatelessWidget {
                     _meta(context, Icons.currency_rupee_rounded, salary),
                   if (exp != null)
                     _meta(context, Icons.work_history_outlined, exp),
-                  _meta(context, Icons.schedule_rounded, postedAgo(job.postedAt)),
+                  if (postedAgo(job.postedAt) case final posted?)
+                    _meta(context, Icons.schedule_rounded, posted),
                 ],
               ),
               if (job.skills.isNotEmpty) ...[
@@ -507,9 +605,9 @@ class _JobCard extends StatelessWidget {
                   spacing: AppSpacing.sm,
                   runSpacing: AppSpacing.sm,
                   children: [
-                    for (final s in job.skills.take(4)) _skillChip(context, s),
+                    for (final s in job.skills.take(4)) CqTag(s),
                     if (job.skills.length > 4)
-                      _skillChip(context, '+${job.skills.length - 4}'),
+                      CqTag('+${job.skills.length - 4}'),
                   ],
                 ),
               ],
@@ -549,21 +647,6 @@ Widget _meta(BuildContext context, IconData icon, String label) {
   );
 }
 
-Widget _skillChip(BuildContext context, String label) {
-  final cq = context.cq;
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
-    decoration: BoxDecoration(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      border: Border.all(color: cq.border),
-    ),
-    child: Text(
-      label,
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: cq.fgMuted),
-    ),
-  );
-}
 
 class _FilterButton extends StatelessWidget {
   const _FilterButton({required this.count, required this.onTap});
@@ -607,47 +690,6 @@ class _FilterButton extends StatelessWidget {
   }
 }
 
-/// An applied facet, with the X that removes it. Always reads as "on" — an
-/// unselected state would be meaningless here, since the chip only exists while
-/// the facet is active.
-class _ActiveFilterChip extends StatelessWidget {
-  const _ActiveFilterChip({required this.label, required this.onRemove});
-
-  final String label;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final cq = context.cq;
-    return Center(
-      child: GestureDetector(
-        onTap: onRemove,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, 8, AppSpacing.sm),
-          decoration: BoxDecoration(
-            color: cq.accent.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(color: cq.accent.withValues(alpha: 0.5)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: cq.accent,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Icon(Icons.close_rounded, size: 15, color: cq.accent),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _ClearAllChip extends StatelessWidget {
   const _ClearAllChip({required this.onTap});
@@ -675,77 +717,7 @@ class _ClearAllChip extends StatelessWidget {
   }
 }
 
-class _SortChip extends StatelessWidget {
-  const _SortChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
 
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final cq = context.cq;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? cq.accent.withValues(alpha: 0.14) : cq.surfaceMuted,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(
-            color: selected ? cq.accent.withValues(alpha: 0.5) : cq.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: selected ? cq.accent : cq.fgMuted,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Pager extends StatelessWidget {
-  const _Pager({required this.page, required this.onGo});
-  final JobsPage page;
-  final void Function(int) onGo;
-
-  @override
-  Widget build(BuildContext context) {
-    if (page.totalPages <= 1) return const SizedBox.shrink();
-    final cq = context.cq;
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.sm),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            onPressed: page.page > 1 ? () => onGo(page.page - 1) : null,
-            icon: const Icon(Icons.chevron_left_rounded),
-          ),
-          Text(
-            'Page ${page.page} of ${page.totalPages}',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cq.fgMuted),
-          ),
-          IconButton(
-            onPressed: page.page < page.totalPages ? () => onGo(page.page + 1) : null,
-            icon: const Icon(Icons.chevron_right_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _EmptyResults extends StatelessWidget {
   const _EmptyResults({
@@ -801,28 +773,3 @@ class _EmptyResults extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

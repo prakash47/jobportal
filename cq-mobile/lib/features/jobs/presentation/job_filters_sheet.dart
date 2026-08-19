@@ -7,6 +7,7 @@ import '../../../shared/widgets/cq_buttons.dart';
 import '../../catalogs/data/catalog_models.dart';
 import '../../catalogs/presentation/catalog_picker.dart';
 import '../data/job_filters.dart';
+import '../../../shared/widgets/cq_chips.dart';
 
 /// Opens the job-search filter sheet seeded with [current]; returns the edited
 /// [JobFilters], or null if dismissed without applying.
@@ -268,7 +269,7 @@ class _JobFiltersSheetState extends ConsumerState<_JobFiltersSheet> {
       runSpacing: AppSpacing.sm,
       children: [
         for (final e in options.entries)
-          _ToggleChip(
+          CqChip(
             label: e.value,
             selected: selected.contains(e.key),
             onTap: () => onToggle != null
@@ -319,41 +320,3 @@ class _JobFiltersSheetState extends ConsumerState<_JobFiltersSheet> {
   }
 }
 
-class _ToggleChip extends StatelessWidget {
-  const _ToggleChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final cq = context.cq;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? cq.accent.withValues(alpha: 0.14) : cq.surfaceMuted,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(
-            color: selected ? cq.accent.withValues(alpha: 0.5) : cq.border,
-          ),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: selected ? cq.accent : cq.fgMuted,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-}

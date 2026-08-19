@@ -92,7 +92,7 @@ class JobSummary {
     required this.title,
     required this.canonicalSlug,
     required this.company,
-    required this.postedAt,
+    this.postedAt,
     this.city,
     this.citySlug,
     this.salaryMin,
@@ -109,7 +109,7 @@ class JobSummary {
   final String title;
   final String canonicalSlug;
   final JobCompany company;
-  final DateTime postedAt;
+  final DateTime? postedAt;
   final String? city;
   final String? citySlug;
   final int? salaryMin;
@@ -128,7 +128,7 @@ class JobSummary {
     company: JobCompany.fromJson(
       (j['company'] as Map?)?.cast<String, dynamic>() ?? const {},
     ),
-    postedAt: DateTime.tryParse(j['postedAt'] as String? ?? '') ?? DateTime.now(),
+    postedAt: DateTime.tryParse(j['postedAt'] as String? ?? ''),
     city: j['city'] as String?,
     citySlug: j['citySlug'] as String?,
     salaryMin: (j['salaryMin'] as num?)?.toInt(),
@@ -220,7 +220,7 @@ class JobDetail {
     required this.title,
     required this.description,
     required this.status,
-    required this.postedAt,
+    this.postedAt,
     required this.company,
     this.descriptionMarkdown,
     this.shortDescription,
@@ -243,7 +243,7 @@ class JobDetail {
   final String title;
   final String description;
   final String status;
-  final DateTime postedAt;
+  final DateTime? postedAt;
   final JobCompany company;
   final String? descriptionMarkdown;
   final String? shortDescription;
@@ -271,7 +271,7 @@ class JobDetail {
     title: j['title'] as String? ?? '',
     description: j['description'] as String? ?? '',
     status: j['status'] as String? ?? 'ACTIVE',
-    postedAt: DateTime.tryParse(j['postedAt'] as String? ?? '') ?? DateTime.now(),
+    postedAt: DateTime.tryParse(j['postedAt'] as String? ?? ''),
     company: JobCompany.fromJson(
       (j['company'] as Map?)?.cast<String, dynamic>() ?? const {},
     ),

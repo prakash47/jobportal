@@ -67,10 +67,13 @@ class CompanyAvatar extends StatelessWidget {
   }
 
   static String _letters(String name) {
+    // Only parts that START with a letter or digit count as words. Without this
+    // filter, "Davis - Nader" split into ["Davis", "-", "Nader"] and the tile
+    // read "D-", taking the hyphen as the second initial.
     final parts = name
         .trim()
         .split(RegExp(r'\s+'))
-        .where((p) => p.isNotEmpty)
+        .where((p) => p.isNotEmpty && RegExp(r'^[\p{L}\p{N}]', unicode: true).hasMatch(p))
         .toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) {

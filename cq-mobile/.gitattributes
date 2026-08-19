@@ -1,0 +1,30 @@
+# Normalise line endings in the repo, check out native on each machine.
+#
+# Without this, a Windows checkout rewrites every Dart file to CRLF and the next
+# commit shows the whole file as changed — the snapshot sync to the jobportal
+# branch printed a "LF will be replaced by CRLF" warning for 130+ files for
+# exactly this reason. It also keeps diffs readable for anyone on macOS/Linux.
+* text=auto eol=lf
+
+# Windows-only files keep CRLF.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary: never diffed, never line-ending-converted. A font or a PNG passed
+# through CRLF conversion is silently corrupted.
+*.ttf     binary
+*.otf     binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.webp    binary
+*.ico     binary
+*.jks     binary
+*.keystore binary
+*.apk     binary
+*.aab     binary
+
+# Generated / vendored — collapse in diffs and exclude from language stats.
+pubspec.lock       -diff linguist-generated
+google_fonts/**    binary linguist-vendored

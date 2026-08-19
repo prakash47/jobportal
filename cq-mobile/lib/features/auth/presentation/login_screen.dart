@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -179,9 +180,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: AppSpacing.md),
 
                       // Two-button row (Naukri pattern): OTP (secondary) + Log in.
+                      // The OTP half only appears when OTP can actually log
+                      // someone in; otherwise "Log in" takes the full width.
                       Row(
                         children: [
-                          Expanded(
+                          if (AppConfig.showAuthAlternatives) Expanded(
                             child: SizedBox(
                               height: 54,
                               child: OutlinedButton(
@@ -205,7 +208,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.md),
+                          if (AppConfig.showAuthAlternatives)
+                            const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: CqPrimaryButton(
                               label: 'Log in',
@@ -215,25 +219,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: AppSpacing.xl),
-                      const OrDivider(),
-                      const SizedBox(height: AppSpacing.lg),
-
-                      CqProviderButton(
-                        icon: googleGIcon(),
-                        label: 'Continue with Google',
-                        onTap: () => showComingSoon(context, 'Google sign-in'),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      CqProviderButton(
-                        icon: Icon(
-                          Icons.smartphone_rounded,
-                          size: 20,
-                          color: cq.fg,
+                      if (AppConfig.showAuthAlternatives) ...[
+                        const SizedBox(height: AppSpacing.xl),
+                        const OrDivider(),
+                        const SizedBox(height: AppSpacing.lg),
+                        CqProviderButton(
+                          icon: googleGIcon(),
+                          label: 'Continue with Google',
+                          onTap: () => showComingSoon(context, 'Google sign-in'),
                         ),
-                        label: 'Continue with Phone',
-                        onTap: () => context.push(AppRoutes.phoneContinue),
-                      ),
+                        const SizedBox(height: AppSpacing.md),
+                        CqProviderButton(
+                          icon: Icon(
+                            Icons.smartphone_rounded,
+                            size: 20,
+                            color: cq.fg,
+                          ),
+                          label: 'Continue with Phone',
+                          onTap: () => context.push(AppRoutes.phoneContinue),
+                        ),
+                      ],
                       const SizedBox(height: AppSpacing.xl2),
 
                       Row(

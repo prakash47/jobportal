@@ -8,7 +8,7 @@ class ResumeView {
     required this.sizeBytes,
     required this.mimeType,
     required this.scanStatus,
-    required this.uploadedAt,
+    this.uploadedAt,
   });
 
   final int id;
@@ -19,7 +19,7 @@ class ResumeView {
   /// Virus-scan state (PENDING | CLEAN | INFECTED). Applying needs CLEAN; the
   /// API returns RESUME_SCANNING while it's still PENDING.
   final String scanStatus;
-  final DateTime uploadedAt;
+  final DateTime? uploadedAt;
 
   bool get isClean => scanStatus == 'CLEAN';
   bool get isScanning => scanStatus == 'PENDING' || scanStatus == 'SCANNING';
@@ -36,6 +36,6 @@ class ResumeView {
     sizeBytes: (j['sizeBytes'] as num?)?.toInt() ?? 0,
     mimeType: j['mimeType'] as String? ?? '',
     scanStatus: j['scanStatus'] as String? ?? 'CLEAN',
-    uploadedAt: DateTime.tryParse(j['uploadedAt'] as String? ?? '') ?? DateTime.now(),
+    uploadedAt: DateTime.tryParse(j['uploadedAt'] as String? ?? ''),
   );
 }

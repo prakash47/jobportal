@@ -5,7 +5,7 @@ class SavedJob {
   const SavedJob({
     required this.jobId,
     required this.canonicalSlug,
-    required this.savedAt,
+    this.savedAt,
     required this.title,
     required this.companyName,
     required this.jobStatus,
@@ -15,7 +15,7 @@ class SavedJob {
 
   final int jobId;
   final String canonicalSlug;
-  final DateTime savedAt;
+  final DateTime? savedAt;
   final String title;
   final String companyName;
 
@@ -34,7 +34,7 @@ class SavedJob {
     return SavedJob(
       jobId: (j['jobId'] as num?)?.toInt() ?? 0,
       canonicalSlug: job['canonicalSlug'] as String? ?? '',
-      savedAt: DateTime.tryParse(j['savedAt'] as String? ?? '') ?? DateTime(2000),
+      savedAt: DateTime.tryParse(j['savedAt'] as String? ?? ''),
       title: job['title'] as String? ?? 'Job',
       companyName: company['name'] as String? ?? '',
       jobStatus: job['status'] as String? ?? 'ACTIVE',

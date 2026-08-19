@@ -41,7 +41,13 @@ This spec lists exactly the endpoints the backend needs to add so the app reache
 | 9 | `GET /me/applications` (additive) | Session | Applications dashboard | Adds `counts` + `statusHistory` |
 
 **Cross-cutting conventions** (all endpoints):
-- No global route prefix — routes sit at the API root, exactly like `me/saved-jobs` and `alerts/unsubscribe` (`apps/api/src/main.ts` sets none).
+- **The prefix is split, and a new controller must pick a side deliberately.** `main.ts:56` calls
+  `app.enableVersioning({ type: VersioningType.URI, defaultVersion: VERSION_NEUTRAL })`, so a controller
+  gets **no** prefix unless it asks for one. The newer public surface asks:
+  `@Controller({ path: 'jobs', version: '1' })` serves `/v1/jobs`. The authenticated `/me/*` routes and
+  `auth/*` do not, and stay at the root — `me/saved-jobs`, `alerts/unsubscribe`.
+  An earlier version of this document said there was no prefix at all, which was wrong: the app already
+  calls both forms, and a route added on the wrong side 404s in a way nothing in CI would notice.
 - Public endpoints omit `@UseGuards(JwtAuthGuard)` (mirror `apps/api/src/media/media.controller.ts` / `alerts/unsubscribe.controller.ts`).
 - Validate query params with a Zod DTO via `.safeParse()` → `throw new BadRequestException(parsed.error.issues)` on failure (pattern: `apps/api/src/saved-jobs/saved-jobs.controller.ts` + `dto.ts`).
 - List endpoints return the `{ hits, total, page, pageSize }` envelope used by `saved-jobs.service.ts`. Money is **paise**, experience is **months/years raw** — the app formats on-device; do not pre-format server-side.

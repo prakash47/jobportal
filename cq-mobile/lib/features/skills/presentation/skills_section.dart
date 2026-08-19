@@ -141,7 +141,10 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
   }
 
   void _remove(CatalogItem item) {
-    final next = [..._skills]..removeWhere((s) => s.id == item.id);
+    // Compare by value: identity is the slug (see CatalogItem), and the picker
+    // already uses it. Matching on id here would have been a second, different
+    // notion of "the same skill".
+    final next = [..._skills]..removeWhere((s) => s == item);
     _persist(next);
   }
 
@@ -237,7 +240,7 @@ class _SkillsSectionState extends ConsumerState<SkillsSection> {
     return Row(
       children: [
         Expanded(child: Text(message, style: text.bodySmall?.copyWith(color: cq.fgMuted))),
-        TextButton(onPressed: _load, child: const Text('Retry')),
+        TextButton(onPressed: _load, child: const Text('Try again')),
       ],
     );
   }

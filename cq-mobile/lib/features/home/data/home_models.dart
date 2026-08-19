@@ -29,7 +29,7 @@ class HomeJob {
     required this.canonicalSlug,
     required this.title,
     required this.companyName,
-    required this.postedAt,
+    this.postedAt,
     this.companyLogoUrl,
     this.cityName,
     this.salaryMinPaise,
@@ -40,7 +40,7 @@ class HomeJob {
   final String canonicalSlug;
   final String title;
   final String companyName;
-  final DateTime postedAt;
+  final DateTime? postedAt;
   final String? companyLogoUrl;
   final String? cityName;
   final int? salaryMinPaise;
@@ -51,7 +51,7 @@ class HomeJob {
     canonicalSlug: j['canonicalSlug'] as String? ?? '',
     title: j['title'] as String? ?? '',
     companyName: j['companyName'] as String? ?? '',
-    postedAt: DateTime.tryParse(j['postedAt'] as String? ?? '') ?? DateTime.now(),
+    postedAt: DateTime.tryParse(j['postedAt'] as String? ?? ''),
     companyLogoUrl: j['companyLogoUrl'] as String?,
     cityName: j['cityName'] as String?,
     salaryMinPaise: (j['salaryMinPaise'] as num?)?.toInt(),
@@ -100,13 +100,37 @@ class HomeCompany {
   );
 }
 
-/// A browse facet — role / city / industry / skill. [query] is what to feed the
-/// search screen; [label] is what to show.
+/// How a home facet chip should search when tapped.
+///
+/// This distinction is load-bearing. A role chip is a *keyword* — "Designer"
+/// really does appear in job titles. A city, skill or industry is a *facet*:
+/// "Rajkot" appears in no job title, so searching it as text returned 0 results
+/// while the chip itself advertised 225 jobs. Facet chips must send the slug to
+/// the matching filter param instead.
+enum HomeTaxoKind { role, city, skill, industry }
+
 class HomeTaxo {
-  const HomeTaxo({required this.label, required this.query, this.jobCount = 0});
+  const HomeTaxo({
+    required this.label,
+    required this.query,
+    // Defaults to `role` (plain keyword search) so the offline sample feed,
+    // which carries no slugs, keeps behaving exactly as it did.
+    this.kind = HomeTaxoKind.role,
+    this.slug = '',
+    this.jobCount = 0,
+  });
+
   final String label;
+
+  /// The keyword to search, for [HomeTaxoKind.role] only.
   final String query;
+
+  /// The facet slug, for everything else.
+  final String slug;
+  final HomeTaxoKind kind;
   final int jobCount;
+
+  bool get isRole => kind == HomeTaxoKind.role;
 }
 
 class HomeFeed {
@@ -146,15 +170,16 @@ class HomeFeed {
         raw(keys).map(f).toList();
 
     // topRoles carry {label, query}; cities/industries/skills carry {name, slug}.
-    List<HomeTaxo> taxo(List<String> keys, {required bool isRole}) =>
+    // The slug was previously parsed and thrown away, which is what made every
+    // city chip search its own name as free text and come back empty.
+    List<HomeTaxo> taxo(List<String> keys, {required HomeTaxoKind kind}) =>
         raw(keys).map((mm) {
           final label = (mm['label'] ?? mm['name'] ?? '') as String;
-          final query = isRole
-              ? (mm['query'] as String? ?? label)
-              : (mm['name'] as String? ?? label);
           return HomeTaxo(
             label: label,
-            query: query,
+            kind: kind,
+            query: mm['query'] as String? ?? label,
+            slug: mm['slug'] as String? ?? '',
             jobCount: (mm['jobCount'] as num?)?.toInt() ?? 0,
           );
         }).toList();
@@ -165,10 +190,10 @@ class HomeFeed {
       ),
       featuredJobs: list(['latestJobs', 'featuredJobs'], HomeJob.fromJson),
       featuredCompanies: list(['featuredCompanies'], HomeCompany.fromJson),
-      roles: taxo(['topRoles', 'roles'], isRole: true),
-      cities: taxo(['popularCities', 'cities'], isRole: false),
-      industries: taxo(['topIndustries', 'industries'], isRole: false),
-      topSkills: taxo(['popularSkills', 'topSkills'], isRole: false),
+      roles: taxo(['topRoles', 'roles'], kind: HomeTaxoKind.role),
+      cities: taxo(['popularCities', 'cities'], kind: HomeTaxoKind.city),
+      industries: taxo(['topIndustries', 'industries'], kind: HomeTaxoKind.industry),
+      topSkills: taxo(['popularSkills', 'topSkills'], kind: HomeTaxoKind.skill),
       recentArticles: list(['recentArticles'], ArticleSummary.fromJson),
     );
   }

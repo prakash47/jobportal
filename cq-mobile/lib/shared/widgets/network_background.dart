@@ -12,7 +12,7 @@ import 'package:flutter/material.dart';
 class NetworkBackground extends StatefulWidget {
   const NetworkBackground({
     super.key,
-    this.color = const Color(0xFF24A0DB),
+    this.color = const Color(0xFF22A0DA),
     this.maxLineOpacity = 0.42,
     this.dotOpacity = 0.9,
     this.linkReach = 0.75,

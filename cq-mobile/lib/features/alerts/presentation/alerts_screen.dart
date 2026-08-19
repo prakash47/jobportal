@@ -8,6 +8,8 @@ import '../../../shared/widgets/cq_loader.dart';
 import '../data/alerts_repository.dart';
 import '../data/job_alert.dart';
 import 'alert_editor_screen.dart';
+import '../../../core/state/data_freshness.dart';
+import '../../../shared/widgets/cq_states.dart';
 
 const _months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -72,7 +74,10 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => AlertEditorScreen(existing: existing)),
     );
-    if (saved == true) _load();
+    if (saved == true) {
+      _load();
+      ref.bumpData(CqData.alerts);
+    }
   }
 
   Future<void> _togglePause(JobAlert alert) async {
@@ -95,6 +100,8 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
     });
     try {
       await (await _repository()).setActive(alert.id, !alert.isActive);
+      // Pausing changes how many alerts are live, which Home reports.
+      if (mounted) ref.bumpData(CqData.alerts);
     } catch (e) {
       if (!mounted) return;
       _load();
@@ -126,6 +133,9 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
       if (!mounted) return;
       setState(() =>
           _alerts = (_alerts ?? []).where((a) => a.id != alert.id).toList());
+      // Home shows an alert count off the same domain, and this screen was the
+      // one place that changed alerts without saying so.
+      ref.bumpData(CqData.alerts);
       _snack('Alert deleted');
     } catch (e) {
       if (!mounted) return;
@@ -158,6 +168,8 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Alerts can also be created from the job-search screen.
+    ref.onDataChanged(CqData.alerts, _load);
     final hasAlerts = (_alerts?.isNotEmpty ?? false);
     final atCap = (_alerts?.length ?? 0) >= AlertsRepository.maxAlerts;
     return Scaffold(
@@ -186,7 +198,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
       return const Center(child: CqLoader(message: 'Loading alerts…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _load);
+      return CqErrorView(message: _error!, onRetry: _load);
     }
     final alerts = _alerts!;
     if (alerts.isEmpty) return _Empty(onCreate: () => _openEditor());
@@ -389,28 +401,3 @@ class _Empty extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

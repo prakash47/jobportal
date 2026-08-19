@@ -18,6 +18,11 @@ import '../../auth/application/auth_controller.dart';
 import '../../resume/presentation/resume_section.dart';
 import '../data/job_models.dart';
 import '../data/jobs_repository.dart';
+import '../../../core/state/data_freshness.dart';
+import '../../auth/presentation/verify_email_sheet.dart';
+import '../../../shared/widgets/cq_states.dart';
+import '../../../shared/widgets/cq_chips.dart';
+import '../../reports/presentation/report_job_sheet.dart';
 
 /// The full job (`GET /jobs/:slug`) — header, key facts, markdown description,
 /// skills, and an Apply action. Apply is live today (`POST /me/applications`);
@@ -63,26 +68,52 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
         _saved = job.isSaved;
         _loading = false;
       });
-      // Best-effort: correct the saved/applied state from the bulk endpoint
-      // (the detail payload doesn't carry per-user markers).
-      final state = await repo.jobState([job.id]);
-      if (!mounted || _job?.id != job.id) return;
-      setState(() {
-        _saved = state.saved.contains(job.id);
-        _applied = state.applied.containsKey(job.id);
-      });
-      await _loadQuota(repo);
-      // Similar jobs load last and never throw — the section simply stays
-      // hidden if the query comes back empty.
-      final similar = await repo.similar(job);
-      if (!mounted || _job?.id != job.id) return;
-      setState(() => _similar = similar);
+      await _enrich(repo, job);
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e is JobsException ? e.message : 'Could not load this job.';
         _loading = false;
       });
+    }
+  }
+
+  /// Everything that decorates a job which has already loaded: the per-user
+  /// saved/applied markers, today's apply allowance, and the similar-jobs rail.
+  ///
+  /// Each gets its own catch. They used to sit inside the same `try` as the
+  /// job itself, so a failure in any of them set `_error` and replaced a job
+  /// that was already on screen with "Could not load this job" — the one thing
+  /// that demonstrably had worked. Separate catches also mean a failing
+  /// markers call no longer skips the quota and the rail behind it.
+  Future<void> _enrich(JobsRepository repo, JobDetail job) async {
+    bool stale() => !mounted || _job?.id != job.id;
+
+    try {
+      // The detail payload carries no per-user markers, so these come from the
+      // bulk endpoint.
+      final state = await repo.jobState([job.id]);
+      if (stale()) return;
+      setState(() {
+        _saved = state.saved.contains(job.id);
+        _applied = state.applied.containsKey(job.id);
+      });
+    } catch (_) {
+      // Keep whatever the detail payload said.
+    }
+
+    try {
+      await _loadQuota(repo);
+    } catch (_) {
+      // The hint above the apply button simply does not appear.
+    }
+
+    try {
+      final similar = await repo.similar(job);
+      if (stale()) return;
+      setState(() => _similar = similar);
+    } catch (_) {
+      // The rail stays hidden.
     }
   }
 
@@ -117,6 +148,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
         _applying = false;
       });
       _toast('Application submitted');
+      ref.bumpData(CqData.applications);
       // The 201 carries no quota, so the cached figure is now one stale.
       await _loadQuota(repo);
     } catch (e) {
@@ -126,6 +158,12 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
         final uploaded = await _promptResumeUpload();
         if (!mounted) return;
         if (uploaded) {
+          // Clear the in-flight flag BEFORE recursing. `_apply` guards on
+          // `_applying` in its very first line, so retrying with it still set
+          // returned immediately: the retry never ran, and `_applying` stayed
+          // true forever, leaving Apply stuck on its spinner. That was the
+          // path EVERY first-time applicant takes.
+          setState(() => _applying = false);
           await _apply(); // retry now that a resume exists
           return;
         }
@@ -135,12 +173,46 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
       // Quota exhausted → reflect it in the bar, not just in a toast that
       // disappears and leaves an apparently-tappable Apply button.
       if (e is JobsException && e.code == 'QUOTA_EXCEEDED') {
-        final limit = _quota?.limit ?? 0;
+        // Prefer the numbers the refusal itself carried. Rebuilding them from
+        // _quota alone failed exactly when it mattered: the quota GET shares
+        // the 100/min budget, so a candidate being refused is a candidate
+        // whose quota read has very likely failed too — leaving _quota null,
+        // limit 0, and both consumers (the hint and the disable condition)
+        // gated on limit > 0. The result was the toast-that-fades-over-a-
+        // tappable-button this branch exists to prevent.
+        final limit = e.quota?.limit ?? _quota?.limit ?? 0;
         setState(() {
           _applying = false;
-          _quota = ApplyQuota(count: limit, limit: limit);
+          _quota = e.quota ?? ApplyQuota(count: limit, limit: limit);
         });
         _toast(e.message, error: true);
+        return;
+      }
+      // An unverified email is the one apply refusal the user can fix from
+      // here, so it opens the verification sheet instead of a toast that fades.
+      // The server sends all three of its code-less 403s as plain text, so we
+      // identify this one from our OWN state rather than by matching message
+      // wording.
+      //
+      // The job's own status has to be part of that: the other two code-less
+      // 403s mean the job is draft, closed or expired, and an unverified
+      // candidate who applied to a closed job used to be marched through email
+      // verification and then straight back into the same refusal. If the job
+      // is not open, the refusal is about the job — show what the server said.
+      final auth = ref.read(authControllerProvider);
+      if (e is JobsException &&
+          e.code == 'FORBIDDEN' &&
+          (_job?.isActive ?? false) &&
+          auth is AuthAuthenticated &&
+          !auth.user.emailVerified) {
+        setState(() => _applying = false);
+        final verified = await showVerifyEmailSheet(
+          context,
+          ref,
+          email: auth.user.email,
+          reason: 'You need a verified email address to apply for this job.',
+        );
+        if (verified && mounted) await _apply(); // straight back to applying
         return;
       }
       setState(() => _applying = false);
@@ -214,6 +286,8 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
       final repo = await ref.read(jobsRepositoryProvider.future);
       await repo.setSaved(job.id, next);
       if (!mounted) return;
+      // The Saved tab is already mounted and will not reload itself.
+      ref.bumpData(CqData.savedJobs);
       _toast(next ? 'Saved to your list' : 'Removed from saved');
     } catch (e) {
       if (!mounted) return;
@@ -268,7 +342,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
       return const Center(child: CqLoader(message: 'Loading job…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _load);
+      return CqErrorView(message: _error!, onRetry: _load);
     }
     final job = _job!;
     final cq = context.cq;
@@ -336,7 +410,8 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
               _fact(context, Icons.location_city_rounded, workModeLabel(job.workMode)),
             if (job.employmentType != null)
               _fact(context, Icons.schedule_rounded, employmentLabel(job.employmentType)),
-            _fact(context, Icons.calendar_today_rounded, 'Posted ${postedAgo(job.postedAt)}'),
+            if (postedAgo(job.postedAt) case final posted?)
+              _fact(context, Icons.calendar_today_rounded, 'Posted $posted'),
           ],
         ),
 
@@ -361,7 +436,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
             spacing: AppSpacing.sm,
             runSpacing: AppSpacing.sm,
             children: [
-              for (final s in job.skills) _skillChip(context, s.name),
+              for (final s in job.skills) CqTag(s.name),
             ],
           ),
         ],
@@ -405,6 +480,32 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
             const SizedBox(height: AppSpacing.sm),
           ],
         ],
+        // ── Report ──
+        //
+        // Last thing on the page on purpose: it must be findable but must not
+        // compete with Apply. Reachable signed-out too — the job page is public
+        // and a browsing stranger is often the one who spots a scam posting.
+        const SizedBox(height: AppSpacing.xl),
+        Divider(height: 1, color: cq.border),
+        const SizedBox(height: AppSpacing.sm),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => showReportJobSheet(
+              context,
+              ref,
+              jobId: job.id,
+              jobTitle: job.title,
+            ),
+            icon: Icon(Icons.flag_outlined, size: 17, color: cq.fgMuted),
+            label: Text(
+              'Report this job',
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(color: cq.fgMuted),
+            ),
+          ),
+        ),
         const SizedBox(height: AppSpacing.lg),
       ],
     );
@@ -516,21 +617,6 @@ Widget _fact(BuildContext context, IconData icon, String label) {
   );
 }
 
-Widget _skillChip(BuildContext context, String label) {
-  final cq = context.cq;
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
-    decoration: BoxDecoration(
-      color: cq.accent.withValues(alpha: 0.10),
-      borderRadius: BorderRadius.circular(AppRadius.pill),
-      border: Border.all(color: cq.accent.withValues(alpha: 0.30)),
-    ),
-    child: Text(
-      label,
-      style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cq.accent),
-    ),
-  );
-}
 
 class _ClosedBanner extends StatelessWidget {
   const _ClosedBanner({required this.status});
@@ -565,28 +651,3 @@ class _ClosedBanner extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

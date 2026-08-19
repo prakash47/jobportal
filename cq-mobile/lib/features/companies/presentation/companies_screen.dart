@@ -12,6 +12,8 @@ import '../../catalogs/data/catalog_models.dart';
 import '../../catalogs/presentation/catalog_picker.dart';
 import '../data/company_models.dart';
 import '../data/companies_repository.dart';
+import '../../../shared/widgets/cq_states.dart';
+import '../../../shared/widgets/cq_chips.dart';
 
 /// Companies directory (`GET /companies`). Reached from the Home feed; each card
 /// taps through to the company profile.
@@ -115,7 +117,7 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         children: [
-          _FilterChip(
+          CqChip(
             label: 'Hiring now',
             selected: _hiringOnly,
             onTap: () {
@@ -124,7 +126,7 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
             },
           ),
           const SizedBox(width: AppSpacing.sm),
-          _FilterChip(
+          CqChip(
             label: _industry?.name ?? 'Industry',
             selected: _industry != null,
             // A selected industry clears on tap; an unset one opens the picker.
@@ -160,7 +162,7 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
       return const Center(child: CqLoader(message: 'Loading companies…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: () => _load(_currentPage));
+      return CqErrorView(message: _error!, onRetry: () => _load(_currentPage));
     }
     final page = _page!;
     if (page.hits.isEmpty) {
@@ -180,7 +182,7 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
         itemCount: page.hits.length + 1,
         separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
         itemBuilder: (context, i) {
-          if (i == page.hits.length) return _Pager(page: page, onGo: _load);
+          if (i == page.hits.length) return CqPager(page: page.page, totalPages: page.totalPages, onGo: _load);
           final c = page.hits[i];
           return _CompanyCard(
             company: c,
@@ -192,64 +194,6 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
   }
 }
 
-/// Directory filter chip — same pill language as the career-advice tags, with
-/// an optional trailing affordance (open the picker / clear the selection).
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.trailing,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  final IconData? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final cq = context.cq;
-    return Center(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
-          decoration: BoxDecoration(
-            color: selected ? cq.accent.withValues(alpha: 0.14) : cq.surfaceMuted,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(
-              color: selected ? cq.accent.withValues(alpha: 0.5) : cq.border,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: selected ? cq.accent : cq.fgMuted,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                ),
-              ),
-              if (trailing != null) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  trailing,
-                  size: 15,
-                  color: selected ? cq.accent : cq.fgMuted,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _CompanyCard extends StatelessWidget {
   const _CompanyCard({required this.company, required this.onTap});
@@ -356,37 +300,6 @@ class RatingPill extends StatelessWidget {
   }
 }
 
-class _Pager extends StatelessWidget {
-  const _Pager({required this.page, required this.onGo});
-  final CompaniesPage page;
-  final void Function(int) onGo;
-
-  @override
-  Widget build(BuildContext context) {
-    if (page.totalPages <= 1) return const SizedBox.shrink();
-    final cq = context.cq;
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.sm),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            onPressed: page.page > 1 ? () => onGo(page.page - 1) : null,
-            icon: const Icon(Icons.chevron_left_rounded),
-          ),
-          Text(
-            'Page ${page.page} of ${page.totalPages}',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cq.fgMuted),
-          ),
-          IconButton(
-            onPressed: page.page < page.totalPages ? () => onGo(page.page + 1) : null,
-            icon: const Icon(Icons.chevron_right_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState({
@@ -424,28 +337,3 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

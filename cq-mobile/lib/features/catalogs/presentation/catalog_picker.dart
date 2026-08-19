@@ -8,6 +8,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../data/catalog_models.dart';
 import '../data/catalogs_repository.dart';
+import '../../../shared/widgets/cq_states.dart';
 
 /// Opens a searchable catalog picker (skills / cities / industries) as a modal
 /// bottom sheet. Returns the chosen items, or null if dismissed.
@@ -56,6 +57,14 @@ class _CatalogPickerSheetState extends ConsumerState<_CatalogPickerSheet> {
   Timer? _debounce;
   CatalogPage? _page;
   bool _loading = true;
+
+  /// Kept separate from an empty result on purpose. Substituting an empty page
+  /// on failure made a dead network look exactly like "nothing matched your
+  /// search" — the user retyped the same word instead of checking their signal.
+  String? _error;
+
+  /// The query the current results belong to, so a retry repeats it.
+  String _query = '';
   late final Set<CatalogItem> _selected = {...widget.initial};
 
   @override
@@ -80,7 +89,11 @@ class _CatalogPickerSheetState extends ConsumerState<_CatalogPickerSheet> {
   }
 
   Future<void> _load(String q) async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _query = q;
+      _error = null;
+    });
     try {
       final data = await (await _repository()).search(widget.kind, q: q);
       if (!mounted) return;
@@ -88,10 +101,12 @@ class _CatalogPickerSheetState extends ConsumerState<_CatalogPickerSheet> {
         _page = data;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
-        _page = const CatalogPage(hits: [], total: 0, page: 1, pageSize: 30);
+        _error = e is CatalogsException
+            ? e.message
+            : 'Could not load the list. Check your connection.';
         _loading = false;
       });
     }
@@ -195,11 +210,14 @@ class _CatalogPickerSheetState extends ConsumerState<_CatalogPickerSheet> {
     if (_loading && _page == null) {
       return const Center(child: CqLoader(message: 'Loading…'));
     }
+    if (_error != null) {
+      return CqErrorView(message: _error!, onRetry: () => _load(_query));
+    }
     final page = _page;
     if (page == null || page.hits.isEmpty) {
       return Center(
         child: Text(
-          'No matches',
+          _query.isEmpty ? 'Nothing to show yet' : 'No matches for "$_query"',
           style: TextStyle(color: context.cq.fgMuted),
         ),
       );

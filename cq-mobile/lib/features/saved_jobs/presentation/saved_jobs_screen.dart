@@ -9,16 +9,23 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../data/saved_job.dart';
 import '../data/saved_jobs_repository.dart';
+import '../../../core/state/data_freshness.dart';
+import '../../../shared/widgets/cq_states.dart';
+import '../../../shared/widgets/cq_buttons.dart';
+import '../../shell/application/shell_tab.dart';
 
 const _months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
-String _fmtDate(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
+String? _fmtDate(DateTime? d) => d == null ? null : '${d.day} ${_months[d.month - 1]} ${d.year}';
 
-/// Saved jobs tab — reads `/me/saved-jobs`. Jobs are saved from the website (or,
-/// later, from in-app browse once that API exists); here the seeker reviews and
-/// removes them, and sees which they've already applied to.
+/// Saved jobs tab — reads `/me/saved-jobs`.
+///
+/// Jobs are saved from the job detail screen in this app (POST
+/// /me/saved-jobs/:jobId); here the seeker reviews and removes them, and sees
+/// which they have already applied to. The list refreshes itself when a job is
+/// saved elsewhere — see CqData.savedJobs.
 class SavedJobsScreen extends ConsumerStatefulWidget {
   const SavedJobsScreen({super.key});
 
@@ -85,6 +92,7 @@ class _SavedJobsScreenState extends ConsumerState<SavedJobsScreen> {
     });
     try {
       await (await _repository()).remove(job.jobId);
+      ref.bumpData(CqData.savedJobs);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -110,6 +118,11 @@ class _SavedJobsScreenState extends ConsumerState<SavedJobsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // This tab is mounted for the whole session inside the shell's IndexedStack,
+    // so it never rebuilds on its own. Saving a job from the detail screen has
+    // to reach it, or it keeps showing the empty state after the user just
+    // saved something.
+    ref.onDataChanged(CqData.savedJobs, () => _load(_currentPage));
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(title: const Text('Saved jobs')),
@@ -122,7 +135,7 @@ class _SavedJobsScreenState extends ConsumerState<SavedJobsScreen> {
       return const Center(child: CqLoader(message: 'Loading saved jobs…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: () => _load(_currentPage));
+      return CqErrorView(message: _error!, onRetry: () => _load(_currentPage));
     }
     final page = _page!;
     if (page.hits.isEmpty) return const _EmptySaved();
@@ -134,7 +147,7 @@ class _SavedJobsScreenState extends ConsumerState<SavedJobsScreen> {
         itemCount: page.hits.length + 1,
         separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
         itemBuilder: (context, i) {
-          if (i == page.hits.length) return _Pager(page: page, onGo: _load);
+          if (i == page.hits.length) return CqPager(page: page.page, totalPages: page.totalPages, onGo: _load);
           final job = page.hits[i];
           return _SavedJobCard(
             job: job,
@@ -207,7 +220,10 @@ class _SavedJobCard extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
-                'Saved ${_fmtDate(job.savedAt)}',
+                switch (_fmtDate(job.savedAt)) {
+                  final d? => 'Saved $d',
+                  _ => '',
+                },
                 style: text.bodySmall?.copyWith(color: cq.fgSubtle),
               ),
               if (!job.isActive)
@@ -261,43 +277,12 @@ class _Badge extends StatelessWidget {
   }
 }
 
-class _Pager extends StatelessWidget {
-  const _Pager({required this.page, required this.onGo});
-  final SavedJobsPage page;
-  final void Function(int) onGo;
 
-  @override
-  Widget build(BuildContext context) {
-    if (page.totalPages <= 1) return const SizedBox.shrink();
-    final cq = context.cq;
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.sm),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            onPressed: page.page > 1 ? () => onGo(page.page - 1) : null,
-            icon: const Icon(Icons.chevron_left_rounded),
-          ),
-          Text(
-            'Page ${page.page} of ${page.totalPages}',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cq.fgMuted),
-          ),
-          IconButton(
-            onPressed: page.page < page.totalPages ? () => onGo(page.page + 1) : null,
-            icon: const Icon(Icons.chevron_right_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptySaved extends StatelessWidget {
+class _EmptySaved extends ConsumerWidget {
   const _EmptySaved();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cq = context.cq;
     final text = Theme.of(context).textTheme;
     return Center(
@@ -315,6 +300,15 @@ class _EmptySaved extends StatelessWidget {
               textAlign: TextAlign.center,
               style: text.bodyMedium?.copyWith(color: cq.fgMuted),
             ),
+            const SizedBox(height: AppSpacing.xl),
+            // An empty state that only describes the emptiness is a dead end —
+            // the user is already here, so hand them the way out.
+            CqPrimaryButton(
+              label: 'Browse jobs',
+              icon: Icons.search_rounded,
+              onPressed: () =>
+                  ref.read(shellTabProvider.notifier).select(ShellTab.jobs),
+            ),
           ],
         ),
       ),
@@ -322,28 +316,3 @@ class _EmptySaved extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

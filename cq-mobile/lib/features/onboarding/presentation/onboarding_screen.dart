@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../shared/widgets/brand_logo.dart';
 import '../../../shared/widgets/cq_buttons.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../data/candidate_profile.dart';
@@ -13,6 +12,7 @@ import '../data/onboarding_repository.dart';
 import 'steps/education_step.dart';
 import 'steps/headline_step.dart';
 import 'steps/work_profile_step.dart';
+import '../../../shared/widgets/cq_states.dart';
 
 // (title, subtitle) for each of the 3 data steps.
 const _stepMeta = [
@@ -47,10 +47,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   bool _saving = false;
   String? _error;
 
+  final _pages = PageController();
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -111,15 +119,38 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     _step -= 1;
   });
 
+  /// Keeps the PageView in sync with [_step] after any setState that moved it.
+  /// The steps stay mounted either way — this only animates which one shows.
+  void _syncPage() {
+    if (!_pages.hasClients || _step >= _dataSteps) return;
+    if (_pages.page?.round() == _step) return;
+    _pages.animateToPage(
+      _step,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+    );
+  }
+
   void _finish() => context.go(AppRoutes.home);
 
   @override
   Widget build(BuildContext context) {
     final done = _step >= _dataSteps;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncPage());
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const BrandLogo(height: 26),
+        // No logo here. The stacked CQ lockup is 1.66:1 with the wordmark in
+        // its bottom quarter, so at an AppBar's 26px the words render about 6px
+        // tall — unreadable mush. The user authenticated seconds ago under that
+        // logo at full size; repeating it small adds nothing.
+        leading: (!_loading && _loadError == null && !done && _step > 0)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Back',
+                onPressed: _saving ? null : _back,
+              )
+            : null,
         actions: [
           if (!_loading && _loadError == null && !done)
             TextButton(onPressed: _finish, child: const Text('Skip for now')),
@@ -130,7 +161,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         child: _loading
             ? const Center(child: CqLoader(message: 'Setting up your profile…'))
             : _loadError != null
-            ? _ErrorView(message: _loadError!, onRetry: _retryLoad)
+            // blocking: the wizard cannot continue without the profile load,
+            // so the retry is the primary action here (as it was before this
+            // view was shared).
+            ? CqErrorView(
+                message: _loadError!,
+                onRetry: _retryLoad,
+                blocking: true,
+              )
             : Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 520),
@@ -152,125 +190,153 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget _buildWizard(BuildContext context) {
     final cq = context.cq;
     final text = Theme.of(context).textTheme;
-    final (title, subtitle) = _stepMeta[_step];
 
     return Column(
       children: [
-        // Progress + heading.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.xl2,
-            AppSpacing.lg,
-            AppSpacing.xl2,
-            0,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  for (var i = 0; i < _dataSteps; i++) ...[
-                    Expanded(
-                      child: Container(
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: i <= _step ? cq.accent : cq.border,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      ),
-                    ),
-                    if (i < _dataSteps - 1) const SizedBox(width: 6),
-                  ],
-                ],
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text('Step ${_step + 1} of $_dataSteps', style: text.labelMedium),
-              const SizedBox(height: AppSpacing.xs),
-              Text(title, style: text.headlineMedium),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                subtitle,
-                style: text.bodyMedium?.copyWith(color: cq.fgMuted),
-              ),
-            ],
-          ),
-        ),
-
-        // Step content — all three stay mounted (state persists across nav).
-        Expanded(
-          child: IndexedStack(
-            index: _step,
-            children: [
-              SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.xl2),
-                child: WorkProfileStep(key: _workKey, initial: _initial!),
-              ),
-              SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.xl2),
-                child: EducationStep(key: _eduKey),
-              ),
-              SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.xl2),
-                child: HeadlineStep(key: _headKey, initial: _initial!),
-              ),
-            ],
-          ),
-        ),
-
-        // Error + footer nav.
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl2),
+        // ── Progress rail ──
+        //
+        // One full-bleed 2px line flush under the AppBar, not three inset
+        // segments. Edge-to-edge reads as part of the chrome; a gutter-inset
+        // segmented bar reads as a stock wizard. It animates rather than
+        // snapping, which is the only progress cue on the screen now.
+        TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: (_step + 1) / _dataSteps),
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          builder: (context, value, _) => SizedBox(
+            height: 2,
             child: Row(
               children: [
-                Icon(Icons.error_outline_rounded, size: 18, color: cq.danger),
-                const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Text(
-                    _error!,
-                    style: text.bodySmall?.copyWith(color: cq.danger),
-                  ),
+                  flex: (value * 1000).round(),
+                  child: ColoredBox(color: cq.accent),
+                ),
+                Expanded(
+                  flex: 1000 - (value * 1000).round(),
+                  child: ColoredBox(color: cq.border),
                 ),
               ],
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.xl2,
-            AppSpacing.md,
-            AppSpacing.xl2,
-            AppSpacing.lg,
-          ),
-          child: Row(
+        ),
+
+        // ── Steps ──
+        //
+        // A PageView rather than an IndexedStack: all three stay mounted (so a
+        // half-filled step survives Back), but moving between them now slides.
+        Expanded(
+          child: PageView(
+            controller: _pages,
+            physics: const NeverScrollableScrollPhysics(),
             children: [
-              Visibility(
-                visible: _step > 0,
-                maintainSize: true,
-                maintainAnimation: true,
-                maintainState: true,
-                child: TextButton(
-                  onPressed: _saving ? null : _back,
-                  child: const Text('Back'),
-                ),
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: _saving ? null : _skip,
-                child: const Text('Skip'),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              SizedBox(
-                width: 138,
-                child: CqPrimaryButton(
-                  label: _step == _dataSteps - 1 ? 'Finish' : 'Continue',
-                  loading: _saving,
-                  onPressed: _continue,
-                ),
-              ),
+              _stepPage(0, WorkProfileStep(key: _workKey, initial: _initial!)),
+              _stepPage(1, EducationStep(key: _eduKey)),
+              _stepPage(2, HeadlineStep(key: _headKey, initial: _initial!)),
             ],
           ),
         ),
+
+        // ── Actions ──
+        //
+        // Pinned, hairline-separated, and stacked full width. The old row put a
+        // 138px cyan CTA next to two bare blue text buttons — three competing
+        // treatments in one row, and the only place in the app where the
+        // primary button was not full width.
+        Container(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: cq.border)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl2,
+                AppSpacing.lg,
+                AppSpacing.xl2,
+                AppSpacing.lg,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_error != null) ...[
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 18,
+                          color: cq.danger,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: text.bodySmall?.copyWith(color: cq.danger),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  CqPrimaryButton(
+                    label: _step == _dataSteps - 1 ? 'Finish' : 'Continue',
+                    loading: _saving,
+                    onPressed: _continue,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton(
+                      onPressed: _saving ? null : _skip,
+                      child: const Text('Skip this step'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ],
+    );
+  }
+
+  /// One step: its own header scrolling with its own fields, so the title moves
+  /// out of the way on a small screen instead of permanently eating the top
+  /// third of the viewport.
+  Widget _stepPage(int index, Widget child) {
+    final cq = context.cq;
+    final text = Theme.of(context).textTheme;
+    final (title, subtitle) = _stepMeta[index];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl2,
+        AppSpacing.xl,
+        AppSpacing.xl2,
+        AppSpacing.xl2,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'STEP ${index + 1} OF $_dataSteps',
+            style: text.labelSmall?.copyWith(
+              color: cq.fgSubtle,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // 30px, not 24: onboarding is a full-screen moment and should own the
+          // page the way the auth hero does.
+          Text(title, style: text.headlineLarge),
+          const SizedBox(height: AppSpacing.sm),
+          // 16px, deliberately LARGER than the 14px field labels below it — at
+          // 14 it competed with them and the hierarchy read flat.
+          Text(subtitle, style: text.bodyLarge?.copyWith(color: cq.fgMuted)),
+          const SizedBox(height: AppSpacing.xl2),
+          child,
+        ],
+      ),
     );
   }
 
@@ -282,17 +348,36 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // A brand panel, not a stock green success circle. The navy + cyan
+          // pairing is the same one the welcome hero and the loader use, so the
+          // last screen of onboarding looks like the first screen of the app.
           Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(color: cq.success, shape: BoxShape.circle),
-            child: const Icon(Icons.check_rounded, color: Colors.white, size: 38),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xl2,
+              vertical: AppSpacing.xl2 + AppSpacing.sm,
+            ),
+            decoration: BoxDecoration(
+              color: cq.brandNavy,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.check_rounded, size: 34, color: cq.accent),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  "You're all set",
+                  textAlign: TextAlign.center,
+                  style: text.headlineLarge?.copyWith(
+                    color: const Color(0xFFF7F9FC),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: AppSpacing.xl),
-          Text("You're all set!", style: text.headlineMedium),
-          const SizedBox(height: AppSpacing.sm),
           Text(
-            'Your profile is ready. You can complete anything you skipped later '
+            'Your profile is ready. Anything you skipped can be completed later '
             'from your profile.',
             textAlign: TextAlign.center,
             style: text.bodyLarge?.copyWith(color: cq.fgMuted),
@@ -309,33 +394,3 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_off_rounded,
-              size: 40,
-              color: context.cq.fgSubtle,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.xl),
-            CqPrimaryButton(label: 'Try again', onPressed: onRetry),
-          ],
-        ),
-      ),
-    );
-  }
-}

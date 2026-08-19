@@ -17,6 +17,19 @@ class ProjectItem {
   final String? url;
   final DateTime createdAt;
 
+  /// The POST body that would recreate this row exactly as it stands.
+  ///
+  /// Used to put a project back after an edit fails. The API has no PATCH, so
+  /// editing means deleting and recreating, and without this the delete is
+  /// unrecoverable.
+  Map<String, dynamic> toCreateBody() => <String, dynamic>{
+        'title': title,
+        if (description != null && description!.isNotEmpty)
+          'description': description,
+        'techStack': techStack,
+        if (url != null && url!.isNotEmpty) 'url': url,
+      };
+
   factory ProjectItem.fromJson(Map<String, dynamic> j) => ProjectItem(
     id: (j['id'] as num?)?.toInt() ?? 0,
     title: j['title'] as String? ?? '',

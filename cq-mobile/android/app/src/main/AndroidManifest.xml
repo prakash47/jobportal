@@ -3,17 +3,31 @@
          DEBUG/PROFILE builds only, so without it here every request in a
          RELEASE build fails with "Connection failed". -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Backup is OFF on purpose. The session lives in cookies, and the refresh
+         cookie is a 30-day credential. With backup enabled Android copies app
+         data to the user's Google account, which would carry a live session off
+         the device and restore it onto another one. All three attributes are
+         needed: allowBackup and fullBackupContent cover API <= 30,
+         dataExtractionRules covers 31+. -->
     <application
         android:label="Career Queue"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:networkSecurityConfig="@xml/network_security_config">
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false">
+        <!-- Portrait only, matching iOS. Every screen was designed and reviewed
+             at phone width and nothing was laid out for landscape; rotating
+             produced overflowing rows rather than a wide layout. Remove the
+             screenOrientation lock the day those layouts exist. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
+            android:screenOrientation="portrait"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">

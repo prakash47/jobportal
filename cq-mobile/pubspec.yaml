@@ -18,11 +18,8 @@ dependencies:
   flutter_riverpod: ^3.3.2
   flutter_secure_storage: ^10.3.1
   flutter_svg: ^2.3.0
-  font_awesome_flutter: ^11.0.0
-  freezed_annotation: ^3.1.0
   go_router: ^17.3.0
   google_fonts: ^8.2.0
-  json_annotation: ^4.12.0
   path_provider: ^2.1.6
   share_plus: ^12.0.2
   url_launcher: ^6.3.2
@@ -31,9 +28,6 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  build_runner: ^2.15.1
-  freezed: ^3.2.5
-  json_serializable: ^6.14.0
   flutter_launcher_icons: ^0.14.4
   image: ^4.8.0
 
@@ -43,6 +37,12 @@ flutter:
   assets:
     - assets/images/
     - assets/logo/
+    # Inter, bundled. google_fonts prefers a matching asset over its HTTP
+    # fetch, so the app no longer downloads its typeface on first launch — a
+    # slow or offline first run used to render the whole product in the
+    # platform fallback font. Filenames must stay in the Google Fonts API form
+    # (Inter-Regular / Medium / SemiBold / Bold) for that matching to work.
+    - google_fonts/
 
 # App launcher icon — bold navy tile + white CQ mark (run: dart run flutter_launcher_icons)
 flutter_launcher_icons:
@@ -55,17 +55,17 @@ flutter_launcher_icons:
   background_color_ios: "#FFFFFF"
   min_sdk_android: 21
 
-# Native splash — SOLID brand navy (#192349), no logo (blank transparent image).
+# Native splash — SOLID brand navy (#192249), no logo (blank transparent image).
 # The animated Dart splash then paints EVERYTHING on that same navy: the network
 # fades in, the CQ letters appear, and the cyan arrow flies in from the left to
 # complete the mark. Native navy → Dart navy = one continuous splash (the reveal
 # happens once, in Dart — never a separate native logo → "two splashes").
 # (run: dart run flutter_native_splash:create)
 flutter_native_splash:
-  color: "#192349"
+  color: "#192249"
   image: assets/icon/blank.png
   android_12:
     image: assets/icon/blank.png
-    icon_background_color: "#192349"
+    icon_background_color: "#192249"
   android: true
   ios: true

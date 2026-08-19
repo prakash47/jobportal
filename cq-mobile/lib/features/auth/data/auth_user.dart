@@ -23,6 +23,18 @@ class AuthUser {
 
   bool get isCandidate => role == 'CANDIDATE';
 
+  /// Round-trips through [AuthUser.fromJson]. Used to cache the last known
+  /// user so a launch with no connectivity can restore the session instead of
+  /// dumping a signed-in user on the welcome screen.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'email': email,
+    'name': name,
+    'role': role,
+    'emailVerified': emailVerified,
+    'phone': phone,
+  };
+
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     return AuthUser(
       id: json['id'] as int,

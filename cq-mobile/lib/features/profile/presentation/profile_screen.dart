@@ -21,6 +21,9 @@ import '../../skills/presentation/skills_section.dart';
 import '../data/profile_overview.dart';
 import '../data/profile_repository.dart';
 import 'profile_details_editor_screen.dart';
+import '../../auth/presentation/verify_email_sheet.dart';
+import '../../../core/format/job_format.dart';
+import '../../../shared/widgets/cq_states.dart';
 
 String _expLabel(int? months) {
   final m = months ?? 0;
@@ -98,6 +101,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (mounted && saved == true) _load(); // refresh after editing
   }
 
+  Future<void> _verifyEmail(String email) async {
+    final verified = await showVerifyEmailSheet(context, ref, email: email);
+    if (verified && mounted) _load();
+  }
+
   /// Run a checklist shortcut that may have saved something, then refresh the
   /// completeness figure and the affected section card.
   Future<void> _afterShortcut(Future<bool?> action) async {
@@ -165,7 +173,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       return const Center(child: CqLoader(message: 'Loading your profile…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _load);
+      return CqErrorView(message: _error!, onRetry: _load);
     }
     final p = _profile!;
     final cq = context.cq;
@@ -180,7 +188,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         p.workStatus != null ? _pretty(p.workStatus) : 'Not set',
       ),
       if (p.workStatus == 'EXPERIENCED')
-        (Icons.timeline_rounded, 'Experience', _expLabel(p.experienceMonths)),
+        (Icons.timeline_rounded, 'Total experience', _expLabel(p.experienceMonths)),
       if ((p.currentTitle ?? '').isNotEmpty)
         (
           Icons.business_center_outlined,
@@ -193,15 +201,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         (Icons.location_on_outlined, 'City', p.currentCityName!),
       if (p.lookingFor != null)
         (Icons.search_rounded, 'Looking for', _pretty(p.lookingFor)),
-      if (p.expectedSalaryMinPaise != null)
+      // Uses the app's own paise→LPA formatter. This row used to divide paise by
+      // 100 by hand and print "₹1200000 / year", and it ignored the maximum the
+      // candidate had entered in the editor.
+      if (p.expectedSalaryMinPaise != null || p.expectedSalaryMaxPaise != null)
         (
           Icons.currency_rupee_rounded,
           'Expected salary',
-          '₹${(p.expectedSalaryMinPaise! ~/ 100)} / year',
+          formatSalaryLpa(p.expectedSalaryMinPaise, p.expectedSalaryMaxPaise) ??
+              'Not set',
         ),
       (Icons.bolt_outlined, 'Skills', '${p.skillCount} added'),
       (Icons.school_outlined, 'Education', '${p.educationCount} added'),
-      (Icons.article_outlined, 'Experience', '${p.experienceCount} added'),
+      (Icons.article_outlined, 'Work history', '${p.experienceCount} added'),
     ];
 
     return RefreshIndicator(
@@ -232,24 +244,59 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       style: text.bodyMedium?.copyWith(color: cq.fgMuted),
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    Row(
-                      children: [
-                        Icon(
-                          p.emailVerified
-                              ? Icons.verified_rounded
-                              : Icons.error_outline_rounded,
-                          size: 15,
-                          color: p.emailVerified ? cq.success : cq.warning,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          p.emailVerified ? 'Email verified' : 'Email not verified',
-                          style: text.labelSmall?.copyWith(
-                            color: p.emailVerified ? cq.success : cq.warning,
+                    // Unverified is a state the user can ACT on, so the badge
+                    // is a button in that case. Before, it stated the problem
+                    // and offered nothing — and an unverified address blocks
+                    // applying entirely.
+                    if (p.emailVerified)
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.verified_rounded,
+                            size: 15,
+                            color: cq.success,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Email verified',
+                            style: text.labelSmall?.copyWith(color: cq.success),
+                          ),
+                        ],
+                      )
+                    else
+                      InkWell(
+                        onTap: () => _verifyEmail(p.email),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.error_outline_rounded,
+                                size: 15,
+                                color: cq.warning,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Email not verified',
+                                style: text.labelSmall?.copyWith(
+                                  color: cq.warning,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Verify',
+                                style: text.labelSmall?.copyWith(
+                                  color: cq.accent,
+                                  fontWeight: FontWeight.w700,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: cq.accent,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
                   ],
                 ),
               ),
@@ -460,28 +507,3 @@ class _InfoTile extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

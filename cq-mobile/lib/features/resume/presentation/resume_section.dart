@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/format/job_format.dart';
+import '../../../core/state/data_freshness.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../data/resume_models.dart';
@@ -41,7 +42,14 @@ Future<ResumeView?> pickAndUploadResume(BuildContext context, WidgetRef ref) asy
   }
   try {
     final repo = await ref.read(resumeRepositoryProvider.future);
-    return await repo.upload(path, f.name, size: f.size);
+    final uploaded = await repo.upload(path, f.name, size: f.size);
+    // Every resume upload in the app funnels through here: the profile card,
+    // the apply flow's "add a resume" prompt, and the onboarding step. Without
+    // this, a candidate who uploaded a CV mid-apply went back to a Profile tab
+    // still telling them to add one — the tab is mounted for the session and
+    // had loaded once at launch.
+    ref.bumpData(CqData.resume);
+    return uploaded;
   } catch (e) {
     err(e is ResumeException ? e.message : 'Upload failed. Please try again.');
     return null;
@@ -62,6 +70,12 @@ class _ResumeCardState extends ConsumerState<ResumeCard> {
   bool _loading = true;
   bool _busy = false;
 
+  /// Distinguishes "you have no resume" from "we could not check". Swallowing
+  /// the failure told a candidate who HAS a resume that they have none and
+  /// should upload one — and an application needs a resume, so the wrong
+  /// message here pushes them into re-uploading a file they already have.
+  String? _error;
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +83,7 @@ class _ResumeCardState extends ConsumerState<ResumeCard> {
   }
 
   Future<void> _load() async {
+    setState(() => _error = null);
     try {
       final repo = await ref.read(resumeRepositoryProvider.future);
       final r = await repo.getActive();
@@ -77,9 +92,14 @@ class _ResumeCardState extends ConsumerState<ResumeCard> {
         _resume = r;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _error = e is ResumeException
+            ? e.message
+            : 'Could not check your resume.';
+        _loading = false;
+      });
     }
   }
 
@@ -120,6 +140,7 @@ class _ResumeCardState extends ConsumerState<ResumeCard> {
       final repo = await ref.read(resumeRepositoryProvider.future);
       await repo.remove();
       if (!mounted) return;
+      ref.bumpData(CqData.resume);
       setState(() {
         _resume = null;
         _busy = false;
@@ -135,6 +156,9 @@ class _ResumeCardState extends ConsumerState<ResumeCard> {
 
   @override
   Widget build(BuildContext context) {
+    // More than one of these can be alive at once — the profile card and the
+    // onboarding step — and either can be behind an upload made elsewhere.
+    ref.onDataChanged(CqData.resume, _load);
     final cq = context.cq;
     final text = Theme.of(context).textTheme;
     return Container(
@@ -205,9 +229,14 @@ class _ResumeCardState extends ConsumerState<ResumeCard> {
               ),
               const SizedBox(height: 2),
               Text(
-                r.isScanning
-                    ? '${r.sizeLabel} · Checking…'
-                    : '${r.sizeLabel} · Added ${formatDate(r.uploadedAt)}',
+                switch ((r.isScanning, r.uploadedAt)) {
+                  (true, _) => '${r.sizeLabel} · Checking…',
+                  (false, final at?) =>
+                    '${r.sizeLabel} · Added ${formatDate(at)}',
+                  // No date from the server: show the size alone rather than
+                  // "Added today", which is what the old fallback rendered.
+                  _ => r.sizeLabel,
+                },
                 style: text.bodySmall?.copyWith(color: cq.fgMuted),
               ),
             ],
@@ -232,6 +261,26 @@ class _ResumeCardState extends ConsumerState<ResumeCard> {
   Widget _emptyPrompt() {
     final cq = context.cq;
     final text = Theme.of(context).textTheme;
+    // Could not reach the server: say so and offer a retry, rather than
+    // asserting the candidate has no resume.
+    if (_error != null) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.cloud_off_rounded, size: 18, color: cq.fgSubtle),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              _error!,
+              style: text.bodyMedium?.copyWith(color: cq.fgMuted),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          TextButton(onPressed: _load, child: const Text('Try again')),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

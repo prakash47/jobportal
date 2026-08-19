@@ -9,12 +9,16 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../data/application.dart';
 import '../data/applications_repository.dart';
+import '../../../core/state/data_freshness.dart';
+import '../../../shared/widgets/cq_states.dart';
+import '../../../shared/widgets/cq_buttons.dart';
+import '../../shell/application/shell_tab.dart';
 
 const _months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
-String _fmtDate(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
+String? _fmtDate(DateTime? d) => d == null ? null : '${d.day} ${_months[d.month - 1]} ${d.year}';
 
 const _statuses = [
   'ALL', 'APPLIED', 'IN_REVIEW', 'SHORTLISTED', 'INTERVIEWED',
@@ -114,6 +118,7 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
 
     try {
       await (await _repository()).withdraw(app.id);
+      ref.bumpData(CqData.applications);
       if (!mounted) return;
       // Reload so counts + filtered list stay correct after the transition.
       await _load(page: _currentPage);
@@ -137,9 +142,17 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Same reason as the Saved tab: applying happens on the job detail screen,
+    // which this tab would otherwise never hear about.
+    ref.onDataChanged(
+      CqData.applications,
+      () => _load(status: _status, page: _currentPage),
+    );
     return Scaffold(
       drawer: const AppDrawer(),
-      appBar: AppBar(title: const Text('Applications')),
+      // Matches the bottom-nav label; the tab said Applied and the screen
+      // said Applications, which read as two different places.
+      appBar: AppBar(title: const Text('Applied jobs')),
       body: SafeArea(
         child: Column(
           children: [
@@ -160,7 +173,7 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
       return const Center(child: CqLoader(message: 'Loading applications…'));
     }
     if (_error != null) {
-      return _ErrorView(
+      return CqErrorView(
         message: _error!,
         onRetry: () => _load(page: _currentPage),
       );
@@ -177,7 +190,7 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
         separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
         itemBuilder: (context, i) {
           if (i == page.hits.length) {
-            return _Pager(page: page, onGo: (p) => _load(page: p));
+            return CqPager(page: page.page, totalPages: page.totalPages, onGo: (p) => _load(page: p));
           }
           final a = page.hits[i];
           return _AppCard(
@@ -318,11 +331,23 @@ class _AppCard extends StatelessWidget {
               const SizedBox(height: AppSpacing.md),
               _StatusBar(app: app),
               const SizedBox(height: AppSpacing.md),
+              // Every fixed-width child plus a Spacer overflowed once the system
+              // font was scaled up — the date alone can outgrow the row. The
+              // date now yields (Flexible + ellipsis) instead of pushing.
               Row(
                 children: [
-                  Text(
-                    'Applied ${_fmtDate(app.appliedAt)}',
-                    style: text.bodySmall?.copyWith(color: cq.fgSubtle),
+                  Flexible(
+                    child: Text(
+                      // Omitted rather than dated 1 Jan 2000, which is what
+                      // the old sentinel rendered as.
+                      switch (_fmtDate(app.appliedAt)) {
+                        final d? => 'Applied $d',
+                        _ => '',
+                      },
+                      style: text.bodySmall?.copyWith(color: cq.fgSubtle),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   const Spacer(),
                   Icon(Icons.timeline_rounded, size: 15, color: cq.fgSubtle),
@@ -520,7 +545,10 @@ class _TimelineRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${_fmtDate(event.at)}$by',
+                    switch (_fmtDate(event.at)) {
+                      final d? => '$d$by',
+                      _ => by.trim(),
+                    },
                     style: text.bodySmall?.copyWith(color: cq.fgMuted),
                   ),
                 ],
@@ -533,48 +561,13 @@ class _TimelineRow extends StatelessWidget {
   }
 }
 
-class _Pager extends StatelessWidget {
-  const _Pager({required this.page, required this.onGo});
-  final ApplicationsPage page;
-  final void Function(int) onGo;
 
-  @override
-  Widget build(BuildContext context) {
-    if (page.totalPages <= 1) return const SizedBox.shrink();
-    final cq = context.cq;
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.sm),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            onPressed: page.page > 1 ? () => onGo(page.page - 1) : null,
-            icon: const Icon(Icons.chevron_left_rounded),
-          ),
-          Text(
-            'Page ${page.page} of ${page.totalPages}',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: cq.fgMuted),
-          ),
-          IconButton(
-            onPressed: page.page < page.totalPages
-                ? () => onGo(page.page + 1)
-                : null,
-            icon: const Icon(Icons.chevron_right_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Empty extends StatelessWidget {
+class _Empty extends ConsumerWidget {
   const _Empty({required this.filtered});
   final bool filtered;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cq = context.cq;
     final text = Theme.of(context).textTheme;
     return Center(
@@ -598,6 +591,17 @@ class _Empty extends StatelessWidget {
               textAlign: TextAlign.center,
               style: text.bodyMedium?.copyWith(color: cq.fgMuted),
             ),
+            // Only when there is genuinely nothing yet — with a filter on, the
+            // way out is the filter row directly above, not another screen.
+            if (!filtered) ...[
+              const SizedBox(height: AppSpacing.xl),
+              CqPrimaryButton(
+                label: 'Find jobs to apply',
+                icon: Icons.search_rounded,
+                onPressed: () =>
+                    ref.read(shellTabProvider.notifier).select(ShellTab.jobs),
+              ),
+            ],
           ],
         ),
       ),
@@ -605,28 +609,3 @@ class _Empty extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

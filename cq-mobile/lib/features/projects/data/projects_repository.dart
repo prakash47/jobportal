@@ -58,10 +58,36 @@ class ProjectsRepository {
     }
   }
 
-  /// Edit = delete the old row then create a fresh one (no PATCH on the API).
-  Future<ProjectItem> replace(int id, Map<String, dynamic> body) async {
-    await remove(id);
-    return create(body);
+  /// Edit = delete the old row then create a fresh one, because the API has no
+  /// PATCH for this resource.
+  ///
+  /// The naive form of that -- `await remove(id); return create(body);` -- loses
+  /// the row outright whenever the create fails: the candidate opened an editor
+  /// to change one field, hit a validation error or a dropped connection, and
+  /// the entry they already had is simply gone. Reordering to create-first would avoid the window here, but the two editors are
+/// kept on one pattern because languages genuinely cannot do that -- see
+/// LanguagesRepository.replace.
+  ///
+  /// So the original is put back before the failure is surfaced. Restoring uses
+  /// a body the server accepted moments ago, and the row it occupied is free
+  /// again, so the restore itself is about as reliable as a call can be. If even
+  /// that fails, say so plainly rather than letting the row vanish silently.
+  Future<ProjectItem> replace(ProjectItem original, Map<String, dynamic> body) async {
+    await remove(original.id);
+    try {
+      return await create(body);
+    } catch (_) {
+      try {
+        await create(original.toCreateBody());
+      } catch (_) {
+        throw ProjectsException(
+          'Your changes could not be saved, and the original could not be '
+          'restored. Please add it again.',
+        );
+      }
+      // Original is back on the profile; report why the edit itself failed.
+      rethrow;
+    }
   }
 }
 

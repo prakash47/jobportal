@@ -46,8 +46,18 @@ class CatalogsRepository {
     }
   }
 
-  /// Resolve bare ids → labels (`?ids=7,47`). Best-effort: returns what it can.
-  Future<List<CatalogItem>> resolve(CatalogKind kind, List<int> ids) async {
+  /// Resolve bare ids → labels (`?ids=7,47`).
+  ///
+  /// Best-effort by default — a failed lookup returns an empty list, which is
+  /// right for decoration. Pass [throwOnError] where an empty list would be a
+  /// LIE the user then acts on: the profile editor renders "Any location" from
+  /// it and a following save overwrites `preferredCityIds` wholesale, so a
+  /// silent failure there destroys the list it failed to read.
+  Future<List<CatalogItem>> resolve(
+    CatalogKind kind,
+    List<int> ids, {
+    bool throwOnError = false,
+  }) async {
     if (ids.isEmpty) return const [];
     if (AppConfig.useMockData) return CatalogMock.resolve(kind, ids);
     try {
@@ -56,7 +66,8 @@ class CatalogsRepository {
         queryParameters: {'ids': ids.join(',')},
       );
       return CatalogPage.fromJson(res.data ?? const {}).hits;
-    } on DioException {
+    } on DioException catch (e) {
+      if (throwOnError) throw CatalogsException(friendlyDioMessage(e));
       return const [];
     }
   }

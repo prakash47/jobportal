@@ -7,7 +7,7 @@
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
-		<string>Cq Mobile</string>
+		<string>Career Queue</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 		<key>CFBundleInfoDictionaryVersion</key>
 		<string>6.0</string>
 		<key>CFBundleName</key>
-		<string>cq_mobile</string>
+		<string>Career Queue</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>
@@ -53,19 +53,35 @@
 		<string>LaunchScreen</string>
 		<key>UIMainStoryboardFile</key>
 		<string>Main</string>
+		<!-- Portrait only. Every screen in this app was designed and reviewed at
+		     phone width; nothing was laid out for landscape, and the iPad entry
+		     additionally promised a tablet experience that does not exist. Apple
+		     reviews what the app DECLARES, so declaring landscape and iPad
+		     invites a rejection for a layout nobody built. Widen this the day
+		     the layouts exist, not before. -->
 		<key>UISupportedInterfaceOrientations</key>
 		<array>
 			<string>UIInterfaceOrientationPortrait</string>
-			<string>UIInterfaceOrientationLandscapeLeft</string>
-			<string>UIInterfaceOrientationLandscapeRight</string>
 		</array>
-		<key>UISupportedInterfaceOrientations~ipad</key>
-		<array>
-			<string>UIInterfaceOrientationPortrait</string>
-			<string>UIInterfaceOrientationPortraitUpsideDown</string>
-			<string>UIInterfaceOrientationLandscapeLeft</string>
-			<string>UIInterfaceOrientationLandscapeRight</string>
-		</array>
+		<!-- The app never opens the photo library or the media library: a resume
+		     is attached through the Files document picker (FileType.custom).
+		     These strings are here because file_picker's public header imports
+		     <Photos/Photos.h> and <MediaPlayer/MediaPlayer.h> unguarded, so the
+		     binary references those APIs and Apple's upload check (ITMS-90683)
+		     rejects a build that declares no purpose for them. The wording is
+		     written for the reviewer who reads it, and is true. Stripping the
+		     picker's media code via Pod::PICKER_MEDIA=false in a Podfile is the
+		     cleaner fix, but it cannot be verified without a Mac, and it would
+		     not remove these two imports anyway, only the PhotosUI one. -->
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Career Queue does not read your photo library. You attach a resume from Files. This entry is required because the file picker the app bundles links Apple's photo APIs.</string>
+		<key>NSAppleMusicUsageDescription</key>
+		<string>Career Queue does not access your media library. This entry is required because the file picker the app bundles links Apple's media APIs.</string>
+		<!-- The app speaks only HTTPS, which is exempt encryption. Declaring it
+		     here stops every single upload stalling on the export-compliance
+		     questionnaire. -->
+		<key>ITSAppUsesNonExemptEncryption</key>
+		<false/>
 		<key>UIStatusBarHidden</key>
 		<false/>
 	</dict>

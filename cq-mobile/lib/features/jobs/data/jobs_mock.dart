@@ -405,7 +405,8 @@ abstract final class JobsMock {
           .toList();
     }
     if (sort == 'recent') {
-      list.sort((a, b) => b.postedAt.compareTo(a.postedAt));
+      final epoch = DateTime.fromMillisecondsSinceEpoch(0);
+      list.sort((a, b) => (b.postedAt ?? epoch).compareTo(a.postedAt ?? epoch));
     } else if (sort == 'salary_desc') {
       list.sort((a, b) => (b.salaryMax ?? 0).compareTo(a.salaryMax ?? 0));
     }

@@ -17,6 +17,8 @@ import '../../dashboard/data/seeker_snapshot.dart';
 import '../../shell/application/shell_tab.dart';
 import '../data/home_models.dart';
 import '../data/home_repository.dart';
+import '../../../core/state/data_freshness.dart';
+import '../../../shared/widgets/cq_states.dart';
 
 /// Home tab — the seeker's landing feed (`GET /home`): a search entry, headline
 /// counts, latest jobs, browse facets, top companies, and recent advice. Every
@@ -56,8 +58,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       await _loadSnapshot();
     } catch (e) {
       if (!mounted) return;
+      final message = e is HomeException ? e.message : 'Could not load your feed.';
+      // A refresh that fails must not take the feed away. _error paints a
+      // full-screen CqErrorView, so a pull-to-refresh in a tunnel used to
+      // replace a perfectly good Home with an error page — the user lost what
+      // they already had by asking for something newer.
+      if (_feed != null) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(message)));
+        return;
+      }
       setState(() {
-        _error = e is HomeException ? e.message : 'Could not load your feed.';
+        _error = message;
         _loading = false;
       });
     }
@@ -77,13 +91,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  void _search(String query) => context.push(AppRoutes.searchPath(query));
+  /// Open search for a home facet chip.
+  ///
+  /// A role is a keyword ("Designer" is genuinely in job titles); a city,
+  /// skill or industry is a filter. Sending a city as a keyword returned zero
+  /// results under a chip that advertised hundreds.
+  void _openTaxo(HomeTaxo taxo) {
+    if (taxo.isRole || taxo.slug.isEmpty) {
+      context.push(AppRoutes.searchPath(taxo.query));
+      return;
+    }
+    context.push(
+      AppRoutes.searchFacetPath(
+        kind: taxo.kind.name,
+        slug: taxo.slug,
+        label: taxo.label,
+      ),
+    );
+  }
 
   void _goToTab(ShellTab tab) =>
       ref.read(shellTabProvider.notifier).select(tab);
 
   @override
   Widget build(BuildContext context) {
+    // Home shows Applied / Saved / Alerts counts, so all three make it stale.
+    // Only the snapshot reloads — the feed itself has not changed.
+    for (final domain in const [
+      CqData.savedJobs,
+      CqData.applications,
+      CqData.alerts,
+    ]) {
+      ref.onDataChanged(domain, _loadSnapshot);
+    }
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
@@ -106,7 +146,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return const Center(child: CqLoader(message: 'Loading your feed…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _load);
+      return CqErrorView(message: _error!, onRetry: _load);
     }
     final f = _feed!;
     final snapshot = _snapshot;
@@ -202,11 +242,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
           // ── Browse facets ──
           if (f.roles.isNotEmpty)
-            _ChipsSection(title: 'Browse by role', items: f.roles, onTap: _search),
+            _ChipsSection(title: 'Browse by role', items: f.roles, onTap: _openTaxo),
           if (f.cities.isNotEmpty)
-            _ChipsSection(title: 'Popular cities', items: f.cities, onTap: _search),
+            _ChipsSection(title: 'Popular cities', items: f.cities, onTap: _openTaxo),
           if (f.topSkills.isNotEmpty)
-            _ChipsSection(title: 'Top skills', items: f.topSkills, onTap: _search),
+            _ChipsSection(title: 'Top skills', items: f.topSkills, onTap: _openTaxo),
 
           // ── Top companies ──
           if (f.featuredCompanies.isNotEmpty) ...[
@@ -461,7 +501,7 @@ class _ChipsSection extends StatelessWidget {
   });
   final String title;
   final List<HomeTaxo> items;
-  final void Function(String query) onTap;
+  final void Function(HomeTaxo taxo) onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -483,7 +523,7 @@ class _ChipsSection extends StatelessWidget {
             children: [
               for (final t in items)
                 GestureDetector(
-                  onTap: () => onTap(t.query),
+                  onTap: () => onTap(t),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.md,
@@ -699,28 +739,3 @@ class _HomeArticleCard extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

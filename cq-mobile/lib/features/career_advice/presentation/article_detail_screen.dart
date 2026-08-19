@@ -11,6 +11,7 @@ import '../../../shared/widgets/cq_loader.dart';
 import '../../../shared/widgets/simple_markdown.dart';
 import '../data/article_models.dart';
 import '../data/articles_repository.dart';
+import '../../../shared/widgets/cq_states.dart';
 
 /// A single career-advice article (`GET /career-advice/:slug`) — title, byline,
 /// markdown body, and an FAQ section.
@@ -75,7 +76,7 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
       return const Center(child: CqLoader(message: 'Loading article…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: _load);
+      return CqErrorView(message: _error!, onRetry: _load);
     }
     final a = _article!;
     final cq = context.cq;
@@ -287,28 +288,3 @@ class _FaqTile extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

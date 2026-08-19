@@ -13,6 +13,11 @@ class LanguageItem {
   final String proficiency;
   final DateTime createdAt;
 
+  /// The POST body that would recreate this row exactly as it stands. See
+  /// ProjectItem.toCreateBody for why this exists.
+  Map<String, dynamic> toCreateBody() =>
+      <String, dynamic>{'name': name, 'proficiency': proficiency};
+
   String get proficiencyLabel => proficiencyLabelOf(proficiency);
 
   factory LanguageItem.fromJson(Map<String, dynamic> j) => LanguageItem(

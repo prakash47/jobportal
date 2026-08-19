@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_spacing.dart';
 import '../../data/onboarding_repository.dart';
+import '../widgets/onboarding_widgets.dart';
 
 /// Step 2 — education: the most recent degree + Class 12. Both are free-text +
 /// year pickers (no catalogue needed). Each section is created on first save and
@@ -134,32 +135,34 @@ class EducationStepState extends State<EducationStep> {
             context,
           ).textTheme.titleMedium?.copyWith(color: cq.fg),
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.lg),
+        const OnboardingLabel('College / university'),
         TextField(
           controller: _degInstitute,
           textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(
-            hintText: 'College / university',
-            prefixIcon: Icon(Icons.school_outlined),
+            hintText: 'e.g. Delhi University',
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.xl2),
+        const OnboardingLabel('Degree'),
         TextField(
           controller: _degName,
           textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(
-            hintText: 'Degree (e.g. B.Tech, B.Com)',
+            hintText: 'e.g. B.Tech',
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.xl2),
+        const OnboardingLabel('Field of study', optional: true),
         TextField(
           controller: _degField,
           textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(
-            hintText: 'Field of study (optional)',
+            hintText: 'e.g. Computer Science',
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.xl2),
         Row(
           children: [
             Expanded(
@@ -188,11 +191,12 @@ class EducationStepState extends State<EducationStep> {
           controlAffinity: ListTileControlAffinity.leading,
           title: const Text('Currently pursuing'),
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.xl2),
+        const OnboardingLabel('Grade / CGPA', optional: true),
         TextField(
           controller: _degGrade,
           decoration: const InputDecoration(
-            hintText: 'Grade / CGPA (optional)',
+            hintText: 'e.g. 8.4 CGPA',
           ),
         ),
 
@@ -206,13 +210,13 @@ class EducationStepState extends State<EducationStep> {
             context,
           ).textTheme.titleMedium?.copyWith(color: cq.fg),
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.lg),
+        const OnboardingLabel('School name'),
         TextField(
           controller: _c12Institute,
           textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(
-            hintText: 'School name',
-            prefixIcon: Icon(Icons.school_outlined),
+            hintText: 'e.g. Kendriya Vidyalaya',
           ),
         ),
         const SizedBox(height: AppSpacing.md),

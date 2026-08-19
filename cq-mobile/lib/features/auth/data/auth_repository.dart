@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/network/api_error.dart';
+
 import 'auth_user.dart';
 
 /// A user-friendly auth failure. [message] is safe to show directly in the UI.
@@ -112,7 +114,14 @@ class AuthRepository {
       return ticket;
     } on DioException catch (e) {
       if (e.response?.statusCode == 400) {
-        throw const AuthException('That code is incorrect or has expired.');
+        // The server counts down — 'That code is incorrect. 3 attempts left.'
+        // — and once the five are spent says 'Too many incorrect attempts.
+        // Request a new code.', which is the ONLY signal that the code in the
+        // user's hand is now permanently dead. Flattening both into one line
+        // left them retyping a code that could never work.
+        throw AuthException(
+          serverMessage(e) ?? 'That code is incorrect or has expired.',
+        );
       }
       throw AuthException(
         _messageFor(e, fallback: 'Could not verify the code. Please try again.'),
@@ -134,7 +143,12 @@ class AuthRepository {
       return _userFrom(res.data);
     } on DioException catch (e) {
       if (e.response?.statusCode == 400) {
-        throw const AuthException('That reset session expired. Please start again.');
+        // Covers both an expired ticket and a rejected password. Blaming the
+        // ticket for a password the server refused sent the user back to step
+        // one for no reason.
+        throw AuthException(
+          serverMessage(e) ?? 'That reset session expired. Please start again.',
+        );
       }
       throw AuthException(
         _messageFor(e, fallback: 'Could not reset your password. Please try again.'),
@@ -144,13 +158,56 @@ class AuthRepository {
 
   /// Returns the signed-in user, or `null` when there's no valid session
   /// (401 / offline). Used on app launch to restore the session.
-  Future<AuthUser?> currentUser() async {
+  /// Re-send the address-verification email to the signed-in user.
+  ///
+  /// `POST /auth/resend-verification` — JWT-guarded, 204, no body. The server
+  /// throttles this to **one request per minute**, which is a real state the UI
+  /// has to explain rather than swallow, and it refuses outright when email
+  /// sending is disabled on the environment.
+  Future<void> resendVerification() async {
+    try {
+      await _dio.post<void>('/auth/resend-verification');
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 429) {
+        throw const AuthException(
+          'An email was just sent. Please wait a minute before asking again.',
+        );
+      }
+      if (status == 503) {
+        throw const AuthException(
+          'Sending email is unavailable right now. Please try again later.',
+        );
+      }
+      throw AuthException(
+        _messageFor(e, fallback: 'Could not send the email. Please try again.'),
+      );
+    }
+  }
+
+  /// Ask the server who we are, KEEPING the reason it failed.
+  ///
+  /// This used to be `Future<AuthUser?> currentUser()` which caught every
+  /// `DioException` and returned null. That collapsed two completely different
+  /// situations — "you are signed out" and "I could not reach the server" — into
+  /// one value, and the caller had no choice but to treat both as signed out. A
+  /// user launching the app in a lift was logged out of a valid 30-day session.
+  Future<SessionProbe> probeSession() async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/auth/me');
       final user = res.data?['user'];
-      return user is Map<String, dynamic> ? AuthUser.fromJson(user) : null;
-    } on DioException {
-      return null;
+      if (user is Map<String, dynamic>) {
+        return SessionActive(AuthUser.fromJson(user));
+      }
+      // 200 with no user is the server telling us there is no session.
+      return const SessionNone();
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 401 || status == 403) return const SessionNone();
+      return const SessionUnknown();
+    } catch (_) {
+      // A malformed body is not evidence about the session either way.
+      return const SessionUnknown();
     }
   }
 
@@ -184,11 +241,69 @@ class AuthRepository {
       };
     }
     return switch (e.response!.statusCode) {
+      // 401 and 409 keep the app's own wording on purpose: the server answers
+      // 'Invalid email or password' and 'Email already registered', which say
+      // the same thing less kindly. Everything else defers to the server,
+      // which knows things this switch cannot.
       401 => 'Incorrect email or password.',
       409 => 'An account with this email already exists.',
-      400 => 'Please check your details and try again.',
-      429 => 'Too many attempts. Please wait a minute and try again.',
+      // A 400 here is a DTO rejection — 'Password must be 8+ chars and include
+      // at least one digit and one special character', or a Zod issue naming
+      // the field. Answering 'check your details' instead left the candidate
+      // guessing which of six inputs was wrong, on the screen where they have
+      // the least context.
+      400 => serverMessage(e) ?? 'Please check your details and try again.',
+      429 => _tooManyAttempts(e),
       _ => fallback,
     };
   }
+
+  /// The login lock-out runs an HOUR, not a minute.
+  ///
+  /// PerEmailThrottleGuard blocks an address for 3600s after 10 failures and
+  /// sets Retry-After to the lock's real remaining TTL — its own comment says
+  /// the header exists so clients stop guessing. Answering every 429 with
+  /// 'wait a minute' sent a locked-out candidate into a retry loop that could
+  /// not succeed, and each retry re-trips the guard.
+  String _tooManyAttempts(DioException e) {
+    final seconds = int.tryParse(e.response?.headers.value('retry-after') ?? '');
+    if (seconds == null || seconds <= 0) {
+      return serverMessage(e) ?? 'Too many attempts. Please try again later.';
+    }
+    return 'Too many attempts. Try again in ${_humanWait(seconds)}.';
+  }
+
+  /// Seconds → something a person would say. Rounded deliberately: the exact
+  /// remaining TTL is noise, and a candidate only needs to know whether this is
+  /// a coffee or a tomorrow.
+  String _humanWait(int seconds) {
+    if (seconds < 90) return 'a minute';
+    final minutes = (seconds / 60).round();
+    if (minutes < 60) return '$minutes minutes';
+    final hours = (minutes / 60).round();
+    return hours == 1 ? 'an hour' : '$hours hours';
+  }
+}
+
+/// The three possible answers to "is there a session?" — the middle one is the
+/// whole reason this type exists.
+sealed class SessionProbe {
+  const SessionProbe();
+}
+
+/// The server confirmed a live session.
+class SessionActive extends SessionProbe {
+  const SessionActive(this.user);
+  final AuthUser user;
+}
+
+/// The server explicitly said there is no session (401/403). Sign out.
+class SessionNone extends SessionProbe {
+  const SessionNone();
+}
+
+/// We could not reach the server. The session may be perfectly valid — do NOT
+/// sign anyone out on this.
+class SessionUnknown extends SessionProbe {
+  const SessionUnknown();
 }

@@ -10,6 +10,8 @@ import '../../../shared/widgets/article_cover_image.dart';
 import '../../../shared/widgets/cq_loader.dart';
 import '../data/article_models.dart';
 import '../data/articles_repository.dart';
+import '../../../shared/widgets/cq_states.dart';
+import '../../../shared/widgets/cq_chips.dart';
 
 /// Career advice list (`GET /career-advice`) with a tag filter. Reached from the
 /// Home feed; each card taps through to the full article.
@@ -139,15 +141,15 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
             ),
             if (_allTags.isNotEmpty)
               SizedBox(
-                height: 48,
+                height: 52,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                   children: [
-                    _TagChip(label: 'All', selected: _tag == null, onTap: () => _selectTag(null)),
+                    CqChip(label: 'All', selected: _tag == null, onTap: () => _selectTag(null)),
                     for (final t in _allTags) ...[
                       const SizedBox(width: AppSpacing.sm),
-                      _TagChip(
+                      CqChip(
                         label: _pretty(t),
                         selected: _tag == t,
                         onTap: () => _selectTag(t),
@@ -169,7 +171,7 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
       return const Center(child: CqLoader(message: 'Loading articles…'));
     }
     if (_error != null) {
-      return _ErrorView(message: _error!, onRetry: () => _load(_currentPage));
+      return CqErrorView(message: _error!, onRetry: () => _load(_currentPage));
     }
     final page = _page!;
     if (page.hits.isEmpty) {
@@ -188,7 +190,7 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
         itemCount: page.hits.length + 1,
         separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
         itemBuilder: (context, i) {
-          if (i == page.hits.length) return _Pager(page: page, onGo: _load);
+          if (i == page.hits.length) return CqPager(page: page.page, totalPages: page.totalPages, onGo: _load);
           final a = page.hits[i];
           return _ArticleCard(
             article: a,
@@ -274,74 +276,7 @@ class _ArticleCard extends StatelessWidget {
   }
 }
 
-class _TagChip extends StatelessWidget {
-  const _TagChip({required this.label, required this.selected, required this.onTap});
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
 
-  @override
-  Widget build(BuildContext context) {
-    final cq = context.cq;
-    return Center(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
-          decoration: BoxDecoration(
-            color: selected ? cq.accent.withValues(alpha: 0.14) : cq.surfaceMuted,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(
-              color: selected ? cq.accent.withValues(alpha: 0.5) : cq.border,
-            ),
-          ),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: selected ? cq.accent : cq.fgMuted,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Pager extends StatelessWidget {
-  const _Pager({required this.page, required this.onGo});
-  final ArticlesPage page;
-  final void Function(int) onGo;
-
-  @override
-  Widget build(BuildContext context) {
-    if (page.totalPages <= 1) return const SizedBox.shrink();
-    final cq = context.cq;
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.sm),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            onPressed: page.page > 1 ? () => onGo(page.page - 1) : null,
-            icon: const Icon(Icons.chevron_left_rounded),
-          ),
-          Text(
-            'Page ${page.page} of ${page.totalPages}',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cq.fgMuted),
-          ),
-          IconButton(
-            onPressed: page.page < page.totalPages ? () => onGo(page.page + 1) : null,
-            icon: const Icon(Icons.chevron_right_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState({
@@ -379,28 +314,3 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl2),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.cloud_off_rounded, size: 40, color: context.cq.fgSubtle),
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, textAlign: TextAlign.center, style: text.bodyLarge),
-            const SizedBox(height: AppSpacing.lg),
-            OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          ],
-        ),
-      ),
-    );
-  }
-}

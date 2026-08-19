@@ -88,10 +88,21 @@ abstract final class CqTheme {
         ),
       ),
 
-      // Tertiary — text button in the accent color.
+      // Tertiary — text button.
+      //
+      // The colour MUST differ per theme. A single pinned hue was the bug
+      // behind "Skip and Back are invisible in dark mode": #2563EB reads fine
+      // on white but only 3.66:1 on the dark scaffold — below AA, and these are
+      // unstyled text controls with no fill or border to carry them.
+      //
+      // `disabledForegroundColor` is set explicitly too: Flutter's M3 default
+      // drops a disabled label to onSurface @ 38%, so the onboarding Back/Skip
+      // faded almost to nothing for the whole duration of a step save.
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppPalette.blue,
+          foregroundColor:
+              brightness == Brightness.dark ? cq.accent : AppPalette.blue,
+          disabledForegroundColor: cq.fgSubtle,
           textStyle: textTheme.labelLarge,
         ),
       ),

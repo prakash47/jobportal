@@ -36,6 +36,22 @@ abstract final class AppConfig {
     defaultValue: 'http://localhost:3000',
   );
 
+  /// True when a build would ship pointing at a developer's machine.
+  ///
+  /// Both base URLs default to localhost, which is right for development and
+  /// catastrophic in a store build: the app reaches nothing, and every job link
+  /// it shares points at the reviewer's own device. Nothing in the pipeline
+  /// noticed — a release APK built with no --dart-define looked perfectly
+  /// normal until it was installed.
+  static bool get pointsAtLocalhost =>
+      _isLocal(apiBaseUrl) || _isLocal(webBaseUrl);
+
+  static bool _isLocal(String url) =>
+      url.contains('localhost') ||
+      url.contains('127.0.0.1') ||
+      url.contains('10.0.2.2') ||
+      url.startsWith('http://');
+
   /// Fail fast if the server can't be reached / is slow.
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 20);
@@ -58,4 +74,20 @@ abstract final class AppConfig {
   /// when true. Forced on by [demoMode]: an offline demo can't reach the API.
   static const bool useMockData =
       demoMode || bool.fromEnvironment('USE_MOCK_DATA', defaultValue: false);
+
+  /// Whether the alternative sign-in entry points — Google and phone/OTP — are
+  /// offered anywhere in the app.
+  ///
+  /// OFF by default, because none of them completes a sign-in yet: Google needs
+  /// an OAuth client id (which needs the release keystore's SHA-1 first), and
+  /// phone/OTP needs backend endpoints that do not exist. Shipping them visible
+  /// is an App Store guideline 2.1 rejection on sight, and the phone one is the
+  /// worse of the two — it opens a real screen and collects a validated number
+  /// before dead-ending.
+  ///
+  /// The screens themselves are deliberately left in the tree rather than
+  /// deleted; flipping this const brings them all back at once. Enable with
+  /// `--dart-define=AUTH_ALTERNATIVES=true`.
+  static const bool showAuthAlternatives =
+      bool.fromEnvironment('AUTH_ALTERNATIVES', defaultValue: false);
 }

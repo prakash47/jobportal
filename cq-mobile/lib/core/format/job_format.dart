@@ -8,20 +8,58 @@
 String _trimNum(double v) =>
     v % 1 == 0 ? v.toInt().toString() : v.toStringAsFixed(1);
 
+/// Lakhs per annum in one crore.
+const double _lakhsPerCrore = 100;
+
 /// paise → "₹N–M LPA" (or "₹N.N Cr" past a crore). Null when both are null.
+///
+/// Two rules exist because the naive version produced nonsense on real data:
+///
+///  * **Collapse an identical range.** Both ends are rounded to one decimal
+///    BEFORE they are compared. A max only a rounding step above the min used
+///    to render as `₹32–32.0 LPA` — a range whose two ends read the same
+///    number. (Live example: 320000000 / 320305827 paise.)
+///  * **Match the precision of the two ends.** `₹19–19.4 LPA` showed a decimal
+///    on one side and hid it on the other, which reads like a formatting slip.
+///    Either both sides are whole, or both carry one decimal.
 String? formatSalaryLpa(int? minPaise, int? maxPaise) {
   if (minPaise == null && maxPaise == null) return null;
-  String toLpa(int p) {
-    final lakhs = p / 100 / 100000;
-    if (lakhs >= 100) return '${_trimNum(lakhs / 100)} Cr';
-    return _trimNum(lakhs);
-  }
+
+  double lakhs(int paise) => paise / 100 / 100000;
+  bool isCrore(double l) => l >= _lakhsPerCrore;
+  double display(double l) => isCrore(l) ? l / 100 : l;
+  String unit(double l) => isCrore(l) ? 'Cr' : 'LPA';
+  double round1(double v) => (v * 10).round() / 10;
+  String fmt(double v, {required bool oneDecimal}) =>
+      oneDecimal ? v.toStringAsFixed(1) : v.toInt().toString();
 
   if (minPaise != null && maxPaise != null) {
-    return '₹${toLpa(minPaise)}–${toLpa(maxPaise)} LPA';
+    final lo = lakhs(minPaise);
+    final hi = lakhs(maxPaise);
+
+    // A range that straddles a crore cannot share one unit, so each end keeps
+    // its own rather than silently rendering 90 lakhs and 1.2 crore as "90–1.2".
+    if (isCrore(lo) != isCrore(hi)) {
+      final loR = round1(display(lo));
+      final hiR = round1(display(hi));
+      return '₹${_trimNum(loR)} ${unit(lo)}–₹${_trimNum(hiR)} ${unit(hi)}';
+    }
+
+    final loR = round1(display(lo));
+    final hiR = round1(display(hi));
+    if (loR == hiR) return '₹${_trimNum(loR)} ${unit(lo)}';
+
+    final oneDecimal = loR % 1 != 0 || hiR % 1 != 0;
+    return '₹${fmt(loR, oneDecimal: oneDecimal)}'
+        '–${fmt(hiR, oneDecimal: oneDecimal)} ${unit(hi)}';
   }
-  if (minPaise != null) return '₹${toLpa(minPaise)}+ LPA';
-  return 'Up to ₹${toLpa(maxPaise!)} LPA';
+
+  if (minPaise != null) {
+    final lo = lakhs(minPaise);
+    return '₹${_trimNum(round1(display(lo)))}+ ${unit(lo)}';
+  }
+  final hi = lakhs(maxPaise!);
+  return 'Up to ₹${_trimNum(round1(display(hi)))} ${unit(hi)}';
 }
 
 /// Prisma-side experience (years) → "N–M yrs".
@@ -44,7 +82,14 @@ String? formatExperienceMonths(int? minMonths, int? maxMonths) {
 }
 
 /// Compact relative "posted" age: today, 3d ago, 2w ago, 1mo ago, 1y ago.
-String postedAgo(DateTime posted) {
+///
+/// Null in, null out — and every caller drops the line rather than printing a
+/// placeholder. The parsers used to substitute DateTime.now() for a timestamp
+/// the server had not sent, which rendered as "today": a six-month-old listing
+/// presented as fresh. On a job board recency is a decision input, so inventing
+/// it is worse than admitting the gap.
+String? postedAgo(DateTime? posted) {
+  if (posted == null) return null;
   final days = DateTime.now().difference(posted).inDays;
   if (days <= 0) return 'today';
   if (days == 1) return '1d ago';

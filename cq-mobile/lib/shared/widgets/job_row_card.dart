@@ -27,7 +27,7 @@ class JobRowCard extends StatelessWidget {
     final sub = hasCity ? '${job.company.name}  ·  ${job.city}' : job.company.name;
     final meta = [
       ?salary,
-      postedAgo(job.postedAt),
+      ?postedAgo(job.postedAt),
     ].join('  ·  ');
 
     return Material(

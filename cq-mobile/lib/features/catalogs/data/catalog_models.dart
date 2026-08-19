@@ -22,10 +22,28 @@ class CatalogItem {
     category: j['category'] as String?,
   );
 
+  /// Identity is the SLUG, not the id.
+  ///
+  /// Two call sites legitimately hold an item with no real id: an alert stores
+  /// its query as `skillSlugs`/`citySlugs` (never ids) and rebuilds items from
+  /// those, and a Home facet chip arrives through the route with `id: 0`. When
+  /// the picker then loaded the real rows from `/v1/skills` or `/v1/cities`,
+  /// id-equality made every already-chosen entry look unselected — so the user
+  /// tapped to confirm it and got a DUPLICATE, which then saved as
+  /// `citySlugs: ['bengaluru', 'bengaluru']`.
+  ///
+  /// The slug is unique per catalogue and is always the real one, so it is the
+  /// honest key.
   @override
-  bool operator ==(Object other) => other is CatalogItem && other.id == id;
+  bool operator ==(Object other) =>
+      other is CatalogItem &&
+      // Slug when we have one; id otherwise, so a pair of slug-less items can
+      // never collapse into each other.
+      (slug.isNotEmpty || other.slug.isNotEmpty
+          ? other.slug == slug
+          : other.id == id);
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => slug.isNotEmpty ? slug.hashCode : id.hashCode;
 }
 
 class CatalogPage {

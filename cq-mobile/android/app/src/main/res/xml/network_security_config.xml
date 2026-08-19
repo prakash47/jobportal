@@ -1,14 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  DEV: permit plain-HTTP (cleartext) so a *release* build can reach the local
-  API over `adb reverse` (http://localhost:4000) or the emulator
-  (http://10.0.2.2:4000). Android blocks cleartext in release by default, which
-  is why the app couldn't reach the dev server.
+  RELEASE network policy: HTTPS everywhere, with a scoped exception for the
+  loopback addresses only.
 
-  TODO before Play Store release: tighten this to a <domain-config> that permits
-  cleartext ONLY for localhost / 127.0.0.1 / 10.0.2.2 — the production API is
-  served over HTTPS and must never accept cleartext.
+  WHY NOT A GLOBAL PERMIT: this file used to be a bare
+  `<base-config cleartextTrafficPermitted="true" />`, which allowed plain HTTP to
+  EVERY host on the internet. With a 30-day refresh cookie riding on those
+  requests, a release build on a hostile Wi-Fi could be downgraded to HTTP and
+  read. Google Play also flags a global cleartext permit during review, and it
+  contradicts the project's own HTTPS-only baseline.
+
+  WHY LOOPBACK IS STILL ALLOWED: the development workflow builds a RELEASE APK
+  and points it at the local API through `adb reverse tcp:4000` (127.0.0.1) or
+  the emulator host (10.0.2.2). Those addresses are not reachable from the
+  network — traffic never leaves the device or the emulator's host bridge — so
+  permitting cleartext there costs nothing and keeps release builds testable.
+  Play does not object to loopback-scoped exceptions.
+
+  For LAN testing over a real IP (e.g. http://192.168.1.7:4000) use a DEBUG
+  build: android/app/src/debug/res/xml/network_security_config.xml overrides this
+  file for that variant and is permissive.
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true" />
+    <!-- Everything not named below must be HTTPS. -->
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- adb reverse -->
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <!-- Android emulator's alias for the host machine -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
 </network-security-config>

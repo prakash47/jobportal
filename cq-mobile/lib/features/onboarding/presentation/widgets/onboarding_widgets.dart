@@ -177,7 +177,6 @@ class _SkillTagsInputState extends State<SkillTagsInput> {
           onSubmitted: (_) => _add(),
           decoration: InputDecoration(
             hintText: 'e.g. Flutter, Python, Excel',
-            prefixIcon: const Icon(Icons.bolt_outlined),
             suffixIcon: IconButton(
               tooltip: 'Add skill',
               icon: const Icon(Icons.add_rounded),

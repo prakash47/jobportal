@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
+import '../../../../core/format/salary_input.dart';
 
 import '../../../../core/theme/app_spacing.dart';
 import '../../data/candidate_profile.dart';
@@ -7,8 +8,11 @@ import '../../data/onboarding_repository.dart';
 import '../widgets/onboarding_widgets.dart';
 
 /// Step 1 — employment & professional details. Mirrors the website's first step
-/// (work status, looking-for, experience, current job, skills). Industry is
-/// omitted here because it needs a catalogue API the backend doesn't expose.
+/// (work status, looking-for, experience, current job, skills).
+///
+/// Industry is not asked for here. `/v1/industries` DOES exist and the profile
+/// editor already resolves it through CatalogKind.industries — this is an
+/// unfinished step, not a missing endpoint.
 class WorkProfileStep extends StatefulWidget {
   const WorkProfileStep({super.key, required this.initial});
 
@@ -28,7 +32,8 @@ class WorkProfileStepState extends State<WorkProfileStep> {
 
   final _company = TextEditingController();
   final _title = TextEditingController();
-  final _salary = TextEditingController();
+  int? _salaryLpa;
+  int? _loadedSalaryPaise;
   final _city = TextEditingController();
 
   @override
@@ -43,9 +48,8 @@ class WorkProfileStepState extends State<WorkProfileStep> {
     _noticeDays = i.noticePeriodDays;
     _company.text = i.currentCompanyName ?? '';
     _title.text = i.currentTitle ?? '';
-    _salary.text = i.currentSalaryPaise != null
-        ? (i.currentSalaryPaise! ~/ 100).toString()
-        : '';
+    _loadedSalaryPaise = i.currentSalaryPaise;
+    _salaryLpa = lpaFromPaise(i.currentSalaryPaise);
     _city.text = i.currentCityName ?? '';
   }
 
@@ -53,7 +57,6 @@ class WorkProfileStepState extends State<WorkProfileStep> {
   void dispose() {
     _company.dispose();
     _title.dispose();
-    _salary.dispose();
     _city.dispose();
     super.dispose();
   }
@@ -66,14 +69,9 @@ class WorkProfileStepState extends State<WorkProfileStep> {
 
     if (_workStatus == 'EXPERIENCED') {
       body['experienceMonths'] = _expYears * 12 + _expMonths;
-      final salaryText = _salary.text.trim();
-      if (salaryText.isNotEmpty) {
-        final rupees = int.tryParse(salaryText);
-        if (rupees == null || rupees < 0) {
-          return 'Enter your annual salary as a number.';
-        }
-        body['currentSalaryPaise'] = rupees * 100;
-      }
+      final salaryPaise =
+          paiseForLpa(_salaryLpa, unchangedFrom: _loadedSalaryPaise);
+      if (salaryPaise != null) body['currentSalaryPaise'] = salaryPaise;
       if (_company.text.trim().isNotEmpty) {
         body['currentCompanyName'] = _company.text.trim();
       }
@@ -162,7 +160,6 @@ class WorkProfileStepState extends State<WorkProfileStep> {
             textCapitalization: TextCapitalization.words,
             decoration: const InputDecoration(
               hintText: 'Company name',
-              prefixIcon: Icon(Icons.business_outlined),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -172,19 +169,25 @@ class WorkProfileStepState extends State<WorkProfileStep> {
             textCapitalization: TextCapitalization.words,
             decoration: const InputDecoration(
               hintText: 'e.g. Software Engineer',
-              prefixIcon: Icon(Icons.badge_outlined),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
-          const OnboardingLabel('Current annual salary (₹)', optional: true),
-          TextField(
-            controller: _salary,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(
-              hintText: 'e.g. 600000',
-              prefixIcon: Icon(Icons.currency_rupee_rounded),
-            ),
+          // Lakhs per annum, like every other salary in the app. As rupees
+          // this was the one field with no editor screen to correct it later,
+          // so a candidate who typed 12 meaning 12 LPA was stuck with a
+          // recorded current salary of twelve rupees.
+          const OnboardingLabel('Current salary (LPA)', optional: true),
+          DropdownButtonFormField<int?>(
+            initialValue: _salaryLpa,
+            isExpanded: true,
+            decoration: const InputDecoration(hintText: 'Not set'),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Not set')),
+              for (final l in <int>{?_salaryLpa, ...salaryLpaOptions}.toList()
+                ..sort())
+                DropdownMenuItem(value: l, child: Text('₹$l LPA')),
+            ],
+            onChanged: (v) => setState(() => _salaryLpa = v),
           ),
           const SizedBox(height: AppSpacing.lg),
           const OnboardingLabel('Notice period', optional: true),
@@ -209,7 +212,6 @@ class WorkProfileStepState extends State<WorkProfileStep> {
           textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(
             hintText: 'e.g. Bengaluru',
-            prefixIcon: Icon(Icons.location_on_outlined),
           ),
         ),
 

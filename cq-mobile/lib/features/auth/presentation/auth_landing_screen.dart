@@ -103,7 +103,7 @@ class _Hero extends StatelessWidget {
                                 decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
                                   gradient: RadialGradient(
-                                    colors: [Color(0x5924A0DB), Color(0x0024A0DB)],
+                                    colors: [Color(0x5922A0DA), Color(0x0022A0DA)],
                                     stops: [0.0, 0.72],
                                   ),
                                 ),
@@ -226,25 +226,29 @@ class _AuthSheet extends StatelessWidget {
                     showArrow: true,
                     onPressed: () => context.push(AppRoutes.login),
                   ),
-                  const SizedBox(height: AppSpacing.lg),
-                  const OrDivider(),
-                  const SizedBox(height: AppSpacing.lg),
-
-                  CqProviderButton(
-                    icon: googleGIcon(),
-                    label: 'Continue with Google',
-                    onTap: () => showComingSoon(context, 'Google sign-in'),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  CqProviderButton(
-                    icon: Icon(
-                      Icons.smartphone_rounded,
-                      size: 20,
-                      color: cq.fg,
+                  // Hidden until they actually sign anyone in — see
+                  // AppConfig.showAuthAlternatives. The divider goes with them,
+                  // or it separates the email button from nothing.
+                  if (AppConfig.showAuthAlternatives) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    const OrDivider(),
+                    const SizedBox(height: AppSpacing.lg),
+                    CqProviderButton(
+                      icon: googleGIcon(),
+                      label: 'Continue with Google',
+                      onTap: () => showComingSoon(context, 'Google sign-in'),
                     ),
-                    label: 'Continue with Phone',
-                    onTap: () => context.push(AppRoutes.phoneContinue),
-                  ),
+                    const SizedBox(height: AppSpacing.md),
+                    CqProviderButton(
+                      icon: Icon(
+                        Icons.smartphone_rounded,
+                        size: 20,
+                        color: cq.fg,
+                      ),
+                      label: 'Continue with Phone',
+                      onTap: () => context.push(AppRoutes.phoneContinue),
+                    ),
+                  ],
 
                   const SizedBox(height: AppSpacing.xl),
                   Text(
