@@ -234,7 +234,7 @@ describe('AdminBroadcastsService', () => {
         emailEnabled: true,
         inAppEnabled: false,
       });
-      const data = m.broadcast.update.mock.calls[0]?.[0]?.data as Record<string, unknown>;
+      const data = m.broadcast.updateMany.mock.calls[0]?.[0]?.data as Record<string, unknown>;
       expect(data.testSentAt).toBeNull();
     });
 
@@ -248,7 +248,7 @@ describe('AdminBroadcastsService', () => {
         emailEnabled: true,
         inAppEnabled: false,
       });
-      const data = m.broadcast.update.mock.calls[0]?.[0]?.data as Record<string, unknown>;
+      const data = m.broadcast.updateMany.mock.calls[0]?.[0]?.data as Record<string, unknown>;
       // Absent, not undefined: exactOptionalPropertyTypes makes an explicit
       // undefined a type error, and Prisma reads a MISSING key as "leave alone".
       // hasOwnProperty is the only assertion that tells the fix from the bug,
@@ -268,8 +268,44 @@ describe('AdminBroadcastsService', () => {
         emailEnabled: true,
         inAppEnabled: false,
       });
-      const data = m.broadcast.update.mock.calls[0]?.[0]?.data as Record<string, unknown>;
+      const data = m.broadcast.updateMany.mock.calls[0]?.[0]?.data as Record<string, unknown>;
       expect(data.testSentAt).toBeNull();
+    });
+
+    it('writes with a CONDITIONAL claim, not an unguarded update by id', async () => {
+      // The status check reads one row and the write happens a moment later. An
+      // unconditional `update({ where: { id } })` would land an edit on a
+      // broadcast claimed for dispatch in between — rewriting the segment and
+      // body of a send already fanning out, with the worker picking up the new
+      // values for every recipient it had not yet reached.
+      m.broadcast.findUnique.mockResolvedValue(draft());
+      await service.update(7, {
+        subject: 'x',
+        body: 'y',
+        category: 'OPERATIONAL',
+        segment: 'ALL_RECRUITERS',
+        emailEnabled: true,
+        inAppEnabled: false,
+      });
+      expect(m.broadcast.update).not.toHaveBeenCalled();
+      expect(m.broadcast.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 7, status: 'DRAFT' } }),
+      );
+    });
+
+    it('409s when the broadcast was claimed for dispatch between the read and the write', async () => {
+      m.broadcast.findUnique.mockResolvedValue(draft());
+      m.broadcast.updateMany.mockResolvedValue({ count: 0 });
+      await expect(
+        service.update(7, {
+          subject: 'x',
+          body: 'y',
+          category: 'OPERATIONAL',
+          segment: 'ALL_RECRUITERS',
+          emailEnabled: true,
+          inAppEnabled: false,
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('409s an edit to anything that is not a draft', async () => {
@@ -318,7 +354,28 @@ describe('AdminBroadcastsService', () => {
       m.broadcast.findUnique.mockResolvedValue(draft());
       resend.send.mockRejectedValue(new Error('resend down'));
       await expect(service.testSend(1, 7)).rejects.toThrow('resend down');
-      expect(m.broadcast.update).not.toHaveBeenCalled();
+      expect(m.broadcast.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('stamps CONDITIONALLY on the draft not having changed under the send', async () => {
+      // A Resend call takes hundreds of milliseconds. An edit committed inside
+      // that window clears testSentAt, and an unconditional stamp landing after
+      // it would re-arm the send precondition for content nobody ever tested —
+      // precisely the state the rail exists to prevent. updatedAt is the
+      // predicate because Prisma's @updatedAt bumps on every write to the row.
+      const seenAt = new Date('2026-08-19T05:00:00Z');
+      m.broadcast.findUnique.mockResolvedValue(draft({ updatedAt: seenAt }));
+      await service.testSend(1, 7);
+      expect(m.broadcast.updateMany).toHaveBeenCalledWith({
+        where: { id: 7, status: 'DRAFT', updatedAt: seenAt },
+        data: { testSentAt: expect.any(Date) },
+      });
+    });
+
+    it('409s rather than stamping when the draft changed mid-test', async () => {
+      m.broadcast.findUnique.mockResolvedValue(draft({ updatedAt: new Date() }));
+      m.broadcast.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.testSend(1, 7)).rejects.toBeInstanceOf(ConflictException);
     });
 
     it('is NOT blocked by the send killswitch', async () => {
@@ -345,7 +402,9 @@ describe('AdminBroadcastsService', () => {
 
     it('records how much had already left, so the audit does not imply a clean undo', async () => {
       m.broadcast.findUnique.mockResolvedValue(draft({ status: 'SENDING' }));
-      m.broadcastRecipient.count.mockResolvedValue(1204);
+      m.broadcastRecipient.groupBy.mockResolvedValue([
+        { status: 'SENT', _count: { _all: 1204 } },
+      ]);
       await service.cancel(1, 7);
       const call = m.profileAuditLog.create.mock.calls[0]?.[0] as {
         data: { action: string; diff: Record<string, unknown> };
@@ -354,7 +413,32 @@ describe('AdminBroadcastsService', () => {
       expect(call.data.diff).toMatchObject({
         broadcastId: 7,
         status: { before: 'SENDING', after: 'CANCELLED' },
+        // Read from the same tally the frozen columns were written from, so the
+        // audit row and the broadcast row cannot describe different instants.
         alreadySentCount: 1204,
+      });
+    });
+
+    it('ROLLS UP the ledger, so a stopped send does not read "0 sent" forever', async () => {
+      // finalize() is the only other writer of these columns and requires status
+      // SENDING — which this transition has just left. Without the roll-up the
+      // log reported "0 sent" for a broadcast that had already mailed 1,204
+      // people, and no later code path would ever correct it.
+      m.broadcast.findUnique.mockResolvedValue(draft({ status: 'SENDING' }));
+      m.broadcastRecipient.groupBy.mockResolvedValue([
+        { status: 'SENT', _count: { _all: 1204 } },
+        { status: 'FAILED', _count: { _all: 6 } },
+        { status: 'PENDING', _count: { _all: 3790 } },
+      ]);
+      await service.cancel(1, 7);
+      expect(m.broadcast.updateMany).toHaveBeenCalledWith({
+        where: { id: 7, status: 'SENDING' },
+        data: expect.objectContaining({
+          status: 'CANCELLED',
+          sentCount: 1204,
+          skippedCount: 0,
+          failedCount: 6,
+        }),
       });
     });
 
@@ -381,6 +465,38 @@ describe('AdminBroadcastsService', () => {
       };
       expect(where.subject.contains).not.toBe('%');
       expect(where.subject.mode).toBe('insensitive');
+    });
+
+    it('returns LIVE ledger counts, not the frozen columns on the row', async () => {
+      // The frozen columns are written only when a broadcast closes out, so a
+      // send in flight carried zeros — the log said "0 sent" for a broadcast
+      // that was at that moment mailing thousands of people, which on screen is
+      // indistinguishable from a send that reached nobody.
+      m.broadcast.count.mockResolvedValue(1);
+      m.broadcast.findMany.mockResolvedValue([
+        { id: 7, status: 'SENDING', sentCount: 0, skippedCount: 0, failedCount: 0 },
+      ]);
+      m.broadcastRecipient.groupBy.mockResolvedValue([
+        { broadcastId: 7, status: 'SENT', _count: { _all: 900 } },
+        { broadcastId: 7, status: 'FAILED', _count: { _all: 2 } },
+        { broadcastId: 7, status: 'PENDING', _count: { _all: 98 } },
+      ]);
+
+      const res = await service.list({});
+      expect(res.items[0]).toMatchObject({
+        sentCount: 900,
+        failedCount: 2,
+        skippedCount: 0,
+        pendingCount: 98,
+      });
+    });
+
+    it('does not query the ledger at all when the page is empty', async () => {
+      // `broadcastId: { in: [] }` is a pointless round-trip on every empty tab.
+      m.broadcast.count.mockResolvedValue(0);
+      m.broadcast.findMany.mockResolvedValue([]);
+      await service.list({ status: 'FAILED' });
+      expect(m.broadcastRecipient.groupBy).not.toHaveBeenCalled();
     });
 
     it('counts and lists over the SAME where-clause', async () => {

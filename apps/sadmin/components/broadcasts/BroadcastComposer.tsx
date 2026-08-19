@@ -8,7 +8,7 @@ import {
   BROADCAST_CATEGORY_LABEL,
   BROADCAST_SEGMENT_LABEL,
   describeInAppReach,
-  formatCount,
+  describeReach,
 } from '../../lib/broadcasts/format';
 import type { BroadcastDetail, PreviewCountResult } from '../../lib/broadcasts/types';
 import { API_URL, FIELD_CLASS, describeApiError } from './shared';
@@ -254,14 +254,15 @@ export function BroadcastComposer({ initial }: { initial?: BroadcastDetail }) {
           </select>
           {/* The reach figure, attached to the choice that produced it. Absent
               rather than zero while it loads or if the request failed — a "0"
-              here would read as an empty segment and stop a legitimate send. */}
+              here would read as an empty segment and stop a legitimate send.
+              ⚠ Built from the ENABLED CHANNELS, not from the segment alone.
+              Reading only the segment made this sentence claim, in the form's
+              DEFAULT state (in-app unchecked), that the message would also reach
+              N people in the recruiter portal — and claim email delivery when
+              Email was unchecked. The one number on this screen an admin acts on
+              has to describe what the current settings will actually do. */}
           <p className="text-xs text-[var(--color-fg-muted)]">
-            {preview
-              ? `Reaches about ${formatCount(preview.emailRecipients)} people by email` +
-                (preview.inAppRecipients > 0
-                  ? `, and ${formatCount(preview.inAppRecipients)} in the recruiter portal.`
-                  : '.')
-              : 'Counting recipients…'}
+            {preview ? describeReach(preview, emailEnabled, inAppEnabled) : 'Counting recipients…'}
           </p>
         </div>
       </div>

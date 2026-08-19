@@ -14,6 +14,7 @@ import { FLAG, isFlagEnabled } from '@jobportal/feature-flags';
 import { escapeLikePattern } from '@jobportal/domain/txn-log-params';
 import { ResendClient } from '../email/resend-client';
 import { renderBroadcast } from '../email/templates/broadcast';
+import { frozenCounts, tallyRecipients } from './broadcast-counts';
 import { broadcastEmailWhere, broadcastInAppWhere } from './broadcast-segment';
 import { BroadcastsQueueService } from './broadcasts.queue';
 import type {
@@ -99,8 +100,34 @@ export class AdminBroadcastsService {
       }),
     ]);
 
+    // ⚠ The delivery figures come from the LEDGER, not from the frozen columns
+    // on the row, and that is load-bearing rather than tidy. Those columns are
+    // written when a broadcast closes out, so a send still IN FLIGHT carries
+    // zeros — the log would report "0 sent" for a broadcast that was at that
+    // moment mailing thousands of people, which is indistinguishable on screen
+    // from a send that reached nobody. One extra groupBy over
+    // `@@index([broadcastId, status])` for the twenty ids on the page buys a
+    // column that is true at every point in a broadcast's life.
+    const ids = rows.map((r) => r.id);
+    const grouped =
+      ids.length === 0
+        ? []
+        : await prisma.broadcastRecipient.groupBy({
+            by: ['broadcastId', 'status'],
+            where: { broadcastId: { in: ids } },
+            _count: { _all: true },
+          });
+    const liveCountOf = (broadcastId: number, status: string): number =>
+      grouped.find((g) => g.broadcastId === broadcastId && g.status === status)?._count._all ?? 0;
+
     return {
-      items: rows,
+      items: rows.map((r) => ({
+        ...r,
+        sentCount: liveCountOf(r.id, 'SENT'),
+        skippedCount: liveCountOf(r.id, 'SKIPPED'),
+        failedCount: liveCountOf(r.id, 'FAILED'),
+        pendingCount: liveCountOf(r.id, 'PENDING'),
+      })),
       total,
       page,
       pageSize: PAGE_SIZE,
@@ -112,7 +139,7 @@ export class AdminBroadcastsService {
     const broadcast = await prisma.broadcast.findUnique({ where: { id } });
     if (!broadcast) throw new NotFoundException('Broadcast not found');
 
-    const [author, problems, liveCounts] = await Promise.all([
+    const [author, problems, progress] = await Promise.all([
       this.resolveAuthor(broadcast.createdById),
       prisma.broadcastRecipient.findMany({
         where: { broadcastId: id, status: { in: ['SKIPPED', 'FAILED'] } },
@@ -120,29 +147,20 @@ export class AdminBroadcastsService {
         take: PROBLEM_ROW_LIMIT,
         select: { id: true, email: true, status: true, statusReason: true },
       }),
-      prisma.broadcastRecipient.groupBy({
-        by: ['status'],
-        where: { broadcastId: id },
-        _count: { _all: true },
-      }),
+      // The same tally the worker and cancel() write from, so the detail screen
+      // and the frozen columns can never describe different arithmetic.
+      tallyRecipients(prisma, id),
     ]);
-
-    const countOf = (s: string): number =>
-      liveCounts.find((g) => g.status === s)?._count._all ?? 0;
 
     return {
       ...broadcast,
       author,
       // Live counts from the ledger rather than the rolled-up columns, so a
       // broadcast that is still SENDING shows real progress. The columns on the
-      // row are the frozen record written at finalize; these are the truth right
-      // now, and while a send is in flight the two legitimately differ.
-      progress: {
-        pending: countOf('PENDING'),
-        sent: countOf('SENT'),
-        skipped: countOf('SKIPPED'),
-        failed: countOf('FAILED'),
-      },
+      // row are the frozen record written when it closes out; these are the
+      // truth right now, and while a send is in flight the two legitimately
+      // differ.
+      progress,
       problems,
       problemsTruncated: problems.length === PROBLEM_ROW_LIMIT,
     };
@@ -216,8 +234,14 @@ export class AdminBroadcastsService {
       (existing.ctaLabel ?? null) !== (input.ctaLabel ?? null) ||
       (existing.ctaUrl ?? null) !== (input.ctaUrl ?? null);
 
-    return prisma.broadcast.update({
-      where: { id },
+    // ⚠ CONDITIONAL, like send() and cancel(). The status check above read one
+    // row and this writes another moment later; an unconditional
+    // `update({ where: { id } })` would happily land an edit on a broadcast that
+    // had been claimed for dispatch in between — rewriting the segment and body
+    // of a send already fanning out to the whole platform, with the worker
+    // reading the new values for every recipient it had not yet reached.
+    const claimed = await prisma.broadcast.updateMany({
+      where: { id, status: 'DRAFT' },
       data: {
         subject: input.subject,
         body: input.body,
@@ -230,6 +254,13 @@ export class AdminBroadcastsService {
         ...(changed ? { testSentAt: null } : {}),
       },
     });
+    if (claimed.count === 0) {
+      throw new ConflictException('This broadcast changed state — reload and try again');
+    }
+
+    const updated = await prisma.broadcast.findUnique({ where: { id } });
+    if (!updated) throw new NotFoundException('Broadcast not found');
+    return updated;
   }
 
   /**
@@ -279,10 +310,26 @@ export class AdminBroadcastsService {
     // Stamped only after Resend accepted it. Setting it first would let a failed
     // test satisfy the send precondition, which is the one thing this column is
     // for.
-    const updated = await prisma.broadcast.update({
-      where: { id },
+    //
+    // ⚠ And stamped CONDITIONALLY on the draft not having moved underneath. A
+    // Resend call takes hundreds of milliseconds, and an edit committed inside
+    // that window clears `testSentAt` — an unconditional stamp landing
+    // afterwards would re-arm the precondition for content that was never
+    // test-sent, which is precisely the state the whole rail exists to prevent.
+    // `updatedAt` is the right predicate because Prisma's `@updatedAt` bumps on
+    // every write to this row, so any edit at all invalidates the claim.
+    const stamped = await prisma.broadcast.updateMany({
+      where: { id, status: 'DRAFT', updatedAt: broadcast.updatedAt },
       data: { testSentAt: new Date() },
     });
+    if (stamped.count === 0) {
+      throw new ConflictException(
+        'The draft changed while the test was being sent, so it has not been marked as tested. Send yourself another test copy.',
+      );
+    }
+
+    const updated = await prisma.broadcast.findUnique({ where: { id } });
+    if (!updated) throw new NotFoundException('Broadcast not found');
     this.logger.log(`admin=${adminUserId} test-sent broadcast=${id} to ${admin.email}`);
     return { ...updated, sentTo: admin.email };
   }
@@ -424,9 +471,16 @@ export class AdminBroadcastsService {
 
     const previousStatus = broadcast.status;
     await prisma.$transaction(async (tx) => {
+      // The ledger is rolled up in the SAME statement that cancels, because
+      // `finalize()` — the only other writer of these columns — requires status
+      // SENDING and this transition has just left it. Without this a stopped
+      // send reads "0 sent" in the console log forever, however much mail had
+      // already gone out, which is the most misleading thing this feature could
+      // say to someone auditing what left the building.
+      const counts = await tallyRecipients(tx, id);
       const claimed = await tx.broadcast.updateMany({
         where: { id, status: previousStatus },
-        data: { status: 'CANCELLED', cancelledAt: new Date() },
+        data: { status: 'CANCELLED', cancelledAt: new Date(), ...frozenCounts(counts) },
       });
       if (claimed.count === 0) {
         throw new ConflictException('This broadcast changed state — reload and try again');
@@ -439,10 +493,10 @@ export class AdminBroadcastsService {
             broadcastId: id,
             status: { before: previousStatus, after: 'CANCELLED' },
             // How much had already left, so the audit row records what the
-            // cancellation could and could not take back.
-            alreadySentCount: await tx.broadcastRecipient.count({
-              where: { broadcastId: id, status: 'SENT' },
-            }),
+            // cancellation could and could not take back. Read from the same
+            // tally the columns above were written from, so the audit row and
+            // the broadcast row cannot disagree about one instant.
+            alreadySentCount: counts.sent,
           } as unknown as Prisma.InputJsonValue,
         },
       });

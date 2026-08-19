@@ -34,9 +34,17 @@ export interface BroadcastListItem {
   inAppEnabled: boolean;
   /** Null until the planner has resolved the segment — i.e. on every DRAFT. */
   recipientCount: number | null;
+  /**
+   * ⚠ These four are the LIVE ledger counts, not the frozen columns on the row.
+   * `list()` overrides them with a groupBy for exactly this reason: the frozen
+   * columns are written when a broadcast closes out, so a send still in flight
+   * carried zeros and the log reported "0 sent" for a broadcast that was at that
+   * moment mailing thousands of people.
+   */
   sentCount: number;
   skippedCount: number;
   failedCount: number;
+  pendingCount: number;
   /** ISO 8601 — JSON has no Date. */
   createdAt: string;
   /** Null on a draft; the moment of DISPATCH, not of the last delivery. */
@@ -64,7 +72,16 @@ export interface BroadcastProblemRow {
   statusReason: string | null;
 }
 
-export interface BroadcastDetail extends BroadcastListItem {
+/**
+ * ⚠ `pendingCount` is Omit'ted, and the difference is real rather than cosmetic.
+ * On the LIST the four counts are live ledger figures. On the DETAIL, the
+ * inherited `sentCount`/`skippedCount`/`failedCount` are the FROZEN columns as
+ * stored on the row, and `progress` below carries the live numbers — the detail
+ * screen deliberately shows both so a send in flight can be distinguished from a
+ * finished one. There is no frozen pending column, so inheriting the field would
+ * promise a value the endpoint does not return.
+ */
+export interface BroadcastDetail extends Omit<BroadcastListItem, 'pendingCount'> {
   body: string;
   ctaLabel: string | null;
   ctaUrl: string | null;

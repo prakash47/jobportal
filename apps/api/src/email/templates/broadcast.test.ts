@@ -28,6 +28,15 @@ describe('toParagraphs', () => {
   });
 });
 
+/**
+ * The hidden preview-text span renderLayout emits, extracted so assertions land
+ * on the preheader itself rather than on the whole document — where the body
+ * below it makes almost any escaping assertion trivially true.
+ */
+function preheaderOf(html: string): string {
+  return html.split('mso-hide:all;">')[1]?.split('</span>')[0] ?? '';
+}
+
 describe('renderBroadcast', () => {
   const base = { subject: 'Scheduled maintenance', body: 'We are down 02:00 to 04:00 IST.' };
 
@@ -64,17 +73,34 @@ describe('renderBroadcast', () => {
   it('builds the preheader from the UNESCAPED body so an entity is never cut in half', () => {
     // esc() expands one character into up to six (& -> &amp;), so slicing after
     // escaping can leave a fragment like "&am" in the inbox preview line.
-    const body = `${'a'.repeat(135)} R&D update continues here`;
-    const out = renderBroadcast({ subject: 'S', body });
-    expect(out.html).not.toContain('&am&');
-    // The preheader is escaped by renderLayout, so a whole entity survives.
-    expect(out.html).toContain('&amp;');
+    //
+    // ⚠ This test previously asserted `not.toContain('&am&')` and
+    // `toContain('&amp;')` over the WHOLE document — both of which are true
+    // under the exact bug it names, since the body below the preheader contains
+    // a correctly-escaped ampersand either way. It now extracts the preheader
+    // itself and asserts on that, which is the only thing that distinguishes the
+    // fix from the bug.
+    const body = `${'a'.repeat(130)} R&D update continues well past the limit`;
+    const preheader = preheaderOf(renderBroadcast({ subject: 'S', body }).html);
+
+    // The '&' falls inside the 139-char window, so a whole entity must appear...
+    expect(preheader).toContain('R&amp;D');
+    // ...and no truncated one may. A slice-after-escape leaves a bare '&' or a
+    // dangling '&am' at the tail.
+    expect(preheader).not.toMatch(/&(?!amp;|lt;|gt;|quot;|#39;)/);
+  });
+
+  it('counts the preheader budget in SOURCE characters, not escaped ones', () => {
+    // The cap is 140 characters of the admin's text. Measuring the escaped
+    // string instead would silently shorten any preheader containing '&' or a
+    // quote to as little as a quarter of its intended length.
+    const body = `${'&'.repeat(60)} tail`;
+    const preheader = preheaderOf(renderBroadcast({ subject: 'S', body }).html);
+    expect(preheader).toContain('tail');
   });
 
   it('truncates a long preheader with an ellipsis rather than dumping the whole body', () => {
-    const out = renderBroadcast({ subject: 'S', body: 'x'.repeat(400) });
-    // The preheader span is the first element in the body.
-    const preheader = out.html.split('mso-hide:all;">')[1]?.split('</span>')[0] ?? '';
+    const preheader = preheaderOf(renderBroadcast({ subject: 'S', body: 'x'.repeat(400) }).html);
     expect(preheader.length).toBeLessThanOrEqual(140);
     expect(preheader.endsWith('…')).toBe(true);
   });

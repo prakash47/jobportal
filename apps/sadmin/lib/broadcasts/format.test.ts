@@ -11,6 +11,7 @@ import {
   broadcastsHref,
   canCancel,
   describeInAppReach,
+  describeReach,
   formatBroadcastsSummary,
   formatChannels,
   formatDeliverySummary,
@@ -174,6 +175,44 @@ describe('describeInAppReach', () => {
 
   it('is plain and unalarming for a recruiter-only broadcast', () => {
     expect(describeInAppReach('ALL_RECRUITERS', true)).toContain('notification bell');
+  });
+});
+
+describe('describeReach', () => {
+  const counts = { emailRecipients: 5000, inAppRecipients: 800 };
+
+  it('does NOT claim in-app delivery when the in-app channel is off', () => {
+    // The composer's default state has in-app UNCHECKED. Built from the segment
+    // alone, this sentence claimed the message would also reach 800 people in
+    // the recruiter portal — an outright false statement in the form's most
+    // common configuration, about the one number an admin acts on.
+    const s = describeReach(counts, true, false);
+    expect(s).toContain('5,000 by email');
+    expect(s).not.toContain('recruiter portal');
+    expect(s).not.toContain('800');
+  });
+
+  it('does NOT claim email delivery when Email is unchecked', () => {
+    const s = describeReach(counts, false, true);
+    expect(s).not.toContain('by email');
+    expect(s).toContain('800 in the recruiter portal');
+  });
+
+  it('names both channels when both are on', () => {
+    expect(describeReach(counts, true, true)).toBe(
+      'Reaches about 5,000 by email, and 800 in the recruiter portal.',
+    );
+  });
+
+  it('omits an in-app clause that would read "0 people"', () => {
+    // A candidate segment has no in-app audience at all; the composer renders a
+    // dedicated explanation for that combination rather than a zero aside.
+    const s = describeReach({ emailRecipients: 5000, inAppRecipients: 0 }, true, true);
+    expect(s).toBe('Reaches about 5,000 by email.');
+  });
+
+  it('asks for a channel rather than reporting a reach of nothing', () => {
+    expect(describeReach(counts, false, false)).toContain('Choose a channel');
   });
 });
 

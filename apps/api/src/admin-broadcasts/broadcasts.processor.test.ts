@@ -155,6 +155,33 @@ describe('BroadcastsProcessor', () => {
       });
     });
 
+    it('a killswitch halt ROLLS UP the ledger, so a stopped send does not read "0 sent"', async () => {
+      // finalize() is the only other writer of these columns and requires status
+      // SENDING — which this transition has just left. Without the roll-up the
+      // console log reported "0 sent" forever for a broadcast that had already
+      // mailed thousands of people before the switch was thrown, which is the
+      // most misleading thing this feature could tell someone auditing what left
+      // the building.
+      m.broadcastRecipient.findUnique.mockResolvedValue(pendingRecipient());
+      m.broadcast.findUnique.mockResolvedValue(broadcast());
+      m.broadcastRecipient.groupBy.mockResolvedValue([
+        { status: 'SENT', _count: { _all: 1204 } },
+        { status: 'PENDING', _count: { _all: 3796 } },
+      ]);
+      flag.mockImplementation(async (key: string) => key === 'killswitch.admin_broadcast_send');
+
+      await processor.handle({ kind: 'deliver', broadcastId: 7, recipientId: 31 });
+      expect(m.broadcast.updateMany).toHaveBeenCalledWith({
+        where: { id: 7, status: 'SENDING' },
+        data: expect.objectContaining({
+          status: 'CANCELLED',
+          sentCount: 1204,
+          skippedCount: 0,
+          failedCount: 0,
+        }),
+      });
+    });
+
     it('also halts on the GLOBAL transactional-email killswitch', async () => {
       // A direct Resend call would otherwise escape the global email stop the
       // way sendJobAlert already does — not a carve-out worth repeating on the
@@ -248,6 +275,49 @@ describe('BroadcastsProcessor', () => {
       });
     });
 
+    it('ENQUEUES a delivery job for every pending recipient', async () => {
+      // The review found that deleting the entire email fan-out left all 19
+      // processor tests green: every other plan test asserted what plan does
+      // BEFORE the fan-out, and none asserted the fan-out itself. A broadcast
+      // that plans a perfect ledger and never sends anything is the failure this
+      // pins.
+      m.broadcast.findUnique.mockResolvedValue(broadcast());
+      m.user.findMany.mockResolvedValueOnce([{ id: 1, email: 'a@x.test' }]).mockResolvedValue([]);
+      m.broadcastRecipient.count.mockResolvedValue(3);
+      m.broadcastRecipient.findMany.mockResolvedValue([{ id: 55 }, { id: 56 }, { id: 57 }]);
+
+      await processor.handle({ kind: 'plan', broadcastId: 7 });
+
+      expect(enqueue).toHaveBeenCalledTimes(1);
+      expect(enqueue).toHaveBeenCalledWith([
+        { kind: 'deliver', broadcastId: 7, recipientId: 55 },
+        { kind: 'deliver', broadcastId: 7, recipientId: 56 },
+        { kind: 'deliver', broadcastId: 7, recipientId: 57 },
+      ]);
+    });
+
+    it('covers every pending recipient exactly once when chunking', async () => {
+      // INSERT_CHUNK is 500, so 1,200 rows must arrive as 3 calls whose union is
+      // the whole set with no gap and no repeat. An off-by-one in the slice
+      // window silently drops or double-sends to real people.
+      const pending = Array.from({ length: 1_200 }, (_, i) => ({ id: i + 1 }));
+      m.broadcast.findUnique.mockResolvedValue(broadcast());
+      m.user.findMany.mockResolvedValueOnce([{ id: 1, email: 'a@x.test' }]).mockResolvedValue([]);
+      m.broadcastRecipient.count.mockResolvedValue(1_200);
+      m.broadcastRecipient.findMany.mockResolvedValue(pending);
+
+      await processor.handle({ kind: 'plan', broadcastId: 7 });
+
+      expect(enqueue).toHaveBeenCalledTimes(3);
+      const ids = enqueue.mock.calls
+        .flatMap((c) => c[0] as { recipientId: number }[])
+        .map((j) => j.recipientId);
+      expect(ids).toHaveLength(1_200);
+      expect(new Set(ids).size).toBe(1_200);
+      expect(Math.min(...ids)).toBe(1);
+      expect(Math.max(...ids)).toBe(1_200);
+    });
+
     it('does nothing when the broadcast was cancelled before the worker picked it up', async () => {
       m.broadcast.findUnique.mockResolvedValue(broadcast({ status: 'CANCELLED' }));
       await processor.handle({ kind: 'plan', broadcastId: 7 });
@@ -275,6 +345,57 @@ describe('BroadcastsProcessor', () => {
       const rows = m.notification.createMany.mock.calls[0]?.[0]?.data as Record<string, unknown>[];
       expect(rows[0]).toMatchObject({ type: 'PLATFORM_ANNOUNCEMENT', title: 'Scheduled maintenance' });
       expect(rows[0]).not.toHaveProperty('linkUrl');
+    });
+
+    it('makes the in-app write IDEMPOTENT — broadcastId plus skipDuplicates', async () => {
+      // The bug three independent review lenses found: plan carries attempts:3
+      // and is re-run after any later throw, and after a deploy kills it (this
+      // repo never calls app.enableShutdownHooks()). Without a collision key
+      // this was the ONE write in the planner that duplicated, putting the same
+      // announcement in every recruiter's bell two or three times. The email
+      // ledger had @@unique([broadcastId,userId]); the bell rows had nothing.
+      m.broadcast.findUnique.mockResolvedValue(broadcast({ inAppEnabled: true }));
+      m.user.findMany
+        .mockResolvedValueOnce([{ id: 1, email: 'a@x.test' }])
+        .mockResolvedValueOnce([{ id: 1 }])
+        .mockResolvedValue([]);
+      m.broadcastRecipient.count.mockResolvedValue(1);
+      m.broadcastRecipient.findMany.mockResolvedValue([{ id: 55 }]);
+
+      await processor.handle({ kind: 'plan', broadcastId: 7 });
+      const call = m.notification.createMany.mock.calls[0]?.[0] as {
+        data: Record<string, unknown>[];
+        skipDuplicates?: boolean;
+      };
+      expect(call.skipDuplicates).toBe(true);
+      expect(call.data[0]).toMatchObject({ broadcastId: 7 });
+    });
+
+    it('narrows the BELL audience below the ledger audience on an ALL_USERS broadcast', async () => {
+      // The ledger addresses everyone; the bell must address active recruiters
+      // only. Swapping writeInAppRows to the email predicate would write a
+      // Notification row for every candidate — rows that apps/web renders
+      // nowhere, so the mistake would be invisible in production.
+      m.broadcast.findUnique.mockResolvedValue(
+        broadcast({ segment: 'ALL_USERS', emailEnabled: true, inAppEnabled: true }),
+      );
+      m.user.findMany
+        .mockResolvedValueOnce([{ id: 1, email: 'a@x.test' }])
+        .mockResolvedValueOnce([{ id: 1 }])
+        .mockResolvedValue([]);
+      m.broadcastRecipient.count.mockResolvedValue(1);
+      m.broadcastRecipient.findMany.mockResolvedValue([{ id: 55 }]);
+
+      await processor.handle({ kind: 'plan', broadcastId: 7 });
+
+      // call[0] is the ledger pass, call[1] is the in-app pass.
+      expect(m.user.findMany.mock.calls[0]?.[0]?.where).toEqual({
+        OR: [{ role: 'CANDIDATE' }, { role: 'RECRUITER', recruiter: { deactivatedAt: null } }],
+      });
+      expect(m.user.findMany.mock.calls[1]?.[0]?.where).toEqual({
+        role: 'RECRUITER',
+        recruiter: { deactivatedAt: null },
+      });
     });
 
     it('an in-app-only broadcast finalises itself without enqueueing any delivery', async () => {

@@ -272,17 +272,11 @@ function BroadcastRow({
               sent: item.sentCount,
               skipped: item.skippedCount,
               failed: item.failedCount,
-              ...(item.status === 'SENDING' && item.recipientCount !== null
-                ? {
-                    pending: Math.max(
-                      0,
-                      item.recipientCount -
-                        item.sentCount -
-                        item.skippedCount -
-                        item.failedCount,
-                    ),
-                  }
-                : {}),
+              // Straight from the ledger rather than derived by subtracting the
+              // other three from recipientCount — that arithmetic went negative
+              // whenever the planner had not yet finished writing rows, and it
+              // silently disagreed with the detail page, which reads the ledger.
+              ...(item.pendingCount > 0 ? { pending: item.pendingCount } : {}),
             })}
       </td>
       <td className="px-4 py-3 whitespace-nowrap text-[var(--color-fg-muted)]">

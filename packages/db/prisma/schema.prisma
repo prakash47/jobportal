@@ -385,8 +385,13 @@ enum ProfileAuditAction {
   // same reason JOB_APPROVED/JOB_REJECTED are: the audit table is the only
   // durable record of which lever staff pulled.
   //
-  // The diff carries { broadcastId, category, segment, channels, recipientCount }
-  // and NEVER the subject or body. Those are admin-authored and would arguably
+  // The diff carries { broadcastId, category, segment, channels,
+  // estimatedRecipients } and NEVER the subject or body. The count is named an
+  // ESTIMATE because that is what it is: the segment is a live query, so the
+  // figure recorded at dispatch is the size at that instant and the ledger the
+  // planner writes is what actually got a row.
+  //
+  // Those are admin-authored and would arguably
   // be permitted, but they already live in their own table (Broadcast) — copying
   // the full text of every platform-wide message into the audit log would
   // duplicate the module's bulkiest free text into the one table this repo keeps
@@ -456,9 +461,12 @@ enum NotificationType {
   JOB_APPROVED
   JOB_REJECTED
   // Admin Broadcast Notifications (/sadmin/broadcasts) — a platform-wide or
-  // role-segmented announcement written by staff. linkUrl carries the
-  // broadcast's optional CTA and is therefore RECRUITER-PORTAL-RELATIVE like
-  // every other value in this table.
+  // role-segmented announcement written by staff.
+  //
+  // ⚠ linkUrl is deliberately NULL on these rows, unlike every other type here.
+  // A broadcast's CTA is an absolute https:// URL for the email, while linkUrl
+  // is a portal-relative path handed to `router.push` — so the CTA cannot be
+  // reused here, and the bell renders title + body with no link.
   //
   // ⚠ In-app broadcasts reach RECRUITERS ONLY, and that is a property of the
   // product rather than a choice made here: apps/web has no bell, no feed and no
@@ -1500,10 +1508,33 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime         @default(now())
 
+  // Which admin broadcast produced this row, for PLATFORM_ANNOUNCEMENT rows only;
+  // null for every event-driven notification (the other seven types).
+  //
+  // ⚠ THIS COLUMN EXISTS FOR THE UNIQUE CONSTRAINT BELOW, not for reporting. The
+  // broadcast planner is deliberately re-runnable — its email ledger is made
+  // idempotent by BroadcastRecipient's own unique key, and BullMQ re-runs the
+  // plan job on a retry or after a deploy kills it mid-pass (this repo never
+  // calls app.enableShutdownHooks()). Without a collision key the in-app pass
+  // was the ONE write in the planner that duplicated on every re-run, putting
+  // the same announcement in every recruiter's bell two or three times.
+  //
+  // Nullable is what makes this safe to add: Postgres treats NULLs as distinct
+  // in a unique index, so every existing and future event notification is
+  // unconstrained and only broadcast rows collide with each other.
+  //
+  // It also, incidentally, makes one broadcast's bell rows findable and
+  // deletable as a batch — there is no retention job for this table anywhere,
+  // and a platform-wide announcement writes one permanent row per recruiter.
+  broadcastId Int?
+  broadcast   Broadcast? @relation(fields: [broadcastId], references: [id], onDelete: SetNull)
+
   // Unread-count badge query: WHERE userId = ? AND readAt IS NULL.
   @@index([userId, readAt])
   // Feed query: WHERE userId = ? ORDER BY createdAt DESC.
   @@index([userId, createdAt(sort: Desc)])
+  // The planner's idempotency key. See the comment on broadcastId above.
+  @@unique([broadcastId, userId])
 }
 
 // Recruiter-scoped notification channel toggles (email on/off, SMS on/off).
@@ -1560,8 +1591,14 @@ model Broadcast {
   inAppEnabled Boolean @default(false)
 
   // Optional single CTA, matching exactly what the shared email layout supports.
-  // ctaUrl doubles as the in-app Notification.linkUrl, which is why it is
-  // validated as a recruiter-portal-relative path when in-app is on.
+  //
+  // ⚠ EMAIL ONLY. `ctaUrl` is validated as an ABSOLUTE https:// URL, and it is
+  // deliberately NOT written to `Notification.linkUrl`: that column is a
+  // recruiter-portal-RELATIVE path handed straight to `router.push` inside
+  // apps/recruiter, so one value cannot be correct in both places. An in-app
+  // announcement therefore carries no link at all rather than a broken one.
+  // Giving the in-app copy its own destination needs a second column and a
+  // decision about which portal it addresses.
   ctaLabel String?
   ctaUrl   String?
 
@@ -1593,7 +1630,11 @@ model Broadcast {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  recipients BroadcastRecipient[]
+  recipients    BroadcastRecipient[]
+  // The in-app bell rows this broadcast produced (recruiters only). Present so
+  // the unique key on Notification.broadcastId can exist; nothing reads the
+  // relation from this side today.
+  notifications Notification[]
 
   // The console's status tabs: WHERE status = ? ORDER BY createdAt DESC.
   @@index([status, createdAt(sort: Desc)])

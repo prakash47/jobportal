@@ -3,6 +3,7 @@ import { prisma, Prisma, type Broadcast } from '@jobportal/db';
 import { FLAG, isFlagEnabled } from '@jobportal/feature-flags';
 import { ResendClient } from '../email/resend-client';
 import { renderBroadcast } from '../email/templates/broadcast';
+import { frozenCounts, tallyRecipients } from './broadcast-counts';
 import { broadcastEmailWhere, broadcastInAppWhere } from './broadcast-segment';
 
 /**
@@ -98,13 +99,19 @@ export class BroadcastsProcessor {
    * the flag, which `FlagAuditLog` already records with their id and reason.
    */
   private async haltAsCancelled(broadcastId: number): Promise<void> {
+    // The ledger is rolled up in the SAME statement that cancels. Without this
+    // the frozen columns stay at zero — `finalize()` is the only other writer
+    // and it requires status SENDING, which this transition has just left — so
+    // the console log would report "0 sent" for a broadcast that had already
+    // mailed thousands of people before the switch was thrown.
+    const counts = await tallyRecipients(prisma, broadcastId);
     const halted = await prisma.broadcast.updateMany({
       where: { id: broadcastId, status: 'SENDING' },
-      data: { status: 'CANCELLED', cancelledAt: new Date() },
+      data: { status: 'CANCELLED', cancelledAt: new Date(), ...frozenCounts(counts) },
     });
     if (halted.count > 0) {
       this.logger.warn(
-        `broadcast=${broadcastId} halted by killswitch — remaining recipients left unsent`,
+        `broadcast=${broadcastId} halted by killswitch after ${counts.sent} sent — ${counts.pending} recipients left unsent`,
       );
     }
   }
@@ -258,13 +265,26 @@ export class BroadcastsProcessor {
       });
       if (users.length === 0) break;
 
+      // ⚠ `broadcastId` + `skipDuplicates` are what make this pass RE-RUNNABLE,
+      // and they are not optional decoration. `plan` carries `attempts: 3` and
+      // is re-run by BullMQ after a throw anywhere later in the method — and
+      // after a deploy kills it mid-pass, which is the normal case here because
+      // `app.enableShutdownHooks()` is never called in this repo. Before the
+      // unique key existed this was the ONE write in the planner with no
+      // collision key, so a single retry put the same announcement in every
+      // recruiter's bell twice, and three attempts made it three times.
+      //
+      // The email ledger got this right via BroadcastRecipient's own unique key;
+      // the bell rows were the gap.
       await prisma.notification.createMany({
         data: users.map((u) => ({
           userId: u.id,
+          broadcastId: broadcast.id,
           type: 'PLATFORM_ANNOUNCEMENT' as const,
           title: broadcast.subject,
           body: preview,
         })),
+        skipDuplicates: true,
       });
 
       const last = users[users.length - 1];
@@ -382,30 +402,18 @@ export class BroadcastsProcessor {
    * apart at a glance.
    */
   private async finalize(broadcastId: number): Promise<void> {
-    const grouped = await prisma.broadcastRecipient.groupBy({
-      by: ['status'],
-      where: { broadcastId },
-      _count: { _all: true },
-    });
-    const countOf = (s: string): number =>
-      grouped.find((g) => g.status === s)?._count._all ?? 0;
-
-    const sentCount = countOf('SENT');
-    const skippedCount = countOf('SKIPPED');
-    const failedCount = countOf('FAILED');
-    const anyDelivered = sentCount > 0;
+    const counts = await tallyRecipients(prisma, broadcastId);
+    const anyDelivered = counts.sent > 0;
 
     await prisma.broadcast.updateMany({
       where: { id: broadcastId, status: 'SENDING' },
       data: {
         status: anyDelivered ? 'SENT' : 'FAILED',
-        sentCount,
-        skippedCount,
-        failedCount,
+        ...frozenCounts(counts),
       },
     });
     this.logger.log(
-      `broadcast=${broadcastId} finalized — sent=${sentCount} skipped=${skippedCount} failed=${failedCount}`,
+      `broadcast=${broadcastId} finalized — sent=${counts.sent} skipped=${counts.skipped} failed=${counts.failed}`,
     );
   }
 }

@@ -180,6 +180,35 @@ export function describeInAppReach(
 }
 
 /**
+ * The composer's reach sentence — what the CURRENT settings will actually do.
+ *
+ * ⚠ Reads the enabled CHANNELS, not just the segment, and that is the whole
+ * reason it exists as its own function. Built from the segment counts alone, the
+ * sentence claimed in the form's DEFAULT state (in-app unchecked) that the
+ * message would reach N people in the recruiter portal, and claimed email
+ * delivery when Email was unchecked. This is the one number on the compose
+ * screen an admin acts on, so it has to describe the settings in front of them
+ * rather than the maximum the segment could theoretically reach.
+ *
+ * The in-app clause is omitted when the in-app audience is empty even with the
+ * channel on — that combination is rejected by the API anyway, and the composer
+ * renders a dedicated explanation for it rather than a "0 people" aside.
+ */
+export function describeReach(
+  counts: { emailRecipients: number; inAppRecipients: number },
+  emailEnabled: boolean,
+  inAppEnabled: boolean,
+): string {
+  const clauses: string[] = [];
+  if (emailEnabled) clauses.push(`${formatCount(counts.emailRecipients)} by email`);
+  if (inAppEnabled && counts.inAppRecipients > 0) {
+    clauses.push(`${formatCount(counts.inAppRecipients)} in the recruiter portal`);
+  }
+  if (clauses.length === 0) return 'Choose a channel to see how many people this reaches.';
+  return `Reaches about ${clauses.join(', and ')}.`;
+}
+
+/**
  * The one line above the table, covering both the counted and the empty case.
  *
  * This is the sentence a screen-reader user hears when a search narrows the list

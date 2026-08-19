@@ -54,9 +54,20 @@ export function BroadcastActions({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [preview, setPreview] = useState<PreviewCountResult | null>(null);
+  // Tracked explicitly rather than inferred from `preview === null`, which
+  // cannot tell "still counting" from "the count failed" — the dialog used to
+  // show both sentences at once, saying "Counting recipients…" directly above
+  // "The recipient count could not be loaded. Close this and try again."
+  const [previewState, setPreviewState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [errorNonce, setErrorNonce] = useState(0);
+  // A nonce, exactly like the error region below. A role="status" handed the
+  // SAME string twice produces no DOM mutation (React's Object.is bailout) and
+  // announces nothing the second time — so an admin sending two test copies in a
+  // row would hear the confirmation once. The counter is rendered inside the
+  // sr-only region as invisible text, which is enough to change its content.
   const [status, setStatus] = useState('');
+  const [statusNonce, setStatusNonce] = useState(0);
   const [loading, setLoading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -70,9 +81,26 @@ export function BroadcastActions({
 
   // Counted when the dialog opens rather than on mount, so the number the admin
   // is asked to type is as fresh as the decision they are about to make.
+  //
+  // ⚠ `setPreview(null)` FIRST, and the response checked against the CURRENT
+  // segment. Without both, this state survives everything that happens on this
+  // page: the composer is rendered directly below on the same route, so an admin
+  // can open the dialog for an 800-person segment, close it, change the segment
+  // to a 50,000-person one, save, and reopen — and because `router.refresh()`
+  // re-renders this component at the same tree position with no key, the stale
+  // 800 is still in state. The dialog would then ask them to type 800 to confirm
+  // a send to 50,000 people, and the API — which counts again server-side —
+  // would happily mail all of them.
+  //
+  // That is the single rail guarding the only irreversible action in the
+  // product, so it validating against a different segment's number is the worst
+  // available failure. The composer's own copy of this effect already got both
+  // guards right; this one did not.
   useEffect(() => {
     if (!sendOpen) return;
     let cancelled = false;
+    setPreview(null);
+    setPreviewState('loading');
     void (async () => {
       try {
         const res = await fetch(`${API_URL}/admin/broadcasts/preview-count`, {
@@ -81,12 +109,21 @@ export function BroadcastActions({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ segment: broadcast.segment }),
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (!cancelled) setPreviewState('error');
+          return;
+        }
         const data = (await res.json()) as PreviewCountResult;
-        if (!cancelled) setPreview(data);
+        if (cancelled) return;
+        // A late response for a segment that is no longer selected must not
+        // populate the number the confirmation is checked against.
+        if (data.segment !== broadcast.segment) return;
+        setPreview(data);
+        setPreviewState('ready');
       } catch {
         // Left null — the dialog then says it could not count and the confirm
         // stays disabled, rather than accepting a send whose size is unknown.
+        if (!cancelled) setPreviewState('error');
       }
     })();
     return () => {
@@ -102,10 +139,14 @@ export function BroadcastActions({
       : preview.inAppRecipients
     : null;
 
+  // Whether there is a number to type at all. Separated from `confirmMatches`
+  // so the label, the input's disabled state and the hint can each say the right
+  // thing about WHY, rather than all collapsing into "not ready".
+  const confirmable = previewState === 'ready' && reach !== null && reach > 0;
+
   // Digits only, so "4,182" and "4182" both match what is displayed — the rail
   // is about having READ the number, not about reproducing its punctuation.
-  const confirmMatches =
-    reach !== null && reach > 0 && confirmText.replace(/[^\d]/g, '') === String(reach);
+  const confirmMatches = confirmable && confirmText.replace(/[^\d]/g, '') === String(reach);
 
   async function post(path: string, action: 'test' | 'send' | 'cancel', okMessage: string) {
     setLoading(true);
@@ -117,6 +158,7 @@ export function BroadcastActions({
       });
       if (!res.ok) throw new Error(await describeApiError(res, action));
       setStatus(okMessage);
+      setStatusNonce((n) => n + 1);
       setSendOpen(false);
       setCancelOpen(false);
       setConfirmText('');
@@ -198,9 +240,11 @@ export function BroadcastActions({
           <DialogHeader>
             <DialogTitle>Send this broadcast?</DialogTitle>
             <DialogDescription>
-              {reach === null
+              {previewState === 'loading'
                 ? 'Counting recipients…'
-                : `This sends “${broadcast.subject}” to ${formatCount(reach)} people — ${BROADCAST_SEGMENT_LABEL[broadcast.segment].toLowerCase()} — by ${formatChannels(broadcast.emailEnabled, broadcast.inAppEnabled).toLowerCase()}.`}
+                : previewState === 'error'
+                  ? `This would send “${broadcast.subject}” to ${BROADCAST_SEGMENT_LABEL[broadcast.segment].toLowerCase()}, but the recipient count could not be loaded.`
+                  : `This sends “${broadcast.subject}” to ${formatCount(reach ?? 0)} people — ${BROADCAST_SEGMENT_LABEL[broadcast.segment].toLowerCase()} — by ${formatChannels(broadcast.emailEnabled, broadcast.inAppEnabled).toLowerCase()}.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -215,23 +259,31 @@ export function BroadcastActions({
 
           <div className="space-y-2">
             <Label htmlFor={confirmId}>
-              {reach === null
-                ? 'Recipient count unavailable'
-                : `Type ${formatCount(reach)} to confirm`}
+              {confirmable ? `Type ${formatCount(reach)} to confirm` : 'Cannot confirm yet'}
             </Label>
             <Input
               id={confirmId}
               value={confirmText}
-              disabled={busy || reach === null}
+              disabled={busy || !confirmable}
               inputMode="numeric"
               autoComplete="off"
               onChange={(e) => setConfirmText(e.target.value)}
-              placeholder={reach === null ? '' : String(reach)}
+              placeholder={confirmable ? String(reach) : ''}
             />
+            {/* Four genuinely different states, and conflating any two of them
+                tells the admin something false. The empty-segment case in
+                particular used to read "Type 0 to confirm" while the confirm
+                button could never enable, because confirmMatches requires
+                reach > 0 — an instruction that cannot be followed, with no
+                explanation of why. */}
             <p className="text-xs text-[var(--color-fg-muted)]">
-              {reach === null
-                ? 'The recipient count could not be loaded, so this send cannot be confirmed. Close this and try again.'
-                : 'Typing the number is the confirmation — it is there so the size of the audience is read, not clicked past.'}
+              {previewState === 'loading'
+                ? 'Counting recipients…'
+                : previewState === 'error'
+                  ? 'The recipient count could not be loaded, so this send cannot be confirmed. Close this and try again.'
+                  : reach === 0
+                    ? 'This segment currently has no recipients, so there is nothing to send. Change the segment on the draft, or check whether anyone matches it.'
+                    : 'Typing the number is the confirmation — it is there so the size of the audience is read, not clicked past.'}
             </p>
           </div>
 
@@ -251,7 +303,7 @@ export function BroadcastActions({
               disabled={!confirmMatches || busy}
               onClick={() => void post('send', 'send', 'Broadcast dispatched.')}
             >
-              Send to {reach === null ? '…' : formatCount(reach)} people
+              Send to {confirmable ? formatCount(reach) : '…'} people
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -308,6 +360,11 @@ export function BroadcastActions({
           change. Without this a dispatch completes in total silence. */}
       <p role="status" className="sr-only">
         {status}
+        {/* Invisible, and the reason it exists is that a repeated identical
+            message is otherwise silent — see statusNonce. A zero-width space per
+            repetition changes the region's text content without changing what is
+            read aloud. */}
+        {'​'.repeat(statusNonce % 4)}
       </p>
 
       {error && !sendOpen && !cancelOpen && (
