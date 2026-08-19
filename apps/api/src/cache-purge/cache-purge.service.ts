@@ -128,6 +128,17 @@ const PATH_MAP: Record<string, string[]> = {
   // change it. A new admin flag with no entry here is a regression, not an
   // oversight; cache-purge.service.test.ts asserts this key is present.
   'killswitch.admin_transaction_export': [],
+  // Gates dispatching a broadcast from /sadmin/broadcasts. Same reasoning as the
+  // four above, and mapped up-front rather than after the fact: the omission the
+  // comment above describes has now shipped twice, so a new admin-only
+  // killswitch arriving without an entry here is a regression by default.
+  //
+  // Worth stating explicitly for this one: a broadcast REACHES every user, so
+  // the instinct that it must therefore affect a public page is wrong. It
+  // reaches them by email and by the recruiter bell — neither of which is a
+  // Cloudflare-cached path, and the bell is rendered per-request behind auth.
+  // There is no cached page anywhere for this flag to invalidate.
+  'killswitch.admin_broadcast_send': [],
 };
 
 export function pathsForFlag(flagKey: string): string[] {

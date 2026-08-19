@@ -46,6 +46,10 @@ describe('pathsForFlag', () => {
     expect(pathsForFlag('killswitch.admin_report_write')).toEqual([]);
     expect(pathsForFlag('killswitch.admin_job_delete')).toEqual([]);
     expect(pathsForFlag('killswitch.admin_transaction_export')).toEqual([]);
+    // A broadcast REACHES every user, which makes the instinct "so it must
+    // affect a public page" tempting and wrong: it reaches them by email and by
+    // the recruiter bell, neither of which is a Cloudflare-cached path.
+    expect(pathsForFlag('killswitch.admin_broadcast_send')).toEqual([]);
   });
 
   it('the two report flags are distinct keys and both purge nothing', () => {

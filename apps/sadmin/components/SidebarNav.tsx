@@ -12,6 +12,7 @@ import {
   Flag,
   IndianRupee,
   LayoutDashboard,
+  Megaphone,
   MessageCircle,
   ShieldCheck,
   Users,
@@ -79,6 +80,23 @@ const NAV_ITEMS: readonly { href: string; label: string; icon: NavIcon }[] = [
   // glyph there — Flag is already Content reports, and reusing it would pair the
   // two surfaces this comment exists to keep apart.
   { href: '/support', label: 'Support & Communication', icon: MessageCircle as NavIcon },
+  // Broadcast Notifications closes the rail, directly after Support, and the two
+  // are a deliberate pair: Support is the INBOUND queue (they write to us) and
+  // this is the OUTBOUND one (we write to them). That is the same "same subject,
+  // opposite direction" relationship the Job review / Job Postings pair records
+  // above, and unlike the Content reports / Support pair further up, filing them
+  // together does not risk working the wrong queue — an admin cannot mistake
+  // composing an announcement for answering a ticket.
+  //
+  // It is LAST rather than first in that pair because the rail otherwise reads
+  // as a descent from "who is on the platform" through "what they owe us" to
+  // "what they have asked us"; sending is the only row that is not a queue of
+  // work waiting, so it belongs at the end rather than interrupting that order.
+  //
+  // `Megaphone` was added to the icons barrel rather than reusing `Send` or
+  // `Mail`. Both of those read as one message to one person, which is precisely
+  // the mental model this console must not encourage.
+  { href: '/broadcasts', label: 'Broadcast Notifications', icon: Megaphone as NavIcon },
 ];
 
 function isActive(pathname: string, href: string): boolean {

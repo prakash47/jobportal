@@ -375,6 +375,31 @@ enum ProfileAuditAction {
   // the note is required on that branch and is the thing worth attributing.
   CONTENT_REPORT_ACTIONED
   CONTENT_REPORT_DISMISSED
+  // Admin Broadcast Notifications (/sadmin/broadcasts). Both written with the
+  // ACTING ADMIN's User id.
+  //
+  // SENT is the moment a broadcast is dispatched to the queue, not the moment
+  // the last email lands — there is no single instant for the latter, and the
+  // per-recipient outcome lives in BroadcastRecipient. CANCELLED is a staff
+  // member stopping a send that is already fanning out. They are split for the
+  // same reason JOB_APPROVED/JOB_REJECTED are: the audit table is the only
+  // durable record of which lever staff pulled.
+  //
+  // The diff carries { broadcastId, category, segment, channels,
+  // estimatedRecipients } and NEVER the subject or body. The count is named an
+  // ESTIMATE because that is what it is: the segment is a live query, so the
+  // figure recorded at dispatch is the size at that instant and the ledger the
+  // planner writes is what actually got a row.
+  //
+  // Those are admin-authored and would arguably
+  // be permitted, but they already live in their own table (Broadcast) — copying
+  // the full text of every platform-wide message into the audit log would
+  // duplicate the module's bulkiest free text into the one table this repo keeps
+  // deliberately body-free (see SUPPORT_TICKET_NOTE_ADDED above). The RECIPIENT
+  // LIST is likewise never written: it is recorded as a count, the same shape
+  // BILLING_TRANSACTIONS_EXPORTED uses for `rowCount`/`hadQuery`.
+  BROADCAST_SENT
+  BROADCAST_CANCELLED
 }
 
 // SRS §4.9 — legal / organisational classification of an employer, shown on the
@@ -435,6 +460,100 @@ enum NotificationType {
   // split rather than a single generic JOB_MODERATED. linkUrl → /jobs/:id.
   JOB_APPROVED
   JOB_REJECTED
+  // Admin Broadcast Notifications (/sadmin/broadcasts) — a platform-wide or
+  // role-segmented announcement written by staff.
+  //
+  // ⚠ linkUrl is deliberately NULL on these rows, unlike every other type here.
+  // A broadcast's CTA is an absolute https:// URL for the email, while linkUrl
+  // is a portal-relative path handed to `router.push` — so the CTA cannot be
+  // reused here, and the bell renders title + body with no link.
+  //
+  // ⚠ In-app broadcasts reach RECRUITERS ONLY, and that is a property of the
+  // product rather than a choice made here: apps/web has no bell, no feed and no
+  // read of this table at all, so a row addressed to a candidate would render
+  // nowhere. The console says so at the point of composing rather than writing
+  // rows nothing displays.
+  PLATFORM_ANNOUNCEMENT
+}
+
+// ============================================================
+// Admin Broadcast Notifications (/sadmin/broadcasts)
+// ============================================================
+
+// The lifecycle of one admin-authored announcement.
+//
+// There is deliberately NO `SCHEDULED` member. v1 sends immediately, so a
+// scheduled state would have no producer — a dead value that every label map,
+// every status pill and the console's own tab strip would still have to carry,
+// and that would render an always-empty tab. It lands with the `scheduledAt`
+// column and the delayed job that fill it, which is the same rule
+// NotificationType's own comment applies to "Message".
+//
+// FAILED is distinct from SENT-with-failures: it means the send never got off
+// the ground (segment resolution threw, or every single recipient failed).
+// A partially-delivered broadcast is SENT and carries its counts.
+enum BroadcastStatus {
+  DRAFT
+  SENDING
+  SENT
+  CANCELLED
+  FAILED
+}
+
+// Who a broadcast is addressed to. Role-based only in v1 — exactly the segments
+// the feature was asked for ("to all recruiters, or all candidates").
+//
+// ⚠ Deliberately NOT named `audience`: `PlanAudience` already owns that noun on
+// SubscriptionPlan and is read in three modules, and `aud` is separately the JWT
+// audience claim. Two unrelated "audience" concepts one grep apart is how the
+// wrong one gets read.
+//
+// ALL_USERS excludes ADMIN accounts. Staff receiving the platform's own
+// announcements as if they were customers is noise, and it is the same
+// exclusion the dashboard's signup series already makes for the same reason.
+enum BroadcastSegment {
+  ALL_CANDIDATES
+  ALL_RECRUITERS
+  ALL_USERS
+}
+
+// What KIND of message this is — the thing consent hangs off.
+//
+// OPERATIONAL = service, maintenance and policy notices. Transactional-class,
+// so it sends UNGATED, exactly as a password reset does. "The site is down for
+// maintenance tonight" is not something an account holder can meaningfully opt
+// out of, and gating it on a marketing toggle that defaults OFF would mean the
+// one category that must always arrive is the one that never does.
+//
+// PROMOTIONAL = marketing. Draftable, but `send` REFUSES it with a 400 until the
+// rails exist. All three are missing today, verified rather than assumed:
+// EmailPreference.productNewsEnabled gates NOTHING (PREFERENCE_GATE maps every
+// template to null or applicationStatusEnabled), recruiters have no surface
+// anywhere to set it, and there is no token unsubscribe or List-Unsubscribe
+// header for bulk mail.
+//
+// The member EXISTS PRECISELY BECAUSE IT IS BLOCKED. Omitting it would not stop
+// promotions being sent — it would mean an admin who wants to send one has no
+// honest way to say so and simply sends it as an operational broadcast, ungated,
+// to the whole platform. A named and refused option is a guardrail; an absent
+// one is an invitation.
+enum BroadcastCategory {
+  OPERATIONAL
+  PROMOTIONAL
+}
+
+// Per-recipient delivery state. PENDING rows are written up-front by the planner
+// so the ledger is complete before the first email leaves the building.
+//
+// SKIPPED has a real producer: the delivery job re-reads the user before sending,
+// because a large send spans minutes and an account can be deleted inside that
+// window. Emailing an address whose account no longer exists is a small harm,
+// but an unexplained gap between recipientCount and sentCount is a worse one.
+enum BroadcastRecipientStatus {
+  PENDING
+  SENT
+  SKIPPED
+  FAILED
 }
 
 // SRS §4.9 — recruiter Team / User-management in-company role (RBAC). This is
@@ -1389,10 +1508,33 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime         @default(now())
 
+  // Which admin broadcast produced this row, for PLATFORM_ANNOUNCEMENT rows only;
+  // null for every event-driven notification (the other seven types).
+  //
+  // ⚠ THIS COLUMN EXISTS FOR THE UNIQUE CONSTRAINT BELOW, not for reporting. The
+  // broadcast planner is deliberately re-runnable — its email ledger is made
+  // idempotent by BroadcastRecipient's own unique key, and BullMQ re-runs the
+  // plan job on a retry or after a deploy kills it mid-pass (this repo never
+  // calls app.enableShutdownHooks()). Without a collision key the in-app pass
+  // was the ONE write in the planner that duplicated on every re-run, putting
+  // the same announcement in every recruiter's bell two or three times.
+  //
+  // Nullable is what makes this safe to add: Postgres treats NULLs as distinct
+  // in a unique index, so every existing and future event notification is
+  // unconstrained and only broadcast rows collide with each other.
+  //
+  // It also, incidentally, makes one broadcast's bell rows findable and
+  // deletable as a batch — there is no retention job for this table anywhere,
+  // and a platform-wide announcement writes one permanent row per recruiter.
+  broadcastId Int?
+  broadcast   Broadcast? @relation(fields: [broadcastId], references: [id], onDelete: SetNull)
+
   // Unread-count badge query: WHERE userId = ? AND readAt IS NULL.
   @@index([userId, readAt])
   // Feed query: WHERE userId = ? ORDER BY createdAt DESC.
   @@index([userId, createdAt(sort: Desc)])
+  // The planner's idempotency key. See the comment on broadcastId above.
+  @@unique([broadcastId, userId])
 }
 
 // Recruiter-scoped notification channel toggles (email on/off, SMS on/off).
@@ -1410,6 +1552,136 @@ model RecruiterNotificationPreference {
   smsEnabled   Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// ============================================================
+// Admin Broadcast Notifications (/sadmin/broadcasts)
+// ============================================================
+
+// One admin-authored announcement, plus what happened when it was sent.
+//
+// The subject and body live HERE rather than in the audit row, and that split is
+// deliberate: ProfileAuditLog is kept id-only by rule across this repo, and a
+// broadcast's prose is the module's own record, not audit metadata. The
+// BROADCAST_SENT row carries { broadcastId, category, segment, channels,
+// recipientCount } and points back here for the text.
+model Broadcast {
+  id       Int               @id @default(autoincrement())
+  subject  String
+  // PLAIN TEXT, never HTML. Rendered through the shared email layout's `esc()`
+  // and split into paragraphs on blank lines. `renderLayout` treats
+  // `bodyParagraphs` as already-escaped raw HTML (see its own comment), so
+  // storing markup here would let an admin inject arbitrary HTML into an email
+  // addressed to the entire platform — the one place in this product where a
+  // single mistake reaches every user at once.
+  body     String
+  category BroadcastCategory
+  segment  BroadcastSegment
+
+  // Two booleans rather than a channel enum: the channels are genuinely
+  // independent (email-only, in-app-only and both are all valid), so an enum
+  // would need one member per combination and would have to grow
+  // combinatorially when a third channel lands.
+  //
+  // ⚠ inAppEnabled reaches RECRUITERS ONLY, whatever the segment says, because
+  // apps/web has no notification surface at all — no bell, no feed, no read of
+  // the Notification table. A row addressed to a candidate would render nowhere.
+  // The console states this at compose time rather than silently dropping rows.
+  emailEnabled Boolean @default(true)
+  inAppEnabled Boolean @default(false)
+
+  // Optional single CTA, matching exactly what the shared email layout supports.
+  //
+  // ⚠ EMAIL ONLY. `ctaUrl` is validated as an ABSOLUTE https:// URL, and it is
+  // deliberately NOT written to `Notification.linkUrl`: that column is a
+  // recruiter-portal-RELATIVE path handed straight to `router.push` inside
+  // apps/recruiter, so one value cannot be correct in both places. An in-app
+  // announcement therefore carries no link at all rather than a broken one.
+  // Giving the in-app copy its own destination needs a second column and a
+  // decision about which portal it addresses.
+  ctaLabel String?
+  ctaUrl   String?
+
+  status BroadcastStatus @default(DRAFT)
+
+  // The admin who created it. A LOOSE id with no FK, matching
+  // CompanyKyc.reviewedById and SupportTicketNote.authorId: the record of what
+  // was said to the entire platform has to outlive the staff account that said
+  // it. An id that no longer resolves renders as "Unknown admin".
+  createdById Int?
+
+  // Resolved at DISPATCH, not at compose. The segment is a live query, so a
+  // count taken while drafting is already stale when Send is pressed — the
+  // console's preview count is explicitly labelled as an estimate for this
+  // reason, and this column is the number that actually got a row written.
+  recipientCount Int?
+  sentCount      Int  @default(0)
+  skippedCount   Int  @default(0)
+  failedCount    Int  @default(0)
+
+  // A test send to the acting admin's own address. `send` REQUIRES this to be
+  // set: it is the one rail that guarantees a human has looked at the rendered
+  // email — subject line, paragraph breaks, the CTA actually resolving — before
+  // it reaches thousands of inboxes. Cleared whenever the content changes, so it
+  // attests to the message that is about to go out rather than an earlier draft.
+  testSentAt  DateTime?
+  sentAt      DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  recipients    BroadcastRecipient[]
+  // The in-app bell rows this broadcast produced (recruiters only). Present so
+  // the unique key on Notification.broadcastId can exist; nothing reads the
+  // relation from this side today.
+  notifications Notification[]
+
+  // The console's status tabs: WHERE status = ? ORDER BY createdAt DESC.
+  @@index([status, createdAt(sort: Desc)])
+  // The All tab, which has no status predicate.
+  @@index([createdAt(sort: Desc)])
+}
+
+// One row per intended email recipient, written up-front by the planner.
+//
+// ⚠ `@@unique([broadcastId, userId])` IS THE SAFETY MECHANISM OF THIS FEATURE,
+// not a tidiness constraint, and the reason is specific to this repo:
+// `app.enableShutdownHooks()` is never called anywhere (grep returns zero hits),
+// so every queue service's OnApplicationShutdown never fires and a deploy kills
+// in-flight BullMQ jobs mid-execution. BullMQ then re-runs them from the start
+// after the stall timeout. Without a per-(broadcast, user) key for a re-run to
+// collide with, a redeploy during a large send re-mails everyone it had already
+// reached — and unlike a duplicated password reset, that is visible to the
+// entire platform at once and cannot be recalled.
+//
+// The delivery job claims work with a conditional
+// `updateMany({ where: { status: 'PENDING' } })` and acts only on the rows it
+// actually claimed, so a second worker racing over the same page claims nothing
+// rather than sending twice.
+//
+// userId is a LOOSE id with no FK, like Broadcast.createdById: a delivery ledger
+// that disappears when the recipient deletes their account cannot answer "did we
+// email this person", which is the only question it exists to answer. `email` is
+// snapshotted for the same reason — it records the address actually used, not
+// whatever the address is today.
+model BroadcastRecipient {
+  id          Int                      @id @default(autoincrement())
+  broadcastId Int
+  broadcast   Broadcast                @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  userId      Int
+  email       String
+  status      BroadcastRecipientStatus @default(PENDING)
+  // Why this row is in its current status: the skip reason for SKIPPED, the
+  // upstream error for FAILED. ONE nullable column rather than two, because a
+  // row is never both at once and a pair of columns where only ever one is set
+  // invites reading the wrong one.
+  statusReason String?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([broadcastId, userId])
+  // The delivery job's claim query: WHERE broadcastId = ? AND status = 'PENDING'.
+  @@index([broadcastId, status])
 }
 
 // ============================================================

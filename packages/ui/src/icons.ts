@@ -37,6 +37,12 @@ export {
   LogOut,
   Mail,
   MapPin,
+  // Broadcast Notifications (/sadmin/broadcasts). Added rather than reusing
+  // Send or Mail: SidebarNav's own comments record that two adjacent rail rows
+  // sharing a glyph is the fastest way to land an admin in the wrong console,
+  // and Mail/Send both read as "one message to one person" — the opposite of
+  // what this console does.
+  Megaphone,
   Menu,
   MessageCircle,
   MoreHorizontal,
