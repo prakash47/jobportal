@@ -30,6 +30,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   bool get _dirty => _saved != null && _draft != _saved;
 
+  /// Owned by the screen rather than by [_confirmDelete], and disposed with it.
+  ///
+  /// Creating it per-call and disposing it when showDialog returns looks tidy
+  /// and is a use-after-dispose: the dialog's route is still animating out at
+  /// that point, so the TextField rebuilds against a controller that is already
+  /// gone. With the keyboard still up it throws outright — "A
+  /// TextEditingController was used after being disposed" — and the error
+  /// widget lands on top of the closing dialog.
+  final _deleteConfirm = TextEditingController();
+
+  @override
+  void dispose() {
+    _deleteConfirm.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -87,7 +103,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// Permanent, store-required account deletion. Requires the user to type
   /// DELETE, then wipes the account server-side and logs them out.
   Future<void> _confirmDelete() async {
-    final controller = TextEditingController();
+    final controller = _deleteConfirm..clear();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) {
@@ -141,9 +157,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         );
       },
     );
-    // The dialog is gone either way by this point, and the controller outlives
-    // it because it is created here rather than in the dialog's own State.
-    controller.dispose();
     if (confirmed != true) return;
 
     setState(() => _deleting = true);
