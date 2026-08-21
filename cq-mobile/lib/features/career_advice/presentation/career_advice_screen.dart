@@ -54,7 +54,10 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
     return repo;
   }
 
-  Future<void> _load(int page) async {
+  /// Returns false when the request failed and the PREVIOUS results were kept.
+  /// See _selectTag: a topic chip lights up before its results arrive, and a
+  /// failure would otherwise leave it lit above the unfiltered list.
+  Future<bool> _load(int page) async {
     setState(() {
       if (_page == null) _loading = true; // keep the list mounted during refresh
       _error = null;
@@ -65,7 +68,7 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
         q: _q,
         page: page,
       );
-      if (!mounted) return;
+      if (!mounted) return true;
       setState(() {
         _page = data;
         _currentPage = data.page;
@@ -78,26 +81,29 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
         _allTags = set.toList();
         _loading = false;
       });
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       final message = e is ArticlesException ? e.message : 'Could not load articles.';
-        _loading = false;
       // A refresh that fails keeps what is already on screen — see
       // core/ui/refresh_failure.dart.
       if (keepContentOnFailure(context, message, hasContent: _page != null)) {
         setState(() => _loading = false);
-        return;
+        return false;
       }
       setState(() {
         _error = message;
         _loading = false;
       });
+      return false;
     }
   }
 
-  void _selectTag(String? tag) {
-    _tag = tag;
-    _load(1);
+  Future<void> _selectTag(String? tag) async {
+    final previous = _tag;
+    setState(() => _tag = tag);
+    // Put the chip back if the results it promised never arrived.
+    if (!await _load(1) && mounted) setState(() => _tag = previous);
   }
 
   void _submitSearch(String raw) {

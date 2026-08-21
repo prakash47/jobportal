@@ -89,7 +89,6 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
       final message = e is ApplicationsException
             ? e.message
             : 'Could not load your applications.';
-        _loading = false;
       // A refresh that fails keeps what is already on screen — see
       // core/ui/refresh_failure.dart.
       if (keepContentOnFailure(context, message, hasContent: _page != null)) {

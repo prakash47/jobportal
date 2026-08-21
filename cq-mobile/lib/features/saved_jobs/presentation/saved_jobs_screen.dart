@@ -73,7 +73,6 @@ class _SavedJobsScreenState extends ConsumerState<SavedJobsScreen> {
       final message = e is SavedJobsException
             ? e.message
             : 'Could not load your saved jobs.';
-        _loading = false;
       // A refresh that fails keeps what is already on screen — see
       // core/ui/refresh_failure.dart.
       if (keepContentOnFailure(context, message, hasContent: _page != null)) {

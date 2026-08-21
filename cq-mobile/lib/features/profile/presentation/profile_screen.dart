@@ -89,7 +89,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       final message = e is ProfileException ? e.message : 'Could not load your profile.';
-        _loading = false;
       // A refresh that fails keeps what is already on screen — see
       // core/ui/refresh_failure.dart.
       if (keepContentOnFailure(context, message, hasContent: _profile != null)) {

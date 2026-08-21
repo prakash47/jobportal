@@ -49,7 +49,14 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
     return repo;
   }
 
-  Future<void> _load(int page) async {
+  /// Returns false when the request failed and the PREVIOUS results were kept.
+  ///
+  /// A filter chip is set before the request goes out, so it lights up
+  /// immediately. If the request then fails, keepContentOnFailure correctly
+  /// leaves the old page on screen — and the two rules together produce a lit
+  /// chip above a list that was never filtered by it. Callers that changed a
+  /// filter use this to put the chip back.
+  Future<bool> _load(int page) async {
     setState(() {
       if (_page == null) _loading = true; // keep the list mounted during refresh
       _error = null;
@@ -62,27 +69,34 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
         hiring: _hiringOnly,
         page: page,
       );
-      if (!mounted) return;
+      if (!mounted) return true;
       setState(() {
         _page = data;
         _currentPage = data.page;
         _loading = false;
       });
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       final message = e is CompaniesException ? e.message : 'Could not load companies.';
-        _loading = false;
       // A refresh that fails keeps what is already on screen — see
       // core/ui/refresh_failure.dart.
       if (keepContentOnFailure(context, message, hasContent: _page != null)) {
         setState(() => _loading = false);
-        return;
+        return false;
       }
       setState(() {
         _error = message;
         _loading = false;
       });
+      return false;
     }
+  }
+
+  /// Applies a filter change, and undoes it if the results never arrived.
+  Future<void> _applyFilter(void Function() change, VoidCallback undo) async {
+    setState(change);
+    if (!await _load(1) && mounted) setState(undo);
   }
 
   @override
@@ -130,8 +144,11 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
             label: 'Hiring now',
             selected: _hiringOnly,
             onTap: () {
-              _hiringOnly = !_hiringOnly;
-              _load(1);
+              final previous = _hiringOnly;
+              _applyFilter(
+                () => _hiringOnly = !_hiringOnly,
+                () => _hiringOnly = previous,
+              );
             },
           ),
           const SizedBox(width: AppSpacing.sm),
@@ -157,8 +174,11 @@ class _CompaniesScreenState extends ConsumerState<CompaniesScreen> {
       initial: _industry == null ? const [] : [_industry!],
     );
     if (picked == null || picked.isEmpty) return;
-    _industry = picked.first;
-    _load(1);
+    final previous = _industry;
+    await _applyFilter(
+      () => _industry = picked.first,
+      () => _industry = previous,
+    );
   }
 
   void _clearIndustry() {
