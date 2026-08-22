@@ -81,4 +81,17 @@ export const ROUTE_SCOPES: Record<string, RouteScope> = {
   // there is no meaningful read-only view of it to give away — see the
   // otp_reveal note in @jobportal/domain/admin-permissions.
   'otp-sessions': { module: 'otp_reveal', level: 'EDIT' },
+
+  // Staff management. `system`/EDIT rather than a READ_ONLY floor, and the
+  // consequence is worth being explicit about: because clampSystem() pins
+  // `system` to the tier default in BOTH directions, only SUPER_ADMIN's default
+  // is 'EDIT', and no stored override can ever move it — this entry makes the
+  // console structurally SUPER_ADMIN-only. It is not merely the current default.
+  //
+  // The full grant to LOAD, like otp-sessions and unlike everything else here,
+  // for the same kind of reason: the read IS the sensitive act. The roster shows
+  // exactly which accounts hold the revenue ledger, candidate PII and the OTP
+  // reveal — a map of who to phish, and of which account is worth stealing. A
+  // read-only tier for it would hand that map to the staff it describes.
+  roles: { module: 'system', level: 'EDIT' },
 };

@@ -16,6 +16,7 @@ import { KpiCard } from '../../../components/dashboard/KpiCard';
 import { PendingApprovals } from '../../../components/dashboard/PendingApprovals';
 import { SignupStats } from '../../../components/dashboard/SignupStats';
 import { ActivityTrends } from '../../../components/dashboard/ActivityTrends';
+import { hasAdminScope } from '@jobportal/domain/admin-permissions';
 import { requireAdminStaff } from '../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
@@ -38,13 +39,34 @@ export const metadata: Metadata = {
 // time-to-hire — Application.statusHistory is unpopulated on historical rows)
 // is omitted rather than faked, per the precedent the recruiter dashboard set.
 export default async function DashboardPage() {
-  // Layer 2 scope gate for this route segment — see
-  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
-  // active staff; this proves they hold THIS module. Load-bearing because
-  // the reads below hit Postgres directly and never reach AdminGuard.
-  await requireAdminStaff();
+  // Layer 2 for this route segment — see lib/roles/scope-map.ts, where this
+  // segment is the only 'ANY_STAFF' entry. The COARSE gate is correct here and
+  // must stay: the dashboard is the post-login landing page, so gating it on a
+  // module would bounce a Support Admin off the first screen they ever see.
+  //
+  // The individual cards carry the scoping instead, which is what makes
+  // ANY_STAFF honest rather than a hole. The permission map comes back from this
+  // same call — already resolved through the tier defaults, the stored overrides
+  // and clampSystem — so filtering costs no extra query.
+  const { permissions } = await requireAdminStaff();
 
+  // Read-level, not EDIT: hasAdminScope is rank-based (EDIT ⊃ READ_ONLY ⊃ NONE),
+  // so this is "may see at all". A raw `!== 'NONE'` comparison would work today
+  // and break the moment a fourth level is added.
+  const canSeeUsers = hasAdminScope(permissions, 'users', 'READ_ONLY');
+  const canSeeModeration = hasAdminScope(permissions, 'moderation', 'READ_ONLY');
+  const canSeeVerification = hasAdminScope(permissions, 'verification', 'READ_ONLY');
+
+  // The queries are NOT skipped for hidden cards. All three KPI figures are
+  // indexed COUNTs and queries.test.ts pins "exactly one query per card"; the
+  // filtering is a render-time concern and threading a permission map into the
+  // query layer would buy nothing and break that assertion.
   const [kpis, approvals] = await Promise.all([getPlatformKpis(), getPendingApprovals()]);
+
+  // A staffer with neither module would otherwise get an empty grid under an
+  // sr-only "Key metrics" heading — an announced section containing nothing.
+  const showKpis = canSeeUsers || canSeeModeration;
+  const showApprovals = canSeeVerification || canSeeModeration;
 
   return (
     // data-wide opts into the (authed) layout's max-w-6xl column. A three-across
@@ -59,38 +81,59 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <section aria-labelledby="sadmin-kpi-heading">
-        <h2 id="sadmin-kpi-heading" className="sr-only">
-          Key metrics
-        </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard
-            label="Recruiters"
-            value={kpis.recruiters}
-            // Names the exclusion, because the number would otherwise be
-            // indistinguishable from a raw user count and quietly disagree
-            // with it once anyone is removed from a team.
-            hint="Active recruiter accounts"
-            icon={Building2}
-          />
-          <KpiCard
-            label="Job seekers"
-            value={kpis.seekers}
-            hint="Registered candidate accounts"
-            icon={Users}
-          />
-          {/* "Open", not "Active" — that is the label JOB_STATUS_META gives
-              JobStatus.ACTIVE everywhere in the recruiter portal. */}
-          <KpiCard
-            label="Open jobs"
-            value={kpis.openJobs}
-            hint="Live and visible to candidates"
-            icon={Briefcase}
-          />
-        </div>
-      </section>
+      {showKpis && (
+        <section aria-labelledby="sadmin-kpi-heading">
+          <h2 id="sadmin-kpi-heading" className="sr-only">
+            Key metrics
+          </h2>
+          {/* Drops to two columns when only the two `users` cards survive, so a
+              Support or Finance Admin gets a balanced row rather than a ragged
+              two-of-three. */}
+          <div
+            className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${
+              canSeeUsers && canSeeModeration ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+            }`}
+          >
+            {canSeeUsers && (
+              <KpiCard
+                label="Recruiters"
+                value={kpis.recruiters}
+                // Names the exclusion, because the number would otherwise be
+                // indistinguishable from a raw user count and quietly disagree
+                // with it once anyone is removed from a team.
+                hint="Active recruiter accounts"
+                icon={Building2}
+              />
+            )}
+            {canSeeUsers && (
+              <KpiCard
+                label="Job seekers"
+                value={kpis.seekers}
+                hint="Registered candidate accounts"
+                icon={Users}
+              />
+            )}
+            {/* "Open", not "Active" — that is the label JOB_STATUS_META gives
+                JobStatus.ACTIVE everywhere in the recruiter portal. */}
+            {canSeeModeration && (
+              <KpiCard
+                label="Open jobs"
+                value={kpis.openJobs}
+                hint="Live and visible to candidates"
+                icon={Briefcase}
+              />
+            )}
+          </div>
+        </section>
+      )}
 
-      <PendingApprovals data={approvals} />
+      {showApprovals && (
+        <PendingApprovals
+          data={approvals}
+          showVerification={canSeeVerification}
+          showModeration={canSeeModeration}
+        />
+      )}
 
       <Suspense fallback={<TrendsFallback />}>
         <DashboardTrends />
