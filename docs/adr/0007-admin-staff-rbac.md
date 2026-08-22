@@ -2,7 +2,8 @@
 
 - **Status**: Accepted
 - **Date**: 2026-08-22
-- **Branch**: `feature/sadmin-roles-permissions` (PR A of 2)
+- **Branch**: `feature/sadmin-roles-permissions` (PR A of 2), then
+  `feature/sadmin-roles-console` (PR B of 2 — decisions 9–13)
 - **SRS**: §4.16 (admin console), §4.12 (auth), FR-4.12.10
 - **Supersedes**: nothing. **Amends**: the unqualified reading of CLAUDE.md §9.
 
@@ -120,12 +121,19 @@ most, and lose them quietly.
 
 ### 8. FR-4.12.10 is split, not overturned
 
-*"ADMIN role is assigned only via direct DB write — never via UI"* remains
-**entirely true as of PR A**: nothing in the product creates a staff account.
+*"ADMIN role is assigned only via direct DB write — never via UI"* was
+**entirely true as of PR A**: nothing in the product created a staff account.
 PR B relaxes it for the three lesser tiers only. **`SUPER_ADMIN` — the tier that
 can grant every other tier — stays seed-or-psql forever**, so no one can
 bootstrap themselves to full power through a web form. That is the property
 FR-4.12.10 exists to protect, and it survives intact.
+
+As of PR B this is enforced in four independent places, none of which is the UI:
+`ASSIGNABLE_ADMIN_STAFF_ROLES` excludes it, the API DTO derives its enum from
+that array rather than re-typing one, `clampSystem()` makes the `system` scope
+that would grant it non-overridable, and the invite table's `staffRole` is only
+ever written from a validated DTO. The console's role dropdown offers three
+options; the API rejects a fourth with a 400 even when the dropdown is bypassed.
 
 ## Consequences
 
@@ -140,21 +148,108 @@ review.
 provides it). `apps/web/lib/auth/require-admin.ts` now queries Postgres, which
 it did not before.
 
-**Known gaps at the end of PR A.**
+**Known gaps at the end of PR A — all but one closed by PR B (2026-08-22).**
 
-- No console and no invites — that is PR B. Sub-admins can currently only be
-  created by direct DB write.
-- **The sidebar is not filtered by scope.** It needs props on a props-less
-  client component whose `NAV_ITEMS` the planned
-  `feature/sadmin-admin-migration` will append to, and a signature change plus
-  an append to one locked file is the worst conflict to hand a teammate. Until
-  PR B, an out-of-scope nav link 404s — safe, not pretty.
-- **The dashboard is `ANY_STAFF`.** It is the post-login landing page, so gating
-  it on a module would bounce a Support Admin off the first screen they see. Its
-  individual KPI cards are not yet filtered by module, so a sub-admin sees
-  platform-wide counts (not records) outside their domain. Worth closing in PR B.
+- ~~No console and no invites.~~ **Closed.** `/sadmin/roles` (+ `/new` +
+  `/[id]`), `AdminStaffInvite`, and a public `(auth)/accept-invite/[token]`.
+- ~~The sidebar is not filtered by scope.~~ **Closed.** See decision 9 below.
+- ~~The dashboard is `ANY_STAFF` with unfiltered KPI cards.~~ **Closed.** The
+  segment stays `ANY_STAFF` — it is the landing page — and the *cards* carry the
+  scoping instead, which is what makes `ANY_STAFF` honest rather than a hole.
 - `apps/web/app/admin/**` still exists and is now SUPER_ADMIN-only. The right
-  fix is deleting it, which `feature/sadmin-admin-migration` does.
+  fix is deleting it, which `feature/sadmin-admin-migration` does. **Still open.**
+
+## PR B — the console (2026-08-22, `feature/sadmin-roles-console`)
+
+### 9. The rail is filtered on the SERVER, not inside `SidebarNav`
+
+`SidebarNav` gains one prop (`allowedHrefs: readonly string[]`); the filtering
+itself lives in `lib/roles/nav-visibility.ts` and runs in the `(authed)` layout,
+which already holds the resolved permission map from its existing
+`requireAdminStaff()` call — so this costs no extra query.
+
+Doing it inside the component would mean a runtime value import of
+`@jobportal/domain` from a `'use client'` module, which needs that package in
+`transpilePackages` — where its absence is an opaque build-time parse error
+rather than a missing-module one. Filtering on the server also keeps the domain
+package out of the client bundle on *every* page, which the rail is, and puts
+the logic under `lib/**`, the only path this app's vitest collects.
+
+**An unmapped href is SHOWN, not hidden.** Enforcement is `requireAdminScope()`
+in each page, which fails closed on its own; hiding an unmapped link would make
+a teammate's newly-added rail entry vanish for everyone with no error to explain
+it. The drift is caught by `nav-visibility.test.ts` as a build failure instead.
+
+**The href list cannot live in `SidebarNav.tsx`.** It did, and it crashed every
+page with `hrefs.filter is not a function`: a server component importing a value
+from a client module receives a client *reference proxy*, not the array. The
+whole automated gate passed — `tsc` sees `string[]` on both sides because that
+is what the source says, and `pnpm build` never renders the layout. It now lives
+in `lib/roles/nav-items.ts`, and the test asserts the two lists match exactly.
+This is the one class of bug in this feature that only a browser can find.
+
+### 10. Provisioning is an invite token, and the obvious shortcut is broken
+
+Creating the `User` with a null `passwordHash` and pointing them at
+forgot-password **fails silently**: `password-reset.service.ts:117`
+short-circuits on a null hash and returns a fallback deliberately
+indistinguishable from success (ADR 0001), so the invitee would watch for a mail
+that is never sent. The token is also what keeps the credential known only to
+its owner — a super admin must never type a colleague's password.
+
+`RecruiterInvite` is **cloned, not reused**: its `companyId` is a non-nullable FK
+with `onDelete: Cascade` and platform staff have no company.
+
+`invite()` has three outcomes rather than the recruiter's two, because "this
+address already has an account" is the *expected* path here — CLAUDE.md §9
+provisions admins by direct DB write, so an `ADMIN` with no staff row is exactly
+what a hand-promotion leaves behind, and the console grants it a tier in place.
+An address belonging to a candidate or recruiter is **refused, not converted**:
+`User.role` is a single scalar, so promoting them would change what their own
+account *is* and strand the profile hanging off it.
+
+### 11. Resend mints a new token, and the console says so
+
+Delivery is not observable: the transactional queue log-and-drops when Redis is
+unreachable, and the send is fire-and-forget after the commit. So a pending
+invite whose mail never arrived is indistinguishable from one the recipient has
+not read, and the roster offers a resend rather than reporting "sent".
+
+Because the database stores only `sha256(raw)`, the original link is
+unrecoverable by anyone including us — a resend is a *fresh capability grant*,
+not a re-delivery, which is why it revokes the prior row and writes its own
+audit action. An `killswitch.transactional_emails` pre-check makes a killed
+mailer a 503 instead of silence.
+
+### 12. Self-directed changes are refused outright
+
+Stricter than the recruiter equivalent, which blocks only self-removal. There is
+no support team here and no second console: a super admin who demotes or
+deactivates themselves is restored by a direct DB write, and if they were the
+last one, nobody remains who could authorise even that.
+
+The `FOR UPDATE` last-super-admin guard therefore matters for a narrower case
+than it first appears — the self guard already covers a lone super admin. It
+earns its place under **concurrency**: with two super admins each deactivating
+the other, both requests read the same pre-write snapshot, both count one
+surviving admin, and both pass. Verified live: fired together, one returned 204
+and the other 409.
+
+### 13. The killswitch gates writes only
+
+`killswitch.admin_roles_write` disables provisioning while the roster and the
+pending-invite list keep rendering — "killing the write must not blind the
+read", the same shape the four existing admin killswitches use. During the
+incident that makes someone reach for this switch, *who has access right now* is
+the first thing anyone needs to see.
+
+It covers the two PUBLIC token endpoints as well, unlike every other admin
+killswitch here, because accepting an invite creates an admin account.
+
+There is no Layer 1, and the reason is sharper than the usual one:
+`apps/sadmin`'s middleware does not authenticate and cannot evaluate flags at
+all, since its runtime is pinned to `nodejs` precisely because the flag client
+cannot run on Edge.
 
 ## Alternatives rejected
 
