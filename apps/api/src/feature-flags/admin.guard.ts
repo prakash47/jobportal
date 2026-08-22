@@ -48,12 +48,13 @@ interface AuthedRequest extends Request {
 // `@UseGuards(AdminGuard)` and no module needs to register a provider — the
 // property that let it be adopted by nine controllers without ceremony.
 //
-// NOTE ON FR-4.12.10: the SRS line "ADMIN role is assigned only via direct DB
-// write — never via UI" still holds for the SUPER_ADMIN tier, which is seeded or
-// written by hand and is the only tier that can grant others. Lesser staff tiers
-// are provisioned through /sadmin by a super admin (docs/adr/0007). The comment
-// that used to sit here asserted the unqualified version, which is no longer
-// true of this codebase.
+// NOTE ON FR-4.12.10. The SRS line "ADMIN role is assigned only via direct DB
+// write — never via UI" is still true as of THIS PR: nothing in the product
+// creates a staff account, and the one that exists comes from the seed. The
+// planned PR B relaxes it for the three lesser tiers only — SUPER_ADMIN, the
+// tier that can grant every other, stays seed-or-psql forever. docs/adr/0007
+// records that split and is the thing to update if this comment and the code
+// ever disagree.
 @Injectable()
 export class AdminGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}

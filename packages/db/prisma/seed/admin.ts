@@ -8,13 +8,26 @@
 // DATABASE_URL (both demo entry points hard-refuse). Putting the admin here is
 // what makes "pull, seed, log in" actually true on all three machines.
 //
-// Role: reuses the existing `UserRole.ADMIN`. There is no SUPER_ADMIN tier in
-// the schema, and adding one would mean a migration under the schema.prisma
-// lock plus an audit of every requireAdmin()/AdminGuard call site. "sadmin" is
-// the portal's name, not a privilege level above ADMIN. This account therefore
-// also reaches the pre-existing /admin console in apps/web — which is a feature,
-// not an accident: nothing could log in there before, since no ADMIN user was
-// seeded anywhere and CLAUDE.md §9 assigns the role only by direct DB write.
+// Role: `UserRole.ADMIN` **plus** an `AdminStaff` row at `SUPER_ADMIN`.
+//
+// This comment used to say there was no SUPER_ADMIN tier, and that adding one
+// would cost a migration under the schema.prisma lock plus an audit of every
+// requireAdmin()/AdminGuard call site. feature/sadmin-roles-permissions paid
+// exactly that price (SRS §4.16). The tier now exists as a SIDECAR — `User.role`
+// is still plain `ADMIN` for every staff member, so none of the eight sites that
+// compare that field to the literal 'ADMIN' changed — and what a staffer may
+// actually do is the AdminStaff row, read per request.
+//
+// The AdminStaff row is not optional garnish: AdminGuard and requireAdminStaff()
+// both treat an ADMIN with no row as having NO access (fail-closed, so that a
+// hand-promoted account holds no powers until a tier is granted deliberately).
+// Without the upsert below, `pnpm db:seed` would produce an account that can
+// authenticate and then 403 on every single screen.
+//
+// This account also reaches the pre-existing /admin console in apps/web — which
+// remains a feature rather than an accident, and is now additionally restricted:
+// that console can toggle killswitches, so apps/web/lib/auth/require-admin.ts
+// requires SUPER_ADMIN specifically, not merely staff.
 //
 // Hashing: argon2 is called directly with the SAME parameters as demo.ts rather
 // than importing hashPassword from @jobportal/auth. That is not laziness —
@@ -124,6 +137,31 @@ export async function seedSuperAdmin(prisma: PrismaClient): Promise<void> {
     select: { id: true },
   });
 
+  // The privilege itself. `User.role = 'ADMIN'` above only says "is staff at
+  // all"; this row is what the guards actually read.
+  //
+  // `staffRole` is re-asserted on update for the same reason `role` is above: a
+  // row that was demoted locally (or created by an earlier run of a future
+  // console) must converge back on SUPER_ADMIN, or the documented "seed, then
+  // sign in" promise quietly stops being true on that machine.
+  //
+  // `permissions` is explicitly reset to null — "derive from the role defaults"
+  // — rather than left alone. A leftover override blob from local experimentation
+  // is precisely the thing that would make one developer's console behave
+  // differently from everyone else's while looking identically seeded. Note that
+  // `system` could not be revoked by such a blob anyway (clampSystem in
+  // @jobportal/domain/admin-permissions), but the other seven modules could.
+  //
+  // `deactivatedAt: null` un-deactivates: a developer who tests the deactivate
+  // path against their own seeded account would otherwise lock themselves out of
+  // the portal permanently, with no second admin able to restore them.
+  await prisma.adminStaff.upsert({
+    where: { userId: admin.id },
+    update: { staffRole: 'SUPER_ADMIN', permissions: null, deactivatedAt: null },
+    create: { userId: admin.id, staffRole: 'SUPER_ADMIN' },
+    select: { id: true },
+  });
+
   // Revoke every existing session for this account.
   //
   // The `update` branch above will happily promote a row that someone else created — and
@@ -139,7 +177,7 @@ export async function seedSuperAdmin(prisma: PrismaClient): Promise<void> {
   const { count } = await prisma.session.deleteMany({ where: { userId: admin.id } });
 
   console.log(
-    `  -> super admin upserted (${SUPER_ADMIN_EMAIL})` +
+    `  -> super admin upserted (${SUPER_ADMIN_EMAIL}, staffRole=SUPER_ADMIN)` +
       (count > 0 ? `; ${count} pre-existing session(s) revoked` : ''),
   );
 }
