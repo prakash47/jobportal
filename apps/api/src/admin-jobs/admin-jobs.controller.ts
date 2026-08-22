@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { RequireAdminScope } from '../auth/admin-scope.decorator';
 import { AdminGuard } from '../feature-flags/admin.guard';
 import { AdminJobsService } from './admin-jobs.service';
 import { ListAdminJobsQueryDto, ModerateJobDto } from './dto';
@@ -25,6 +26,7 @@ import { ListAdminJobsQueryDto, ModerateJobDto } from './dto';
 // it, matching the admin-kyc / admin-support precedent.
 @Controller('admin/jobs')
 @UseGuards(AdminGuard)
+@RequireAdminScope('moderation', 'READ_ONLY')
 export class AdminJobsController {
   constructor(private readonly service: AdminJobsService) {}
 
@@ -40,6 +42,7 @@ export class AdminJobsController {
     return this.service.getJobDetail(id);
   }
 
+  @RequireAdminScope('moderation', 'EDIT')
   @Patch(':id')
   async moderate(
     @CurrentUser() admin: AccessClaims,
@@ -62,6 +65,7 @@ export class AdminJobsController {
   //
   // 204, matching DELETE /recruiter/jobs/:id: there is no resource left to
   // return, and the sadmin client only branches on the status code.
+  @RequireAdminScope('moderation', 'EDIT')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(

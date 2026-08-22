@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { RequireAdminScope } from '../auth/admin-scope.decorator';
 import { AdminGuard } from '../feature-flags/admin.guard';
 import { ParseInt32IdPipe } from '../common/parse-int32-id.pipe';
 import { AdminSupportService } from './admin-support.service';
@@ -29,6 +30,7 @@ import {
 // while the recruiter-facing surface is paused.
 @Controller('admin/support')
 @UseGuards(AdminGuard)
+@RequireAdminScope('support', 'READ_ONLY')
 export class AdminSupportController {
   constructor(private readonly service: AdminSupportService) {}
 
@@ -50,6 +52,7 @@ export class AdminSupportController {
     return this.service.getTicketDetail(id);
   }
 
+  @RequireAdminScope('support', 'EDIT')
   @Patch('tickets/:id')
   async updateStatus(
     @CurrentUser() admin: AccessClaims,
@@ -61,6 +64,7 @@ export class AdminSupportController {
     return this.service.updateStatus(admin.sub, id, parsed.data);
   }
 
+  @RequireAdminScope('support', 'EDIT')
   @Post('tickets/:id/messages')
   async reply(
     @CurrentUser() admin: AccessClaims,
@@ -81,6 +85,7 @@ export class AdminSupportController {
   // what staff knew and when; making it editable would let the account that
   // wrote it rewrite its own trail after the fact, and the audit row only
   // attests that a note was added.
+  @RequireAdminScope('support', 'EDIT')
   @Post('tickets/:id/notes')
   async addNote(
     @CurrentUser() admin: AccessClaims,

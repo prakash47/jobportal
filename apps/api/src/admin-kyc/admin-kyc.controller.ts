@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { RequireAdminScope } from '../auth/admin-scope.decorator';
 import { AdminGuard } from '../feature-flags/admin.guard';
 import { AdminKycService } from './admin-kyc.service';
 import { ListKycQueryDto, ReviewKycDto } from './dto';
@@ -21,6 +22,7 @@ import { ListKycQueryDto, ReviewKycDto } from './dto';
 // still clear an existing backlog while new submissions are paused.
 @Controller('admin/kyc')
 @UseGuards(AdminGuard)
+@RequireAdminScope('verification', 'READ_ONLY')
 export class AdminKycController {
   constructor(private readonly service: AdminKycService) {}
 
@@ -36,6 +38,7 @@ export class AdminKycController {
     return this.service.getKycDetail(companyId);
   }
 
+  @RequireAdminScope('verification', 'EDIT')
   @Patch(':companyId')
   async review(
     @CurrentUser() admin: AccessClaims,

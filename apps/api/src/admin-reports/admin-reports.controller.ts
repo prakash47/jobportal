@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Param, Patch, UseGuards } from '
 import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { ParseInt32IdPipe } from '../common/parse-int32-id.pipe';
+import { RequireAdminScope } from '../auth/admin-scope.decorator';
 import { AdminGuard } from '../feature-flags/admin.guard';
 import { AdminReportsService } from './admin-reports.service';
 import { UpdateReportDto } from './dto';
@@ -27,8 +28,11 @@ import { UpdateReportDto } from './dto';
 // able to clear a queue that already has rows in it — the rule admin-jobs,
 // admin-support and admin-otp-sessions already follow. The gate here is
 // `killswitch.admin_report_write`, checked in the service.
+// Writes only (the queue and detail screens read Postgres in their RSCs), so
+// this sits at moderation/EDIT wholesale rather than declaring an unused floor.
 @Controller('admin/reports')
 @UseGuards(AdminGuard)
+@RequireAdminScope('moderation', 'EDIT')
 export class AdminReportsController {
   constructor(private readonly service: AdminReportsService) {}
 

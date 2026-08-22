@@ -12,6 +12,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { RequireAdminScope } from '../auth/admin-scope.decorator';
 import { AdminGuard } from '../feature-flags/admin.guard';
 import { ParseInt32IdPipe } from '../common/parse-int32-id.pipe';
 import { AdminBroadcastsService } from './admin-broadcasts.service';
@@ -42,8 +43,14 @@ import {
  * actually uses. The count an admin approves has to be produced by the same code
  * that decides who gets the message.
  */
+// Scope floor is communications/READ_ONLY (list, detail, and the recipient
+// preview — a count, not a send). Every route that can put mail in flight raises
+// itself to EDIT below. `send` is the one action in this product no later action
+// can reverse, which is why it also carries a typed-recipient-count confirmation
+// and its own killswitch; the scope is the outermost of those three rings.
 @Controller('admin/broadcasts')
 @UseGuards(AdminGuard)
+@RequireAdminScope('communications', 'READ_ONLY')
 export class AdminBroadcastsController {
   constructor(private readonly service: AdminBroadcastsService) {}
 
@@ -68,6 +75,7 @@ export class AdminBroadcastsController {
     return this.service.previewCount(parsed.data);
   }
 
+  @RequireAdminScope('communications', 'EDIT')
   @Post()
   async create(@CurrentUser() admin: AccessClaims, @Body() body: unknown) {
     const parsed = CreateBroadcastDto.safeParse(body);
@@ -85,6 +93,7 @@ export class AdminBroadcastsController {
     return this.service.getDetail(id);
   }
 
+  @RequireAdminScope('communications', 'EDIT')
   @Put(':id')
   async update(@Param('id', ParseInt32IdPipe) id: number, @Body() body: unknown) {
     const parsed = UpdateBroadcastDto.safeParse(body);
@@ -99,6 +108,7 @@ export class AdminBroadcastsController {
    * that puts real mail on the wire without a preceding state check, and a loop
    * against it is free outbound volume on our sending domain.
    */
+  @RequireAdminScope('communications', 'EDIT')
   @Post(':id/test-send')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   testSend(@CurrentUser() admin: AccessClaims, @Param('id', ParseInt32IdPipe) id: number) {
@@ -119,12 +129,14 @@ export class AdminBroadcastsController {
    * DRAFT on the first call), so this limit is about many DIFFERENT broadcasts
    * in quick succession — which is not a thing a human does deliberately.
    */
+  @RequireAdminScope('communications', 'EDIT')
   @Post(':id/send')
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   send(@CurrentUser() admin: AccessClaims, @Param('id', ParseInt32IdPipe) id: number) {
     return this.service.send(admin.sub, id);
   }
 
+  @RequireAdminScope('communications', 'EDIT')
   @Post(':id/cancel')
   cancel(@CurrentUser() admin: AccessClaims, @Param('id', ParseInt32IdPipe) id: number) {
     return this.service.cancel(admin.sub, id);
