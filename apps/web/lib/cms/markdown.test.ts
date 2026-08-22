@@ -5,9 +5,21 @@ import { renderArticleMarkdown } from './markdown';
 // the per-test 5s default doesn't trip on the first paragraph render. The
 // processor is stateless after init, so we deliberately do NOT _resetProcessor
 // between tests — that would re-init Shiki and 10× the suite runtime.
+//
+// 120s, raised from 30s. This hook loads Shiki's WASM engine and grammars, and
+// its duration is a function of how busy the MACHINE is, not of anything this
+// file asserts. Run alone it takes ~12s; run under a full root `pnpm test`,
+// where Turborepo has ten workspaces' vitest instances competing for cores, it
+// crossed 30s the moment feature/sadmin-roles-permissions added ~43 tests
+// elsewhere in the repo — and then failed the whole gate from a file that
+// change never touched.
+//
+// A timeout on a warmup hook is not an assertion: nothing here is verified by
+// it, and a tight value only converts "this laptop is busy" into "the merge
+// gate is red". The seven real assertions below keep their own timeouts.
 beforeAll(async () => {
   await renderArticleMarkdown('warmup');
-}, 30_000);
+}, 120_000);
 
 describe('renderArticleMarkdown', () => {
   it('renders a paragraph', async () => {
