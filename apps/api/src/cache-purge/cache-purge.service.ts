@@ -139,6 +139,20 @@ const PATH_MAP: Record<string, string[]> = {
   // Cloudflare-cached path, and the bell is rendered per-request behind auth.
   // There is no cached page anywhere for this flag to invalidate.
   'killswitch.admin_broadcast_send': [],
+  // Gates staff provisioning on /sadmin/roles. Same reasoning as the five above
+  // — every surface it touches lives in apps/sadmin, behind auth and noindex,
+  // served by a different app than the Cloudflare-cached seeker site — and
+  // mapped up-front rather than after the fact, because the omission this
+  // file's comments describe has now shipped twice and each time it evicted the
+  // job-seeker homepage.
+  //
+  // It is worth saying plainly for this key, because it is the one most likely
+  // to be reasoned about wrongly: this flag governs who may hold an ADMIN
+  // account, which sounds platform-wide. But an admin's powers are read from
+  // the AdminStaff row on every single request — never baked into a cached page
+  // and never into the token — so no public HTML anywhere embeds a staffing
+  // decision. There is nothing for a purge to invalidate.
+  'killswitch.admin_roles_write': [],
 };
 
 export function pathsForFlag(flagKey: string): string[] {
