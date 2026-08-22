@@ -33,13 +33,13 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-22 after `feature/sadmin-roles-permissions` (PR A) merged (`20260822042537_add_admin_staff_roles`). **PR B will take it again** for `AdminStaffInvite` + the `ProfileAuditAction` members. |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/sadmin-roles-console` | 2026-08-22 | PR B: `model AdminStaffInvite` + 8 `ProfileAuditAction` members (`ADMIN_STAFF_INVITED` / `_INVITE_RESENT` / `_INVITE_REVOKED` / `_INVITE_ACCEPTED` / `_ROLE_CHANGED` / `_PERMISSIONS_CHANGED` / `_DEACTIVATED` / `_REACTIVATED`), migration `add_admin_staff_invites`. Also fixes `AdminStaff`'s stale doc comment (lists 7 modules, omits `otp_reveal`). |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
 | **UI atoms/molecules barrels** | `packages/ui/src/components/*/index.ts` | — free — | | | Append-only. |
-| **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | — free — | | | Released 2026-08-19 after `feature/sadmin-broadcast-notifications` merged (appended `/broadcasts`, no reorder). Append-only edits are safe; reorders need the lock. |
-| **Feature flags** | `packages/feature-flags/src/keys.ts` | — free — | | | Released 2026-08-19 after `feature/sadmin-broadcast-notifications` merged (added `KILL_ADMIN_BROADCAST_SEND`; nothing renamed). |
+| **sadmin sidebar nav** | `apps/sadmin/components/SidebarNav.tsx` (`NAV_ITEMS`) | Claude/Prakash | `feature/sadmin-roles-console` | 2026-08-22 | PR B: **signature change** — `SidebarNav()` → `SidebarNav({ allowedHrefs })` so the rail is filtered by scope (ADR 0007's second known gap), plus an appended `/roles` row. ⚠️ `feature/sadmin-admin-migration` appends to the same `NAV_ITEMS`; the append itself stays conflict-free, the props line is the part to rebase onto. |
+| **Feature flags** | `packages/feature-flags/src/keys.ts` | Claude/Prakash | `feature/sadmin-roles-console` | 2026-08-22 | PR B: adding `KILL_ADMIN_ROLES_WRITE` (`killswitch.admin_roles_write`); nothing renamed. Ships with its `seed/flags.ts` row and its `cache-purge` `PATH_MAP` entry in the same PR. |
 
 > "Held by: — free —" means anyone can take it. To take it, replace `— free —` with your name + branch + date, commit, push. To release it, set it back to `— free —`.
 
@@ -51,6 +51,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/sadmin-roles-console` | **Roles & Permissions — PR B of 2: the console.** `model AdminStaffInvite` (cloned from `RecruiterInvite`, which cannot be reused — its `companyId` is a non-nullable FK and platform staff have no company) · 8 `ProfileAuditAction` members · `killswitch.admin_roles_write` · API module `admin-staff` (6 scoped writes + public GET preview / POST accept) · a new `admin_staff_invite` email template · `/sadmin/roles` + `/new` + `/[id]` · public `(auth)/accept-invite/[token]` · `lib/roles/{queries,format,nav-visibility}.ts`. Also closes ADR 0007's two remaining gaps: **filters the sidebar by scope** and **filters the dashboard KPI cards per module**. | 🔒 `schema.prisma` · 🔒 `keys.ts` · 🔒 `SidebarNav.tsx` (signature change) · append-only: `packages/ui/src/icons.ts` (`UserCog`), `apps/sadmin/lib/candidates/format.ts` (audit labels) |
 
 ---
 
@@ -60,7 +61,6 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Feature | Notes |
 |---|---|---|
-| Claude/Prakash | **Roles & Permissions — PR B of 2 (`feature/sadmin-roles-console`)** | The console half. PR A (merged 2026-08-22) shipped the tier and the enforcement; **nothing in the product creates a staff account yet** — sub-admins can only be made by direct DB write, so FR-4.12.10 is still literally true. PR B adds `/sadmin/roles` (+ `/new` + `/[id]`), an **`AdminStaffInvite`** table cloned from `RecruiterInvite` (which cannot be reused: its `companyId` is a non-nullable FK and platform staff have no company), the six `ProfileAuditAction` members, a `killswitch.admin_roles_write`, and a public `(auth)/accept-invite` page. ⚠ **The intuitive shortcut is already broken**: creating the user with a null `passwordHash` and pointing them at forgot-password fails silently — `password-reset.service.ts:117` short-circuits and the fallback is deliberately indistinguishable from success (ADR 0001). Takes the **`keys.ts`** and **`SidebarNav.tsx`** locks (PR A left both free on purpose) and finally **filters the rail by scope** — until then an out-of-scope link 404s. Also worth doing here: the dashboard is `ANY_STAFF`, so its KPI cards should be filtered per module. See `docs/adr/0007`. |
 | Claude/Prakash | **Admin console migration — PR 3 (`feature/sadmin-admin-migration`)** | ⚠️ **Scope reduced 2026-08-18: `support` is NO LONGER part of this PR** — it was peeled off into `feature/sadmin-support-console` (in progress above), which moves the support pages and deletes that subtree on its own. This PR now covers **feature-flags · audit-log · kyc-review** and is what finally deletes the remainder of `apps/web/app/admin`. Original scope note follows. ~~Moves feature-flags · audit-log · kyc-review · support out of `apps/web/app/admin` into `/sadmin` and deletes the old subtree.~~ **Must land after PR 2**: `/admin/feature-flags` is the only surface that can turn moderation OFF, and a raw DB update can't substitute (`invalidateFlag()` is only called from `setFlag()`, so the 30s cache keeps serving the stale value). Also takes the `keys.ts` lock for the moderation-flag criticality change. |
 
 ---
