@@ -4,6 +4,7 @@ import { FLAG, isFlagEnabled } from '@jobportal/feature-flags';
 import { ArrowLeft } from '@jobportal/ui/icons';
 import { broadcastsHref } from '../../../../lib/broadcasts/format';
 import { BroadcastComposer } from '../../../../components/broadcasts/BroadcastComposer';
+import { requireAdminScope } from '../../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'New broadcast — Career Queue Super Admin',
@@ -23,6 +24,12 @@ export const dynamic = 'force-dynamic';
  * other admin console in this portal uses.
  */
 export default async function NewBroadcastPage() {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminScope('communications', 'READ_ONLY');
+
   const killed = await isFlagEnabled(FLAG.KILL_ADMIN_BROADCAST_SEND);
 
   return (

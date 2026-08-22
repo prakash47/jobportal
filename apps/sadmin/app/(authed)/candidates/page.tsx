@@ -16,6 +16,7 @@ import {
 } from '../../../lib/candidates/format';
 import { listCandidates, type CandidateListRow } from '../../../lib/candidates/queries';
 import { CandidateSearchBar } from '../../../components/candidates/CandidateSearchBar';
+import { requireAdminScope } from '../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'Candidate management — Career Queue Super Admin',
@@ -35,6 +36,12 @@ interface PageProps {
 }
 
 export default async function CandidatesPage({ searchParams }: PageProps) {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminScope('users', 'READ_ONLY');
+
   const sp = await searchParams;
   const q = normalizeQuery(firstParam(sp.q));
   const page = clampPage(firstParam(sp.page));

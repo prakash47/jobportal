@@ -30,6 +30,7 @@ import {
 import { DateRangeFilter } from '../../../components/transactions/DateRangeFilter';
 import { ExportCsvButton } from '../../../components/transactions/ExportCsvButton';
 import { TransactionSearchBar } from '../../../components/transactions/TransactionSearchBar';
+import { requireAdminScope } from '../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'Transaction & Revenue Log — Career Queue Super Admin',
@@ -54,6 +55,12 @@ interface PageProps {
 }
 
 export default async function TransactionsPage({ searchParams }: PageProps) {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminScope('finance', 'READ_ONLY');
+
   const sp = await searchParams;
   const tab = parseTransactionTab(sp.status);
   const rawFrom = parseIstDay(sp.from);

@@ -16,6 +16,7 @@ import { KpiCard } from '../../../components/dashboard/KpiCard';
 import { PendingApprovals } from '../../../components/dashboard/PendingApprovals';
 import { SignupStats } from '../../../components/dashboard/SignupStats';
 import { ActivityTrends } from '../../../components/dashboard/ActivityTrends';
+import { requireAdminStaff } from '../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'Dashboard — Career Queue Super Admin',
@@ -37,6 +38,12 @@ export const metadata: Metadata = {
 // time-to-hire — Application.statusHistory is unpopulated on historical rows)
 // is omitted rather than faked, per the precedent the recruiter dashboard set.
 export default async function DashboardPage() {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminStaff();
+
   const [kpis, approvals] = await Promise.all([getPlatformKpis(), getPendingApprovals()]);
 
   return (

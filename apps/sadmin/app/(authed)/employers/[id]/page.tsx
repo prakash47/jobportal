@@ -13,6 +13,7 @@ import {
   type EmployerTeamMember,
 } from '../../../../lib/employers/format';
 import { getEmployerDetail, type EmployerDetail } from '../../../../lib/employers/queries';
+import { requireAdminScope } from '../../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'Employer profile — Career Queue Super Admin',
@@ -36,6 +37,12 @@ interface PageProps {
 }
 
 export default async function EmployerProfilePage({ params }: PageProps) {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminScope('users', 'READ_ONLY');
+
   const { id } = await params;
   // The route is [id], so anything can arrive here.
   //

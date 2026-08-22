@@ -30,6 +30,7 @@ import {
 } from '../../../lib/subscriptions/queries';
 import { SubscriptionSearchBar } from '../../../components/subscriptions/SubscriptionSearchBar';
 import { CompPlanDialog } from '../../../components/subscriptions/CompPlanDialog';
+import { requireAdminScope } from '../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'Subscriptions & Billing — Career Queue Super Admin',
@@ -52,6 +53,12 @@ interface PageProps {
 }
 
 export default async function SubscriptionsPage({ searchParams }: PageProps) {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminScope('finance', 'READ_ONLY');
+
   const sp = await searchParams;
   const tab = parseSubscriptionTab(sp.status);
   const q = normalizeQuery(firstParam(sp.q));

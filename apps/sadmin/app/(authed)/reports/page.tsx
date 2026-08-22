@@ -21,6 +21,7 @@ import {
 } from '../../../lib/reports/format';
 import { listReports, type ReportListRow } from '../../../lib/reports/queries';
 import { ReportSearchBar } from '../../../components/reports/ReportSearchBar';
+import { requireAdminScope } from '../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'Content reports — Career Queue Super Admin',
@@ -43,6 +44,12 @@ interface PageProps {
 }
 
 export default async function ReportsPage({ searchParams }: PageProps) {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminScope('moderation', 'READ_ONLY');
+
   const sp = await searchParams;
   const status = parseReportTab(sp.status);
   const q = normalizeQuery(firstParam(sp.q));

@@ -4,6 +4,7 @@ import { adminApiGet } from '../../../../lib/admin-api';
 import type { JobReviewDetail } from '../../../../lib/jobs/types';
 import { JobDecisionForm } from '../../../../components/jobs/JobDecisionForm';
 import { BackLink, JobDetailView } from '../../../../components/jobs/JobDetailView';
+import { requireAdminScope } from '../../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'Job review — Career Queue Super Admin',
@@ -24,6 +25,12 @@ interface PageProps {
 // error branch and the approve/send-back form are unchanged, so this route
 // behaves exactly as it did before the extraction.
 export default async function JobReviewDetailPage({ params }: PageProps) {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminScope('moderation', 'READ_ONLY');
+
   const { id } = await params;
   // The route is [id], so anything can arrive here. Reject non-numeric ids
   // before spending an API call on them.
