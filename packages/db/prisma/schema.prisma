@@ -571,6 +571,33 @@ enum RecruiterRole {
   MEMBER
 }
 
+// The PLATFORM-STAFF role, for /sadmin Roles & Permissions. Read the
+// RecruiterRole comment directly above first — this is the same idea one level
+// up, and it obeys the same instruction: it is DELIBERATELY separate from
+// UserRole, and every staff member is still a plain User{role:ADMIN}.
+//
+// Why a second dimension instead of new UserRole members: UserRole is a single
+// scalar baked into the 15-minute access token, and exactly eight sites in the
+// repo compare it to the literal 'ADMIN' (admin.guard.ts, auth.service.ts's
+// adminLogin, feature-flags' controller + api, sadmin's page.tsx +
+// require-super-admin, web's require-admin, and domain/job-visibility). Adding
+// SUPPORT_ADMIN there would make all eight reject the very staff they were
+// created for; widening all eight would hand every sub-admin billing grants,
+// OTP reveal and ledger export — the exact inverse of this feature. There is no
+// middle setting of that dial, so the middle is this table.
+//
+// SUPER_ADMIN is the only tier that can manage staff or write feature flags, and
+// per FR-4.12.10 it is the only tier that CANNOT be created through the console
+// — it comes from the seed or a direct DB write. That split is what lets a web
+// form mint staff at all without letting anyone bootstrap themselves to full
+// power (docs/adr/0007).
+enum AdminStaffRole {
+  SUPER_ADMIN
+  SUPPORT_ADMIN
+  CONTENT_ADMIN
+  FINANCE_ADMIN
+}
+
 // Recruiter Help & Support ticket lifecycle. OPEN on creation; support staff
 // moves it to IN_PROGRESS / RESOLVED from the admin console; CLOSED is terminal
 // (set by staff, or by the recruiter closing their own ticket). A recruiter
@@ -684,6 +711,10 @@ model User {
 
   candidate           Candidate?
   recruiter           Recruiter?
+  // Platform-staff tier + scope map (/sadmin Roles & Permissions). Present only
+  // for User{role:ADMIN}; its ABSENCE on an admin means no access, not legacy
+  // full access. See model AdminStaff.
+  adminStaff          AdminStaff?
   applications        Application[]
   savedJobs           SavedJob[]
   jobAlerts           JobAlert[]
@@ -1127,6 +1158,63 @@ model RecruiterInvite {
 
   @@index([companyId])
   @@index([companyId, email])
+}
+
+// ============================================================
+// Admin staff RBAC (/sadmin Roles & Permissions)
+// ============================================================
+
+// One platform-staff member's tier + scope map. A sidecar on User rather than
+// columns ON User, because User is the candidate/recruiter table too and these
+// four columns are meaningless for 99.9% of its rows.
+//
+// THE ROW IS THE PRIVILEGE. User{role:ADMIN} now means only "is staff at all";
+// what a staffer may actually do is this row, and it is read on EVERY admin
+// request rather than carried in the token. That costs one query per request and
+// buys the only thing that matters here: instant revocation. Scopes in the JWT
+// could not be revoked for up to 15 minutes — apps/sadmin never calls
+// /auth/refresh (grep it: zero hits), so no re-issued token can reach an admin's
+// browser mid-session, and the access token has no jti to denylist. For a
+// Finance Admin being removed, a 15-minute tail is not acceptable.
+//
+// An ADMIN user with NO AdminStaff row is treated as NO ACCESS, not as legacy
+// full access — the fail-closed direction. The seed provisions the row for
+// admin@careerqueue.in, so "seed, then log in" stays true (seed/admin.ts).
+//
+// permissions: per-module override map { support | moderation | finance | users
+// | verification | communications | system -> EDIT | READ_ONLY | NONE }; null
+// means "derive from the staffRole defaults", exactly like Recruiter.permissions.
+// The resolver lives in @jobportal/domain/admin-permissions so apps/api and
+// apps/sadmin share ONE copy — the recruiter taxonomy already got hand-copied
+// into apps/recruiter, and a third copy is how these two drift apart.
+model AdminStaff {
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  staffRole   AdminStaffRole
+  permissions Json?
+
+  // Soft-remove, mirroring Recruiter.deactivatedAt — and here it is not a
+  // preference but a correctness requirement. ProfileAuditLog.user is
+  // onDelete: Cascade, so hard-deleting a staff User would silently destroy
+  // every KYC approval, OTP-code reveal, ledger export and takedown that person
+  // ever logged. Deactivation keeps the account, its history, and its name on
+  // the audit trail. Nothing in the product hard-deletes an AdminStaff row.
+  deactivatedAt DateTime?
+
+  // The SUPER_ADMIN who provisioned this staffer. Loose actor id with no FK,
+  // matching CompanyKyc.reviewedById and FlagAuditLog.changedById: the
+  // provenance must outlive the provisioner's own account.
+  createdById Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Drives the "who is still active staff" list and the last-super-admin count,
+  // which is taken FOR UPDATE inside a transaction (the recruiter
+  // assertNotLastOwner pattern) so two concurrent demotions cannot both pass it.
+  @@index([staffRole, deactivatedAt])
 }
 
 // ============================================================
