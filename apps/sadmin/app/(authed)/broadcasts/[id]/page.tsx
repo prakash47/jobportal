@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { FLAG, isFlagEnabled } from '@jobportal/feature-flags';
 import { ArrowLeft } from '@jobportal/ui/icons';
-import { requireSuperAdmin } from '../../../../lib/auth/require-super-admin';
+import { requireAdminScope } from '../../../../lib/auth/require-super-admin';
 import { formatDateTimeIst } from '../../../../lib/jobs/format';
 import {
   BROADCAST_RECIPIENT_STATUS_LABEL,
@@ -48,7 +48,7 @@ export default async function BroadcastDetailPage({ params, searchParams }: Page
   // Explicit, rather than relying on the (authed) layout alone. The layout does
   // call requireSuperAdmin(), but this file could be moved out from under it and
   // silently lose the check — and this route renders recipient email addresses.
-  await requireSuperAdmin();
+  await requireAdminScope('communications', 'READ_ONLY');
 
   const { id } = await params;
   const sp = await searchParams;

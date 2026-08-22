@@ -12,6 +12,7 @@ import {
 import type { Response } from 'express';
 import type { AccessClaims } from '@jobportal/auth';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { RequireAdminScope } from '../auth/admin-scope.decorator';
 import { AdminGuard } from '../feature-flags/admin.guard';
 import { AdminTransactionsService } from './admin-transactions.service';
 import { ExportTransactionsDto } from './dto';
@@ -39,8 +40,18 @@ import { ExportTransactionsDto } from './dto';
 // No `version: '1'` — admin routes carry no /v1 prefix; wiring the console to
 // /v1/admin/... yields 404s. No @Throttle — no admin controller has one and the
 // global 100/min ThrottlerGuard already applies.
+// finance/EDIT, though the only route here is an export and an export is a read.
+//
+// The distinction that matters is not read-vs-write but on-screen-vs-exfiltrated:
+// the ledger UI is paginated and stays behind the console, while this produces a
+// single file containing every company's payment history and every statutory
+// invoice number, which then lives outside the platform's control forever. It is
+// already the second read in this product considered worth attributing in the
+// audit log, after OTP_CODE_REVEALED — the two reads treated as privileged
+// actions are exactly the two that require a full grant here.
 @Controller('admin/transactions')
 @UseGuards(AdminGuard)
+@RequireAdminScope('finance', 'EDIT')
 export class AdminTransactionsController {
   constructor(private readonly service: AdminTransactionsService) {}
 

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireSuperAdmin } from '../../../../lib/auth/require-super-admin';
+import { requireAdminScope } from '../../../../lib/auth/require-super-admin';
 import { formatDateTimeIst } from '../../../../lib/jobs/format';
 import { formatInrFromPaise } from '../../../../lib/subscriptions/format';
 import {
@@ -46,7 +46,7 @@ export default async function TransactionDetailPage({ params, searchParams }: Pa
   // the same call /candidates/[id], /job-postings/[id] and /subscriptions/[id]
   // make. This page shows a company's payment instrument ids and its GST place
   // of supply.
-  await requireSuperAdmin();
+  await requireAdminScope('finance', 'READ_ONLY');
 
   const { id } = await params;
   // The route is [id], so anything can arrive here. Reject junk before spending

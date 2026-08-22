@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireSuperAdmin } from '../../../../lib/auth/require-super-admin';
+import { requireAdminScope } from '../../../../lib/auth/require-super-admin';
 import { formatDateTimeIst } from '../../../../lib/jobs/format';
 import {
   clampPage,
@@ -27,7 +27,7 @@ interface PageProps {
 export default async function ContactMessagesPage({ searchParams }: PageProps) {
   // Explicit, as on the ticket detail: this page renders submitter names and
   // email addresses, including from people with no account.
-  await requireSuperAdmin();
+  await requireAdminScope('support', 'READ_ONLY');
 
   const sp = await searchParams;
   const page = clampPage(firstParam(sp.page));

@@ -11,7 +11,7 @@ import {
   formatWorkMode,
 } from '../../../../lib/jobs/format';
 import { displayName } from '../../../../lib/employers/format';
-import { requireSuperAdmin } from '../../../../lib/auth/require-super-admin';
+import { requireAdminScope } from '../../../../lib/auth/require-super-admin';
 import {
   CANDIDATE_ACTIVITY_LIMIT,
   CANDIDATE_APPLICATIONS_LIMIT,
@@ -123,7 +123,7 @@ export default async function CandidateProfilePage({ params, searchParams }: Pag
   //
   // The sibling detail routes (employers/[id], jobs/[id]) still rely on the
   // layout alone and should adopt this too. Noted in PROGRESS.md.
-  await requireSuperAdmin();
+  await requireAdminScope('users', 'READ_ONLY');
 
   // One anchor instant for the whole render, so the active-session count and
   // every session state below cannot straddle a boundary and disagree.

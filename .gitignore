@@ -167,6 +167,17 @@ docker-compose.override.yml
 # ---------- Local-only docs (NOT pushed to remote) ----------
 # /docs/ is kept local — it contains the SRS PDF and other strategy
 # material that doesn't belong in a public repo.
-/docs/
+#
+# EXCEPT docs/adr/. ADRs are decision records written to be read by the other
+# two developers, and ignoring them made every ADR local to whichever machine
+# wrote it: this clone holds 0002, 0006 and 0007 while comments in three
+# middleware files cite an "ADR 0005" that does not exist here at all. Code
+# comments across apps/api, apps/sadmin and packages/db now reference
+# docs/adr/0007; a reference to a file teammates cannot open is worse than no
+# reference. Note `/docs/*` rather than `/docs/` — git will not descend into an
+# ignored DIRECTORY, so the negation below only works if the directory itself
+# was never excluded. The SRS PDF and everything else under docs/ stay local.
+/docs/*
+!/docs/adr/
 cookies.txt
 _archived_routes/

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { prisma } from '@jobportal/db';
-import { requireSuperAdmin } from '../../lib/auth/require-super-admin';
+import { requireAdminStaff } from '../../lib/auth/require-super-admin';
 import { AppNavigationProgress } from '../../components/nav-progress/AppNavigationProgress';
 import { SidebarNav } from '../../components/SidebarNav';
 import { SignOutButton } from '../../components/SignOutButton';
@@ -29,9 +29,24 @@ function initials(name: string): string {
 }
 
 export default async function AuthedLayout({ children }: { children: React.ReactNode }) {
-  // The gate for every page in this group. Layer 2; see require-super-admin.ts
-  // for why this is the load-bearing check on a read-only, API-less surface.
-  const user = await requireSuperAdmin();
+  // The COARSE gate for every page in this group: signed in, ADMIN, and holding
+  // an ACTIVE staff row. Layer 2; see require-super-admin.ts for why this is the
+  // load-bearing check on a read-only, API-less surface.
+  //
+  // Per-MODULE scoping happens in each page, not here, because a layout cannot
+  // know which route it is wrapping without trusting a header. This call is the
+  // floor that catches a page which forgot its own — such a page is reachable by
+  // any staff tier, but never by a deactivated account or a non-admin.
+  //
+  // The nav is NOT filtered by scope yet, deliberately. Doing so means giving
+  // SidebarNav props, and it is currently a props-less client component whose
+  // NAV_ITEMS array the planned feature/sadmin-admin-migration will APPEND to —
+  // a signature change and an append to the same locked file is the worst kind
+  // of conflict to hand a teammate. It is also not yet observable: until PR B
+  // ships the console, the only way a sub-admin can exist is a direct DB write.
+  // PR B takes the SidebarNav lock and filters the rail. Until then an
+  // out-of-scope link 404s, which is safe (fail-closed) but not pretty.
+  const { user } = await requireAdminStaff();
 
   // AccessClaims carries email/role but no display name, so one cheap lookup
   // gives the account row something human. Falls back to the email if the row

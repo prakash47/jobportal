@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { requireSuperAdmin } from '../../../../lib/auth/require-super-admin';
+import { requireAdminScope } from '../../../../lib/auth/require-super-admin';
 import { adminApiGet } from '../../../../lib/admin-api';
 import type { JobReviewDetail } from '../../../../lib/jobs/types';
 import {
@@ -50,7 +50,7 @@ export default async function JobPostingDetailPage({ params, searchParams }: Pag
   // real boundary, but stating the requirement in the route makes it impossible
   // to move this file out from under that layout and silently lose the check —
   // the same call /candidates/[id] makes.
-  await requireSuperAdmin();
+  await requireAdminScope('moderation', 'READ_ONLY');
 
   const { id } = await params;
   // The route is [id], so anything can arrive here. Reject junk before spending

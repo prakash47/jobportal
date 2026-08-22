@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { isFlagEnabled } from '@jobportal/feature-flags';
-import { requireSuperAdmin } from '../../../../lib/auth/require-super-admin';
+import { requireAdminScope } from '../../../../lib/auth/require-super-admin';
 import { formatDateIst } from '../../../../lib/jobs/format';
 import {
   SUBSCRIPTION_STATE_LABEL,
@@ -47,7 +47,7 @@ export default async function SubscriptionDetailPage({ params, searchParams }: P
   // to move this file out from under that layout and silently lose the check —
   // the same call /candidates/[id] and /job-postings/[id] make. This page is one
   // of the more sensitive in the portal: it shows what a company pays.
-  await requireSuperAdmin();
+  await requireAdminScope('finance', 'READ_ONLY');
 
   const { id } = await params;
   // The route is [id], so anything can arrive here. Reject junk before spending a

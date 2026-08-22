@@ -26,6 +26,7 @@ import {
 import { listBroadcasts, pageSizeOf } from '../../../lib/broadcasts/queries';
 import type { BroadcastListItem } from '../../../lib/broadcasts/types';
 import { BroadcastSearchBar } from '../../../components/broadcasts/BroadcastSearchBar';
+import { requireAdminScope } from '../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'Broadcast Notifications — Career Queue Super Admin',
@@ -48,6 +49,12 @@ interface PageProps {
 }
 
 export default async function BroadcastsPage({ searchParams }: PageProps) {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminScope('communications', 'READ_ONLY');
+
   const sp = await searchParams;
   const tab = parseBroadcastTab(sp.status);
   const q = normalizeQuery(firstParam(sp.q));

@@ -15,11 +15,19 @@ import type { AccessClaims } from '@jobportal/auth';
 import { isCriticalFlag } from '@jobportal/feature-flags';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { FeatureFlagsService } from './feature-flags.service';
+import { RequireAdminScope } from '../auth/admin-scope.decorator';
 import { AdminGuard } from './admin.guard';
 import { AuditLogQuerySchema, FlagPatchSchema } from './dto';
 
+// system/READ_ONLY floor, system/EDIT on the write. Since `system` is NONE for
+// every assignable staff tier and is non-overridable (clampSystem), this whole
+// controller is SUPER_ADMIN-only in practice — which is the point. Whoever can
+// write flags can switch off the killswitches that gate every other module, so
+// a Content Admin with flag access would make every other scope in the model
+// decorative.
 @Controller('admin/feature-flags')
 @UseGuards(AdminGuard)
+@RequireAdminScope('system', 'READ_ONLY')
 export class FeatureFlagsController {
   constructor(private readonly service: FeatureFlagsService) {}
 
@@ -47,6 +55,7 @@ export class FeatureFlagsController {
     return flag;
   }
 
+  @RequireAdminScope('system', 'EDIT')
   @Patch(':key')
   @HttpCode(HttpStatus.OK)
   async update(

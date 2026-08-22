@@ -5,6 +5,7 @@ import { isFlagEnabled } from '@jobportal/feature-flags';
 import { adminApiGet } from '../../../lib/admin-api';
 import { formatDateIst, formatWaiting, waitingDays } from '../../../lib/jobs/format';
 import type { JobReviewList } from '../../../lib/jobs/types';
+import { requireAdminScope } from '../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'Job review — Career Queue Super Admin',
@@ -24,6 +25,12 @@ interface PageProps {
 }
 
 export default async function JobReviewPage({ searchParams }: PageProps) {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminScope('moderation', 'READ_ONLY');
+
   const sp = await searchParams;
   const view = sp.view === 'decided' ? 'decided' : 'pending';
   // Clamp before it reaches the API: page feeds Prisma's `skip`, which is an

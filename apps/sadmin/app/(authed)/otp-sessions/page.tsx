@@ -14,6 +14,7 @@ import {
   type OtpSessionRow,
 } from '../../../lib/otp-sessions/format';
 import { listOtpSessions } from '../../../lib/otp-sessions/queries';
+import { requireAdminScope } from '../../../lib/auth/require-super-admin';
 
 export const metadata: Metadata = {
   title: 'OTP Sessions — Career Queue Super Admin',
@@ -30,6 +31,12 @@ interface PageProps {
 }
 
 export default async function OtpSessionsPage({ searchParams }: PageProps) {
+  // Layer 2 scope gate for this route segment — see
+  // lib/roles/scope-map.ts. The (authed) layout only proves the caller is
+  // active staff; this proves they hold THIS module. Load-bearing because
+  // the reads below hit Postgres directly and never reach AdminGuard.
+  await requireAdminScope('otp_reveal', 'EDIT');
+
   const sp = await searchParams;
   const page = clampPage(sp.page);
 
