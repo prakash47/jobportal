@@ -50,6 +50,11 @@ describe('pathsForFlag', () => {
     // affect a public page" tempting and wrong: it reaches them by email and by
     // the recruiter bell, neither of which is a Cloudflare-cached path.
     expect(pathsForFlag('killswitch.admin_broadcast_send')).toEqual([]);
+    // Staff provisioning. Governs who may hold an ADMIN account, which sounds
+    // platform-wide — but an admin's powers are read from the AdminStaff row on
+    // every request, never baked into a cached page and never into the token,
+    // so no public HTML embeds a staffing decision.
+    expect(pathsForFlag('killswitch.admin_roles_write')).toEqual([]);
   });
 
   it('the two report flags are distinct keys and both purge nothing', () => {

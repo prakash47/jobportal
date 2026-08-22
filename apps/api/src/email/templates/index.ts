@@ -14,6 +14,7 @@ import { renderApplicationStatusChange } from './application-status-change';
 import { renderJobPostedConfirmation } from './job-posted-confirmation';
 import { renderPaymentReceipt } from './payment-receipt';
 import { renderRecruiterInvite } from './recruiter-invite';
+import { renderAdminStaffInvite } from './admin-staff-invite';
 import { renderSupportContactMessage } from './support-contact-message';
 import { renderSupportTicketOpened } from './support-ticket-opened';
 
@@ -62,6 +63,14 @@ export interface RecruiterInvitePayload {
   inviterName?: string;
   expiresInHours: number;
 }
+// SRS §4.16 — platform-staff invitation. Carries no tier and no module: the
+// mail reaches an address with no account yet, so a misdirected copy must not
+// disclose what the account would have been able to see. The accept page renders
+// the tier, behind the token.
+export interface AdminStaffInvitePayload {
+  inviteUrl: string;
+  expiresInHours: number;
+}
 export interface SupportContactMessagePayload {
   contactId: number;
   name: string;
@@ -88,6 +97,7 @@ export interface TemplateMap {
   job_posted_confirmation: JobPostedConfirmationPayload;
   payment_receipt: PaymentReceiptPayload;
   recruiter_invite: RecruiterInvitePayload;
+  admin_staff_invite: AdminStaffInvitePayload;
   support_contact_message: SupportContactMessagePayload;
   support_ticket_opened: SupportTicketOpenedPayload;
 }
@@ -122,6 +132,8 @@ export function renderTemplate<K extends TemplateKind>(
       return renderPaymentReceipt(payload as PaymentReceiptPayload);
     case 'recruiter_invite':
       return renderRecruiterInvite(payload as RecruiterInvitePayload);
+    case 'admin_staff_invite':
+      return renderAdminStaffInvite(payload as AdminStaffInvitePayload);
     case 'support_contact_message':
       return renderSupportContactMessage(
         payload as SupportContactMessagePayload,

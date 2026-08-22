@@ -9,6 +9,7 @@ import type {
   PasswordResetPayload,
   PaymentReceiptPayload,
   RecruiterInvitePayload,
+  AdminStaffInvitePayload,
   RegistrationConfirmationPayload,
   SupportContactMessagePayload,
   SupportTicketOpenedPayload,
@@ -126,6 +127,26 @@ export class EmailService {
   ): Promise<void> {
     return this.queue.enqueue({
       kind: 'recruiter_invite',
+      to,
+      userId,
+      payload,
+    });
+  }
+
+  // SRS §4.16 — platform-staff invitation to the /sadmin portal. userId is null
+  // (the invitee has no account yet); the email is transactional-mandatory (no
+  // preference gating).
+  //
+  // ⚠ A resolved promise here is NOT proof of delivery: the queue log-and-drops
+  // when Redis is unreachable. Callers must treat the invite as pending and
+  // offer a resend rather than reporting "sent".
+  enqueueAdminStaffInvite(
+    to: string,
+    userId: number | null,
+    payload: AdminStaffInvitePayload,
+  ): Promise<void> {
+    return this.queue.enqueue({
+      kind: 'admin_staff_invite',
       to,
       userId,
       payload,

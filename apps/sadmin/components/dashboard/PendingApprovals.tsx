@@ -8,9 +8,25 @@ import type { PendingApprovals as PendingApprovalsData } from '../../lib/dashboa
 // row becomes an in-app link too.
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
-export function PendingApprovals({ data }: { data: PendingApprovalsData }) {
+export function PendingApprovals({
+  data,
+  showVerification,
+  showModeration,
+}: {
+  data: PendingApprovalsData;
+  /** Layer 2: the caller holds `verification` at READ_ONLY or better. */
+  showVerification: boolean;
+  /** Layer 2: the caller holds `moderation` at READ_ONLY or better. */
+  showModeration: boolean;
+}) {
   const { companyVerification, jobPostings, moderationEnabled } = data;
-  const nothingWaiting = companyVerification === 0 && jobPostings === 0;
+
+  // Computed over the VISIBLE rows only. Over both, a Support Admin — who has
+  // verification but not moderation — would read "Waiting on a reviewer" above a
+  // lone 0, because five pending jobs they cannot see would be driving the
+  // sentence. The summary has to describe the list underneath it.
+  const nothingWaiting =
+    (!showVerification || companyVerification === 0) && (!showModeration || jobPostings === 0);
 
   return (
     <section
@@ -31,6 +47,7 @@ export function PendingApprovals({ data }: { data: PendingApprovalsData }) {
 
       <dl className="mt-4 divide-y divide-[var(--color-border)]">
         {/* Company verification — a live queue with a real destination. */}
+        {showVerification && (
         <div className="flex items-center justify-between gap-4 py-3">
           <dt className="flex min-w-0 items-center gap-2 text-sm text-[var(--color-fg)]">
             <ShieldCheck
@@ -71,10 +88,12 @@ export function PendingApprovals({ data }: { data: PendingApprovalsData }) {
             )}
           </dd>
         </div>
+        )}
 
         {/* Job postings — the queue now lives in this portal, so this is an
             in-app link rather than a cross-origin one: no target="_blank", and
             no "opens in a new tab" hint to go with it. */}
+        {showModeration && (
         <div className="flex items-center justify-between gap-4 py-3">
           <dt className="flex min-w-0 items-center gap-2 text-sm text-[var(--color-fg)]">
             <AlertCircle
@@ -103,11 +122,14 @@ export function PendingApprovals({ data }: { data: PendingApprovalsData }) {
             )}
           </dd>
         </div>
+        )}
       </dl>
 
       {/* Without this, a permanent "0" reads as "all caught up" when the truth
-          is that the queue is switched off and nothing can enter it. */}
-      {!moderationEnabled && (
+          is that the queue is switched off and nothing can enter it.
+          Gated on `moderation`, NOT on whoever can toggle the flag: hiding the
+          caveat from the moderator it warns is the inverse of its purpose. */}
+      {showModeration && !moderationEnabled && (
         <p className="mt-3 text-xs text-[var(--color-fg-muted)]">
           Job moderation is currently off, so new postings go live without review.
         </p>

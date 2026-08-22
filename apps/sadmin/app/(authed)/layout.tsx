@@ -4,6 +4,8 @@ import { prisma } from '@jobportal/db';
 import { requireAdminStaff } from '../../lib/auth/require-super-admin';
 import { AppNavigationProgress } from '../../components/nav-progress/AppNavigationProgress';
 import { SidebarNav } from '../../components/SidebarNav';
+import { NAV_ITEM_HREFS } from '../../lib/roles/nav-items';
+import { visibleNavHrefs } from '../../lib/roles/nav-visibility';
 import { SignOutButton } from '../../components/SignOutButton';
 import { Logo } from '../../components/brand/Logo';
 
@@ -38,15 +40,19 @@ export default async function AuthedLayout({ children }: { children: React.React
   // floor that catches a page which forgot its own — such a page is reachable by
   // any staff tier, but never by a deactivated account or a non-admin.
   //
-  // The nav is NOT filtered by scope yet, deliberately. Doing so means giving
-  // SidebarNav props, and it is currently a props-less client component whose
-  // NAV_ITEMS array the planned feature/sadmin-admin-migration will APPEND to —
-  // a signature change and an append to the same locked file is the worst kind
-  // of conflict to hand a teammate. It is also not yet observable: until PR B
-  // ships the console, the only way a sub-admin can exist is a direct DB write.
-  // PR B takes the SidebarNav lock and filters the rail. Until then an
-  // out-of-scope link 404s, which is safe (fail-closed) but not pretty.
-  const { user } = await requireAdminStaff();
+  // The permission map comes back from the SAME call, which is why the rail can
+  // be filtered without a second query: requireAdminStaff() already resolves the
+  // tier defaults, the stored overrides and clampSystem to reach it.
+  //
+  // Filtering here rather than inside SidebarNav is deliberate — that component
+  // is 'use client', and a runtime value import of @jobportal/domain would need
+  // adding to `transpilePackages`, where its absence fails the build with an
+  // opaque parse error. See lib/roles/nav-visibility.ts.
+  //
+  // This is presentation only. Each page independently calls requireAdminScope(),
+  // which 404s a scope miss whether or not a link was drawn.
+  const { user, permissions } = await requireAdminStaff();
+  const allowedHrefs = visibleNavHrefs(NAV_ITEM_HREFS, permissions);
 
   // AccessClaims carries email/role but no display name, so one cheap lookup
   // gives the account row something human. Falls back to the email if the row
@@ -83,7 +89,7 @@ export default async function AuthedLayout({ children }: { children: React.React
           </Link>
 
           <div className="flex-1 overflow-y-auto px-2 pb-4">
-            <SidebarNav />
+            <SidebarNav allowedHrefs={allowedHrefs} />
           </div>
 
           <div className="mt-auto flex items-center gap-3 border-t border-white/10 px-3 py-3">

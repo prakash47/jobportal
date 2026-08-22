@@ -55,6 +55,20 @@ const config: NextConfig = {
     // its own list despite importing it in middleware; declaring it here avoids
     // relying on that working by accident.
     '@jobportal/feature-flags',
+    // The Roles & Permissions console renders the tier list, the module labels
+    // and the access-level labels from @jobportal/domain/admin-permissions in
+    // CLIENT components, so the package is now a runtime dependency of the
+    // bundle rather than a type-only one.
+    //
+    // It got away without an entry until PR B because its only consumer here was
+    // lib/roles/scope-map.ts, which uses `import type` — erased at compile time
+    // and therefore invisible to this list. The first runtime value import is
+    // what makes the omission real, and the failure would be the opaque parse
+    // error the comment above warns about rather than a missing-module message.
+    //
+    // The subpath is cheap to pull in: admin-permissions.ts imports only a TYPE
+    // from @jobportal/db, so nothing Prisma-touching reaches the client.
+    '@jobportal/domain',
   ],
 };
 

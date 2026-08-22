@@ -15,6 +15,7 @@ import {
   Megaphone,
   MessageCircle,
   ShieldCheck,
+  UserCog,
   Users,
 } from '@jobportal/ui/icons';
 
@@ -97,6 +98,24 @@ const NAV_ITEMS: readonly { href: string; label: string; icon: NavIcon }[] = [
   // `Mail`. Both of those read as one message to one person, which is precisely
   // the mental model this console must not encourage.
   { href: '/broadcasts', label: 'Broadcast Notifications', icon: Megaphone as NavIcon },
+  // Roles & Permissions closes the rail, below the outbound pair, because it is
+  // the only entry that is not about the PLATFORM at all — every row above
+  // answers a question about recruiters, seekers, jobs or money, and this one
+  // answers a question about us. Last also means it does not interrupt the
+  // descent from "who is on the platform" through "what they owe us" to "what
+  // they have asked us".
+  //
+  // In practice it is the last row for a second reason: `system`/EDIT makes it
+  // SUPER_ADMIN-only and unoverridable, so for every sub-admin the rail simply
+  // ends at Broadcast Notifications.
+  //
+  // `UserCog` was appended to the icons barrel rather than reusing `ShieldCheck`,
+  // which is already OTP Sessions. Two adjacent rail rows sharing a glyph is the
+  // fastest way to land an admin in the wrong console — the same rule the Job
+  // review / Job Postings and Subscriptions / Transactions pairs record above,
+  // and it matters most here, where the wrong console is the one that grants
+  // access to all the others.
+  { href: '/roles', label: 'Roles & Permissions', icon: UserCog as NavIcon },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -126,12 +145,38 @@ const ICON = 'size-[18px] shrink-0';
 const ICON_ACTIVE = 'text-[var(--color-accent-500)]';
 const ICON_IDLE = 'text-white/70';
 
-export function SidebarNav() {
+/**
+ * The rail, filtered to what this staff member can actually open.
+ *
+ * `allowedHrefs` is computed SERVER-side by lib/roles/nav-visibility.ts and
+ * passed down as plain strings. Deliberately not computed here: this is a
+ * 'use client' component, and a runtime value import of @jobportal/domain would
+ * need that package adding to `transpilePackages` in next.config.ts — where its
+ * absence produces an opaque build-time parse error rather than a useful one.
+ *
+ * Filtering the rail is presentation, not enforcement. Each page independently
+ * calls requireAdminScope(), which 404s a scope miss whether or not a link to it
+ * was ever drawn. Before this existed an out-of-scope link simply 404'd when
+ * clicked — safe, but it invited staff to keep trying doors that would never
+ * open, and it disclosed the shape of consoles they have no part in.
+ *
+ * `NAV_ITEMS` stays module-level and unfiltered so nav-visibility.test.ts can
+ * read it off disk and fail the build when an entry has no ROUTE_SCOPES key, or
+ * drifts from the server-side list in lib/roles/nav-items.ts.
+ *
+ * ⚠ Do NOT export the href list from this file for the layout to import. That
+ * was the first attempt and it crashed every page: a server component importing
+ * a value from a 'use client' module receives a client reference proxy, not the
+ * array, so `.filter` is undefined at runtime while tsc sees string[] on both
+ * sides. See lib/roles/nav-items.ts.
+ */
+export function SidebarNav({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
   const pathname = usePathname();
+  const allowed = new Set(allowedHrefs);
 
   return (
     <nav aria-label="Super Admin">
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+      {NAV_ITEMS.filter(({ href }) => allowed.has(href)).map(({ href, label, icon: Icon }) => {
         const active = isActive(pathname, href);
         return (
           <Link

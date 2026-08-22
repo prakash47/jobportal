@@ -7,6 +7,7 @@ import { PublicHomeModule } from './public-home/public-home.module';
 import { PublicArticlesModule } from './public-articles/public-articles.module';
 import { AdminBillingModule } from './admin-billing/admin-billing.module';
 import { AdminBroadcastsModule } from './admin-broadcasts/admin-broadcasts.module';
+import { AdminStaffModule } from './admin-staff/admin-staff.module';
 import { AdminJobsModule } from './admin-jobs/admin-jobs.module';
 import { AdminKycModule } from './admin-kyc/admin-kyc.module';
 import { AdminOtpSessionsModule } from './admin-otp-sessions/admin-otp-sessions.module';
@@ -87,6 +88,7 @@ import { StorageModule } from './storage/storage.module';
     AdminOtpSessionsModule,
     AdminSupportModule,
     AdminBroadcastsModule,
+    AdminStaffModule,
     JobLifecycleModule,
     NotificationsPreferencesModule,
     MediaModule,

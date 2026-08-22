@@ -62,6 +62,12 @@ export type TransactionalEmailJob =
       payload: TemplatePayload<'recruiter_invite'>;
     }
   | {
+      kind: 'admin_staff_invite';
+      to: string;
+      userId: number | null;
+      payload: TemplatePayload<'admin_staff_invite'>;
+    }
+  | {
       kind: 'support_contact_message';
       to: string;
       userId: number | null;
@@ -90,6 +96,10 @@ const PREFERENCE_GATE: Record<TemplateKind, keyof PrefRow | null> = {
   // transactional-mandatory, no preference gating. The invitee has no account /
   // preference row yet anyway (userId is null at enqueue time).
   recruiter_invite: null,
+  // Platform-staff invitation. Transactional-mandatory for the same reason as
+  // the recruiter one above, and more strongly: the invitee has no account, no
+  // preference row, and no other way to reach the portal at all.
+  admin_staff_invite: null,
   // Help & Support ops-inbox mail. Recipient is the internal support inbox, not
   // a user — transactional-mandatory, never preference-gated (userId is null at
   // enqueue time).

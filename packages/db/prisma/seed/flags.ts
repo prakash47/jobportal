@@ -213,6 +213,17 @@ const flags: FlagSeed[] = [
   // announcement would lock every user out of their own account. The worker
   // honours both, so the global stop still covers this path.
   { key: 'killswitch.admin_broadcast_send', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable sending broadcasts (kill)' },
+  // Staff provisioning on /sadmin/roles (SRS §4.16). Gates the writes — invite,
+  // resend, revoke, role/permission change, deactivate, reactivate — plus the
+  // two public token endpoints, since accepting an invite creates an admin
+  // account. The roster and the pending-invite list keep rendering.
+  //
+  // Seeded with `enabled` omitted (→ false) like every other killswitch, so
+  // staff provisioning is LIVE on day 0. A killswitch missing from this file
+  // would be worse than one seeded wrong: the evaluator returns enabled:false
+  // for a key with no row, which for a killswitch reads as "not killed" — it
+  // would fail OPEN and the switch would silently do nothing when thrown.
+  { key: 'killswitch.admin_roles_write', type: 'BOOLEAN', category: 'killswitch', uiLabel: 'Disable staff provisioning (kill)' },
 ];
 
 export async function seedFlags(prisma: PrismaClient): Promise<void> {

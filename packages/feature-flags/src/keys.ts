@@ -277,6 +277,47 @@ export const FLAG = {
   // modal) by isCriticalFlag below — no NON_KILLSWITCH_CRITICAL entry needed.
   KILL_ADMIN_BROADCAST_SEND: 'killswitch.admin_broadcast_send',
 
+  // Emergency stop for STAFF PROVISIONING (/sadmin/roles → the write half of
+  // POST /admin/staff/*). Gates inviting, resending, revoking, changing a role
+  // or its permission overrides, deactivating and reactivating — and, unlike
+  // every other admin killswitch here, also the two PUBLIC token endpoints
+  // (GET preview / POST accept-invite), because accepting an invite CREATES an
+  // admin account and is therefore the most consequential write in the group.
+  //
+  // This is the switch for "we think a super-admin account is compromised".
+  // What an attacker with that access does first is provision themselves a
+  // second, quieter way back in; this is the lever that stops that while the
+  // question is being answered, without taking down the console that shows who
+  // currently holds what.
+  //
+  // Gates WRITES only. The roster, the pending-invite list and each staffer's
+  // resolved permission map all keep rendering, matching
+  // KILL_ADMIN_BROADCAST_SEND, KILL_ADMIN_TRANSACTION_EXPORT and
+  // KILL_ADMIN_JOB_DELETE: killing the write must not blind the read, and
+  // during exactly the incident that makes someone reach for this switch, "who
+  // has access right now" is the first thing anyone needs to see.
+  //
+  // ⚠ It does NOT revoke anything already granted. An existing staff row stays
+  // live and an already-accepted invite stays accepted — this only stops NEW
+  // grants. Removing a specific person is still Deactivate, which revokes their
+  // sessions in the same transaction and takes effect on their next request.
+  // Flipping this ON while staff are signed in changes nothing for them.
+  //
+  // ⚠ It also does not protect SUPER_ADMIN. That tier is never UI-creatable in
+  // the first place (ASSIGNABLE_ADMIN_STAFF_ROLES excludes it, FR-4.12.10), so
+  // there is no path here for this switch to close.
+  //
+  // There is deliberately NO middleware route gate (L1), matching every other
+  // admin console — and here the reason is sharper than usual: apps/sadmin's
+  // middleware does not authenticate and cannot evaluate flags at all (its
+  // runtime is pinned to nodejs precisely because the flag client cannot run on
+  // Edge). L2 disables the controls and renders a banner; L3 in apps/api is the
+  // non-bypassable boundary and returns 503.
+  //
+  // As a `killswitch.*` key it is auto-classified critical (Slack + confirm
+  // modal) by isCriticalFlag below — no NON_KILLSWITCH_CRITICAL entry needed.
+  KILL_ADMIN_ROLES_WRITE: 'killswitch.admin_roles_write',
+
   // Moderation
   //
   // User-submitted content reports (the "Report this job" control on the public

@@ -61,6 +61,7 @@ export {
   TrendingUp,
   Twitter,
   User,
+  UserCog,
   UserPlus,
   Users,
   X,

@@ -22,6 +22,15 @@ export default function DashboardLoading() {
         <div className={`${BAR} mt-1 h-5 w-64`} />
       </div>
 
+      {/* ⚠ ONE card, not three. This file cannot await a session, so it cannot
+          know how many KPI cards the real page will render — and since PR B
+          scoped those cards per module, a Support or Finance Admin gets two and
+          a staffer with neither `users` nor `moderation` gets none. Three
+          placeholders collapsing to one is a visible reflow on every load for
+          everyone below super admin; one placeholder only ever grows into more,
+          which reads as content arriving rather than content disappearing.
+          Keeping the sm:grid-cols-2 / lg:grid-cols-3 wrapper means the single
+          card lands in the same column the first real card will occupy. */}
       <div
         role="status"
         className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
@@ -32,7 +41,7 @@ export default function DashboardLoading() {
             dead click. The recruiter's DashboardSkeleton carries the same
             sr-only line for the same reason. */}
         <span className="sr-only">Loading platform metrics…</span>
-        {[0, 1, 2].map((i) => (
+        {[0].map((i) => (
           <div
             key={i}
             className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4"

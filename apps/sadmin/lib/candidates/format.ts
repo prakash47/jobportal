@@ -352,6 +352,30 @@ const PROFILE_AUDIT_ACTION_LABEL: Record<ProfileAuditAction, string> = {
   // to the queue, not the moment the last email landed.
   BROADCAST_SENT: 'Dispatched a broadcast',
   BROADCAST_CANCELLED: 'Cancelled a broadcast',
+  // Platform-staff management (/sadmin/roles). Staff-on-staff actions, so like
+  // the block above they can never appear on a candidate's timeline and are here
+  // to keep the record exhaustive.
+  //
+  // Every label says "staff" explicitly. Seven of these read almost identically
+  // to the RECRUITER_USER_* rows near the top of this map — "Invited a team
+  // member" vs "Invited a staff member" — and the two groups mean entirely
+  // different things: one adds a colleague to a company, the other hands someone
+  // the revenue ledger and every candidate's phone number. If the timeline ever
+  // renders both, the word "staff" is the only thing distinguishing them.
+  ADMIN_STAFF_INVITED: 'Invited a staff member',
+  // "Re-sent" is not quite what happens — the old token is revoked and a new one
+  // minted, because the raw token is never recoverable from the database. The
+  // label stays in the user's vocabulary; the schema comment carries the truth.
+  ADMIN_STAFF_INVITE_RESENT: 'Re-sent a staff invite',
+  ADMIN_STAFF_INVITE_REVOKED: 'Revoked a staff invite',
+  ADMIN_STAFF_INVITE_ACCEPTED: 'Accepted a staff invite',
+  ADMIN_STAFF_ROLE_CHANGED: 'Changed a staff member’s role',
+  ADMIN_STAFF_PERMISSIONS_CHANGED: 'Changed staff member permissions',
+  // "Deactivated" rather than "Removed", matching the schema: nothing in the
+  // product hard-deletes an AdminStaff row, and this is the action that actually
+  // ends someone's access — it revokes their sessions in the same transaction.
+  ADMIN_STAFF_DEACTIVATED: 'Deactivated a staff member',
+  ADMIN_STAFF_REACTIVATED: 'Reactivated a staff member',
 };
 
 export function formatProfileAuditAction(action: ProfileAuditAction): string {
