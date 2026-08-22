@@ -118,16 +118,6 @@ const NAV_ITEMS: readonly { href: string; label: string; icon: NavIcon }[] = [
   { href: '/roles', label: 'Roles & Permissions', icon: UserCog as NavIcon },
 ];
 
-/**
- * Every rail href, in order — the input to the server-side scope filter.
- *
- * Derived from NAV_ITEMS rather than re-listed, so appending a row above is
- * still the one-line change it has always been and cannot leave a second list
- * behind. The (authed) layout passes these through visibleNavHrefs() and hands
- * the survivors back as `allowedHrefs`.
- */
-export const NAV_ITEM_HREFS: readonly string[] = NAV_ITEMS.map((i) => i.href);
-
 function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -171,7 +161,14 @@ const ICON_IDLE = 'text-white/70';
  * open, and it disclosed the shape of consoles they have no part in.
  *
  * `NAV_ITEMS` stays module-level and unfiltered so nav-visibility.test.ts can
- * read it off disk and fail the build when an entry has no ROUTE_SCOPES key.
+ * read it off disk and fail the build when an entry has no ROUTE_SCOPES key, or
+ * drifts from the server-side list in lib/roles/nav-items.ts.
+ *
+ * ⚠ Do NOT export the href list from this file for the layout to import. That
+ * was the first attempt and it crashed every page: a server component importing
+ * a value from a 'use client' module receives a client reference proxy, not the
+ * array, so `.filter` is undefined at runtime while tsc sees string[] on both
+ * sides. See lib/roles/nav-items.ts.
  */
 export function SidebarNav({ allowedHrefs }: { allowedHrefs: readonly string[] }) {
   const pathname = usePathname();

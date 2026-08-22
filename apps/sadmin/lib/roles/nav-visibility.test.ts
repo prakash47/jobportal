@@ -6,6 +6,7 @@ import {
   resolveAdminPermissions,
 } from '@jobportal/domain/admin-permissions';
 import { ROUTE_SCOPES } from './scope-map';
+import { NAV_ITEM_HREFS } from './nav-items';
 import { visibleNavHrefs } from './nav-visibility';
 
 /**
@@ -25,7 +26,25 @@ function navHrefs(): string[] {
   });
 }
 
-describe('SidebarNav ↔ ROUTE_SCOPES', () => {
+describe('SidebarNav ↔ nav-items ↔ ROUTE_SCOPES', () => {
+  /**
+   * The two href lists must agree EXACTLY, in both directions.
+   *
+   * NAV_ITEM_HREFS is a second copy of what SidebarNav renders, and it exists
+   * only because the layout cannot import the list from that file: SidebarNav is
+   * 'use client', so a server component importing a value from it receives a
+   * client reference proxy rather than the array. That shipped once and crashed
+   * every page in the portal with "hrefs.filter is not a function" — while
+   * typecheck, the unit suites and `pnpm build` all passed, because the types
+   * agree on both sides and nothing renders the layout during a build.
+   *
+   * This assertion is the price of that second copy. A rail row added in one
+   * place and not the other is a failing test rather than an unfiltered link.
+   */
+  it('nav-items.ts matches SidebarNav.tsx exactly, in order', () => {
+    expect([...NAV_ITEM_HREFS]).toEqual(navHrefs());
+  });
+
   it('finds the rail items at all', () => {
     // Guards the regex above. If SidebarNav's NAV_ITEMS shape is ever
     // reformatted, every assertion below would pass vacuously on an empty list
