@@ -400,6 +400,46 @@ enum ProfileAuditAction {
   // BILLING_TRANSACTIONS_EXPORTED uses for `rowCount`/`hadQuery`.
   BROADCAST_SENT
   BROADCAST_CANCELLED
+  // Platform-staff management (/sadmin/roles, SRS §4.16). All eight are written
+  // with the ACTING SUPER_ADMIN's User id, EXCEPT ADMIN_STAFF_INVITE_ACCEPTED,
+  // which is written with the newly-created staffer's own id — the same actor
+  // split RECRUITER_INVITE_ACCEPTED makes above, and for the same reason: at
+  // accept time the only session that exists is the invitee's.
+  //
+  // This group is the most privilege-dense in the enum. Every row here is
+  // someone changing who may read the revenue ledger, candidate PII, or live
+  // login codes, so the eight are split rather than collapsed into one
+  // ADMIN_STAFF_UPDATED for the same reason JOB_APPROVED/JOB_REJECTED are: this
+  // table is the only durable record of WHICH lever was pulled, and "granted a
+  // colleague Finance" must not read identically to "revoked it".
+  //
+  // DEACTIVATED and REACTIVATED are separate members rather than one toggle
+  // because deactivation is this product's ONLY revocation channel — apps/sadmin
+  // never calls /auth/refresh, so killing the staff row and its sessions is what
+  // ends an admin's access. The moment that lever was pulled, and by whom, is
+  // the single most important line this table will ever hold. There is no
+  // ADMIN_STAFF_DELETED: nothing in the product hard-deletes an AdminStaff row
+  // (ProfileAuditLog.user is onDelete: Cascade, so a hard delete would destroy
+  // exactly the history that makes this group worth writing).
+  //
+  // INVITE_RESENT is distinguished from INVITED because a resend supersedes the
+  // prior row and mints a NEW token — the raw token is never recoverable from
+  // the database, so a resend is a fresh capability grant, not a re-delivery.
+  //
+  // The diff carries { staffUserId, email, staffRole } and, for the two change
+  // actions, the before/after role or the changed module levels. NEVER the raw
+  // invite token (it would make the audit log a capability store), never
+  // password material, and never the resolved permission map in full — only the
+  // modules that actually moved, matching the minimisation rule KYC, moderation
+  // and billing already follow.
+  ADMIN_STAFF_INVITED
+  ADMIN_STAFF_INVITE_RESENT
+  ADMIN_STAFF_INVITE_REVOKED
+  ADMIN_STAFF_INVITE_ACCEPTED
+  ADMIN_STAFF_ROLE_CHANGED
+  ADMIN_STAFF_PERMISSIONS_CHANGED
+  ADMIN_STAFF_DEACTIVATED
+  ADMIN_STAFF_REACTIVATED
 }
 
 // SRS §4.9 — legal / organisational classification of an employer, shown on the
@@ -1182,8 +1222,14 @@ model RecruiterInvite {
 // admin@careerqueue.in, so "seed, then log in" stays true (seed/admin.ts).
 //
 // permissions: per-module override map { support | moderation | finance | users
-// | verification | communications | system -> EDIT | READ_ONLY | NONE }; null
-// means "derive from the staffRole defaults", exactly like Recruiter.permissions.
+// | verification | otp_reveal | communications | system -> EDIT | READ_ONLY |
+// NONE }; null means "derive from the staffRole defaults", exactly like
+// Recruiter.permissions. (`otp_reveal` was missing from this list until PR B —
+// ADMIN_MODULES in the resolver is the contract, and it has always been eight.)
+// `system` is the one module a stored blob cannot move: clampSystem() forces it
+// back to the role default on every resolve, in BOTH directions, because it
+// gates feature flags AND staff management — the two levers that can grant
+// everything else.
 // The resolver lives in @jobportal/domain/admin-permissions so apps/api and
 // apps/sadmin share ONE copy — the recruiter taxonomy already got hand-copied
 // into apps/recruiter, and a third copy is how these two drift apart.
@@ -1215,6 +1261,58 @@ model AdminStaff {
   // which is taken FOR UPDATE inside a transaction (the recruiter
   // assertNotLastOwner pattern) so two concurrent demotions cannot both pass it.
   @@index([staffRole, deactivatedAt])
+}
+
+// SRS §4.16 — invitation to become platform staff. The provisioning half of the
+// Roles & Permissions console (PR B), and a near-copy of RecruiterInvite above:
+// sha256(raw) stored here with the raw token living only in the emailed link,
+// single-use, revocable, supersede-on-reinvite, and status DERIVED from the
+// timestamp columns rather than stored.
+//
+// It is a CLONE rather than a reuse, and that was forced: RecruiterInvite.
+// companyId is a non-nullable FK with onDelete: Cascade, and platform staff have
+// no company. Making it nullable would weaken a constraint that is load-bearing
+// for every recruiter row in order to serve a table with different semantics.
+//
+// WHY AN INVITE AT ALL, rather than creating the User with a null passwordHash
+// and pointing them at forgot-password: that shortcut is already broken, and it
+// fails SILENTLY. password-reset.service.ts short-circuits on a null
+// passwordHash and returns a fallback deliberately indistinguishable from
+// success (ADR 0001), so the staffer would see "check your email" forever and no
+// mail would ever be sent. The super admin also must never type a colleague's
+// password — the token is what keeps the credential known only to its owner.
+//
+// staffRole is constrained to the ASSIGNABLE tiers in the API DTO, never to
+// SUPER_ADMIN. That is what keeps FR-4.12.10 true in spirit: the tier that can
+// grant every other tier stays seed-or-psql only, so no one can bootstrap
+// themselves to full power through a web form. The column is the full enum
+// because Prisma cannot express a subset; the allowlist is
+// ASSIGNABLE_ADMIN_STAFF_ROLES in @jobportal/domain/admin-permissions.
+//
+// invitedByUserId is the acting SUPER_ADMIN's User id — loose actor, no FK,
+// matching AdminStaff.createdById and CompanyKyc.reviewedById, so provenance
+// outlives the inviter's own account. Raw tokens and password material are never
+// logged and never written to audit JSON.
+model AdminStaffInvite {
+  id              Int            @id @default(autoincrement())
+  email           String
+  staffRole       AdminStaffRole
+  permissions     Json?
+  tokenHash       String         @unique
+  invitedByUserId Int?
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Serves both reads the console makes: the pending-invite list (which filters
+  // on email) and supersede-on-reinvite. There is no @@unique on email: the
+  // constraint that actually matters is partial ("one PENDING invite per
+  // address", i.e. WHERE acceptedAt IS NULL AND revokedAt IS NULL), which Prisma
+  // cannot express — so it is enforced in the service inside the create
+  // transaction, exactly as RecruiterInvite does it.
+  @@index([email])
 }
 
 // ============================================================
