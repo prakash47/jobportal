@@ -95,6 +95,10 @@ const fixtures = {
     inviterName: 'Anjali',
     expiresInHours: 72,
   },
+  admin_staff_invite: {
+    inviteUrl: 'https://admin.jobportal.com/sadmin/accept-invite/tok',
+    expiresInHours: 72,
+  },
   support_contact_message: {
     contactId: 3,
     name: 'Ravi Kumar',
