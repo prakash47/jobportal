@@ -5,7 +5,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { prisma } from '@jobportal/db';
+import { prisma, type Prisma } from '@jobportal/db';
 import type { User } from '@jobportal/db';
 import {
   type AccessClaims,
@@ -37,6 +37,22 @@ export class AuthService {
     input: RegisterInput,
     deviceInfo: string | undefined,
     ipAddress: string | undefined,
+    /**
+     * A signup challenge already proven to hold this exact address (SRS §4.12).
+     *
+     * OPTIONAL, and that is a deliberate, owner-approved asymmetry rather than
+     * an oversight: the WEBSITE always supplies it, so no web account can be
+     * created for an address nobody received mail at. The mobile
+     * `/v1/auth/mobile/register` route does not yet implement the two-step
+     * flow, and gating it here would have broken the app the moment this
+     * merged. That gap is recorded as a Notice in WORKLOG.md for the app
+     * developer; until it closes, the mobile route can still create unverified
+     * accounts — bounded, because applying already requires a verified email.
+     *
+     * When present, the challenge is spent in the SAME transaction that creates
+     * the user, so a verified code can never be replayed into a second account.
+     */
+    verified?: { signupId: string; consume: (tx: Prisma.TransactionClient, signupId: string) => Promise<void> },
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     if (!isStrongPassword(input.password)) {
       throw new BadRequestException('Password too weak');
@@ -46,15 +62,29 @@ export class AuthService {
     if (existing) throw new ConflictException('Email already registered');
 
     const passwordHash = await hashPassword(input.password);
-    const user = await prisma.user.create({
-      data: {
-        email: input.email,
-        passwordHash,
-        name: input.name,
-        phone: input.phone ?? null,
-        role: 'CANDIDATE',
-      },
+
+    // One transaction so the challenge is spent exactly when the account
+    // appears. Creating first and deleting after would leave a window in which
+    // two concurrent registers both see a verified challenge — the delete is a
+    // compare-and-swap, so the loser deletes 0 rows and is rejected.
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          email: input.email,
+          passwordHash,
+          name: input.name,
+          phone: input.phone ?? null,
+          role: 'CANDIDATE',
+          // The code proved they receive mail at this address, which is exactly
+          // what verification means — so they can apply immediately instead of
+          // chasing a second confirmation link for a fact already established.
+          emailVerified: verified !== undefined,
+        },
+      });
+      if (verified) await verified.consume(tx, verified.signupId);
+      return created;
     });
+
     return this.issueSession(user, deviceInfo, ipAddress);
   }
 

@@ -29,13 +29,16 @@ import { isFlagEnabled } from '@jobportal/feature-flags';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
 import { PasswordResetService } from './password-reset.service';
+import { SignupOtpService } from './signup-otp.service';
 import {
   ForgotPasswordDto,
   LoginDto,
-  RegisterDto,
+  RegisterWithOtpDto,
+  RequestSignupOtpDto,
   ResetPasswordDto,
   UpdateNameDto,
   VerifyResetOtpDto,
+  VerifySignupOtpDto,
 } from './dto';
 import { EmailService } from '../email/email.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -73,7 +76,41 @@ export class AuthController {
     private readonly emailVerify: EmailVerificationService,
     private readonly passwordReset: PasswordResetService,
     private readonly email: EmailService,
+    private readonly signupOtp: SignupOtpService,
   ) {}
+
+  // ---- Seeker signup email verification (SRS §4.12) -----------------------
+  //
+  // Registration accepted any syntactically-valid address, so `x@gmail.con`
+  // created a real account and reported success. No validator can catch that —
+  // whether a mailbox exists is not derivable from the text — so the address is
+  // proven by sending a code to it. NOTHING is created until it comes back.
+  //
+  // Both routes are unauthenticated by necessity (there is no account yet) and
+  // carry the same per-IP throttles the recruiter equivalents use. The per-IP
+  // budget is NOT the brute-force bound — an attacker adds IPs — that lives in
+  // SignupOtpService: a 5-attempt cap per code, and a live-codes-per-address
+  // ceiling a caller cannot reset by minting a fresh signupId.
+
+  @Post('signup/otp/request')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.ACCEPTED)
+  async requestSignupOtp(@Body() body: unknown, @Req() req: Request) {
+    const parsed = RequestSignupOtpDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return this.signupOtp.request(parsed.data, req.ip);
+  }
+
+  // 10/min rather than 5: a registrant mistypes a six-digit code more often
+  // than they request one.
+  @Post('signup/otp/verify')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  async verifySignupOtp(@Body() body: unknown) {
+    const parsed = VerifySignupOtpDto.safeParse(body);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    return this.signupOtp.verify(parsed.data);
+  }
 
   @Post('register')
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
@@ -83,12 +120,25 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const parsed = RegisterDto.safeParse(body);
+    // RegisterWithOtpDto, not RegisterDto: the website must present a verified
+    // signup handle. The mobile controller still parses the plain RegisterDto,
+    // which is what keeps the app working unchanged (see the WORKLOG Notice).
+    const parsed = RegisterWithOtpDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+
+    // Bound to the address being registered, not merely to a verified handle.
+    // Without re-checking the destination a caller could verify their own
+    // address and then submit somebody else's — the same bug one layer down.
+    await this.signupOtp.assertVerifiedEmail(parsed.data.signupId, parsed.data.email);
+
     const result = await this.auth.register(
       parsed.data,
       req.headers['user-agent'] ? String(req.headers['user-agent']) : undefined,
       req.ip,
+      {
+        signupId: parsed.data.signupId,
+        consume: (tx, signupId) => this.signupOtp.consumeVerified(tx, signupId),
+      },
     );
     // Auto-login: set the session cookies so the new seeker lands authenticated
     // on the onboarding step (no separate sign-in).
@@ -104,11 +154,12 @@ export class AuthController {
     // created-but-"failed" account. Swallow it — the user can request a fresh
     // verification email later. (enqueue() also log-and-drops on a down queue;
     // this also covers any failure in token creation.)
-    try {
-      await this.emailVerify.issueAndSend(result.user.id, parsed.data.email);
-    } catch {
-      // No logger injected in the controller; the email/queue layers log.
-    }
+    // NO verification link is sent here any more. The account was created with
+    // emailVerified: true because a code sent to this address came back, so a
+    // second "please confirm your email" message would ask the user to re-prove
+    // something they just proved — and would arrive for an address that is by
+    // construction already reachable. `emailVerify.issueAndSend` still serves
+    // the resend endpoint and the mobile route, which has no OTP step yet.
     // Fire-and-log: enqueue is fast, but a Redis blip should not flip a
     // successful registration into a 5xx. The verify email above IS awaited
     // because the user can't apply without it; this welcome email is

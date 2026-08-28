@@ -10,6 +10,7 @@ import { AppleIdentityService } from './apple-identity.service';
 import { OidcVerifierService } from './oidc-verifier.service';
 import { EmailVerificationService } from './email-verification.service';
 import { PasswordResetService } from './password-reset.service';
+import { SignupOtpService } from './signup-otp.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 import { PerEmailThrottleGuard } from './per-email-throttle.guard';
@@ -33,6 +34,7 @@ import { EmailModule } from '../email/email.module';
     OidcVerifierService,
     EmailVerificationService,
     PasswordResetService,
+    SignupOtpService,
     JwtAuthGuard,
     RolesGuard,
     PerEmailThrottleGuard,

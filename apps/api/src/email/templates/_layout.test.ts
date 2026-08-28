@@ -66,6 +66,11 @@ const fixtures = {
     code: '481920',
     expiresInMinutes: 15,
   },
+  signup_otp: {
+    code: '481920',
+    name: 'Aisha',
+    expiresInMinutes: 15,
+  },
   application_submitted: {
     jobTitle: 'Sales Lead',
     companyName: 'Acme Corp',

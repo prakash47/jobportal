@@ -9,6 +9,7 @@ import type { Rendered } from './_layout';
 import { renderRegistrationConfirmation } from './registration-confirmation';
 import { renderEmailVerification } from './email-verification';
 import { renderPasswordReset } from './password-reset';
+import { renderSignupOtp } from './signup-otp';
 import { renderApplicationSubmitted } from './application-submitted';
 import { renderApplicationStatusChange } from './application-status-change';
 import { renderJobPostedConfirmation } from './job-posted-confirmation';
@@ -26,6 +27,20 @@ export interface RegistrationConfirmationPayload {
 export interface EmailVerificationPayload {
   verifyUrl: string;
 }
+/**
+ * Seeker signup email verification (SRS §4.12).
+ *
+ * Distinct from EmailVerificationPayload, which carries a LINK for an account
+ * that already exists. This one carries a CODE for an account that does not:
+ * nothing is created until it is entered, so the copy must not imply a signup
+ * already happened.
+ */
+export interface SignupOtpPayload {
+  code: string;
+  name: string;
+  expiresInMinutes: number;
+}
+
 export interface PasswordResetPayload {
   // The 6-digit one-time code. Replaced the emailed reset URL when the flow
   // moved from a link to an OTP (SRS §4.12.5) — a code cannot be silently
@@ -92,6 +107,7 @@ export interface TemplateMap {
   registration_confirmation: RegistrationConfirmationPayload;
   email_verification: EmailVerificationPayload;
   password_reset: PasswordResetPayload;
+  signup_otp: SignupOtpPayload;
   application_submitted: ApplicationSubmittedPayload;
   application_status_change: ApplicationStatusChangePayload;
   job_posted_confirmation: JobPostedConfirmationPayload;
@@ -118,6 +134,8 @@ export function renderTemplate<K extends TemplateKind>(
       return renderEmailVerification(payload as EmailVerificationPayload);
     case 'password_reset':
       return renderPasswordReset(payload as PasswordResetPayload);
+    case 'signup_otp':
+      return renderSignupOtp(payload as SignupOtpPayload);
     case 'application_submitted':
       return renderApplicationSubmitted(payload as ApplicationSubmittedPayload);
     case 'application_status_change':

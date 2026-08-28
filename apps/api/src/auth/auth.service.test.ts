@@ -11,6 +11,12 @@ vi.mock('@jobportal/db', () => ({
     user: { findUnique: vi.fn(), create: vi.fn() },
     recruiter: { findUnique: vi.fn() },
     session: { create: vi.fn() },
+    otpChallenge: { deleteMany: vi.fn() },
+    // register() now creates the user and spends the signup challenge in ONE
+    // transaction, so the mock has to hand the callback a client. Running it
+    // against this same object means every tx.* call lands on the spies the
+    // assertions already read.
+    $transaction: vi.fn(),
   },
 }));
 
@@ -52,6 +58,9 @@ describe('AuthService.register (auto-login on sign-up)', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     // resetAllMocks wipes return values too — re-establish happy-path defaults.
+    (prisma as unknown as { $transaction: ReturnType<typeof vi.fn> }).$transaction.mockImplementation(
+      async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma),
+    );
     mockedStrong.mockReturnValue(true);
     mockedHash.mockResolvedValue('argon2-hash');
     mockedIssue.mockReturnValue({
