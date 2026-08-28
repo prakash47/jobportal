@@ -27,6 +27,20 @@
 
 ---
 
+## 📣 Notices for other developers
+
+> Findings raised by whoever hit them, owned by whoever owns that surface. Put a
+> row here when you find something OUTSIDE your own area — it reaches the other
+> machines on their next `git pull`, which a chat message does not. Delete your
+> row once you have acted on it.
+
+| For | Raised | What we found | Why it matters |
+|---|---|---|---|
+| **Recruiter dev** | Claude/Prakash · 2026-08-28 | **The recruiter signup OTP is never delivered to anyone.** `RecruiterOtpService.request()` generates the code, stores it, logs `otp issued challenge=<id> channel=<ch>` and returns `{signupId, expiresAt, resendAvailableAt}` — the code is deliberately excluded ("never the code, never the destination"). There is **no email or SMS send anywhere in the repo** for it. Verified live: a request stored code `580320` and nothing was dispatched. | A recruiter cannot self-serve signup — the only way to obtain a code is a staff member revealing it at `/sadmin/otp-sessions`. If that manual gate is deliberate, ignore this. If not, recruiter registration is unusable in production, and it will stay unusable even after `RESEND_API_KEY` is set, because nothing calls the mailer. **Not touched — recruiter surface is yours.** |
+| **Mobile dev** | Claude/Prakash · 2026-08-28 | **`POST /v1/auth/mobile/register` still creates accounts with no email verification.** The website now requires a verified 6-digit code before any `User` row is created (this branch); the mobile route deliberately does not, so the app keeps working unchanged today. | Until the app implements the same two-step flow, an unverified account can still be created through the public mobile endpoint — which is the bug this branch fixes for the web. Impact is bounded (applying already requires a verified email), but it is an open path. Contract for the new endpoints is in `API_CONTRACT.md`. **Owner's call to sequence; nothing in the app was changed.** |
+
+---
+
 ## 🔒 Shared-surface locks
 
 These files are edited by everyone, so two simultaneous edits = guaranteed merge conflict or duplicate migration. **Hold the lock before you touch them; release it the moment your change is merged.** A lock should last hours, not days — make the change, merge, release.
@@ -51,6 +65,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/seeker-signup-otp` | **RPT: registration accepts an unreal email.** Reproduced: malformed addresses ARE rejected (400), but syntactically-valid non-existent ones (`x@gmail.con`) are created with `emailVerified:false` and reported as success — no validator can catch that, so the fix is a verification gate. Adds a **seeker-owned** email OTP: `POST /auth/signup/otp/{request,verify}` + `POST /auth/register` refuses without a verified `signupId`, so **no `User` row exists until the code is proven**. Three-step web signup. Recruiter OTP is NOT reused — `RecruiterAuthModule` does not export it and imports `AuthModule`, so injecting it would be circular. | `apps/api/src/auth/*` (seeker), `apps/web/(auth)/register`. **No schema change** — the existing generic `OtpChallenge` table is reused. No lock needed. |
 
 ---
 
