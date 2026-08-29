@@ -27,3 +27,26 @@ export function apiErrorMessage(body: unknown, fallback: string): string {
 
   return fallback;
 }
+
+/**
+ * An API failure that still carries its parsed body.
+ *
+ * `apiErrorMessage` reduces a response to display text, which is all most call
+ * sites need — but some error bodies carry data the UI has to act on, not just
+ * show. The signup cooldown 429 is the case that forced this: it returns the
+ * seconds remaining, and throwing away everything but the message left the
+ * Resend button with no way to re-arm itself, so it stayed enabled and every
+ * press failed again.
+ *
+ * Append-only addition: `apiErrorMessage` is untouched and every existing
+ * caller keeps working, since this is still an Error with the same message.
+ */
+export class ApiError extends Error {
+  readonly body: Record<string, unknown>;
+
+  constructor(message: string, body: Record<string, unknown>) {
+    super(message);
+    this.name = 'ApiError';
+    this.body = body;
+  }
+}

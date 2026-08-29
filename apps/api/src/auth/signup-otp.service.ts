@@ -49,6 +49,29 @@ export const SIGNUP_OTP_RESEND_COOLDOWN_MS = 30 * 1000;
 export const SIGNUP_OTP_MAX_RESENDS = 5;
 
 /**
+ * How long a VERIFIED challenge may still be spent at /auth/register, measured
+ * from `verifiedAt` rather than from the code's own expiry.
+ *
+ * SEEKER-ONLY — deliberately not part of the "identical to the recruiter
+ * engine" set above, all six of which still match theirs exactly.
+ *
+ * The code's 15-minute life and the time allowed to FINISH the form are two
+ * different deadlines that were being served by one constant, and the result
+ * was a dead end: verify at 14:59, take two minutes over a password, and
+ * register refused while the form still showed a green verified tick. Proof of
+ * control does not decay on the code's schedule — the code establishes a fact
+ * about the address, and that fact does not stop being true at minute 16.
+ *
+ * Bounded rather than open-ended because a verified handle IS the capability to
+ * create an account for that address. 30 minutes also sits well inside the
+ * hourly OTP purge (`OTP_PURGE_GRACE_MS` = 60 min in job-lifecycle.processor),
+ * so the row cannot be swept while the window it grants is still open: worst
+ * case the window closes at verifiedAt+30 for a row not purgeable until
+ * expiresAt+60.
+ */
+export const SIGNUP_OTP_COMPLETION_MS = 30 * 60 * 1000;
+
+/**
  * Live (unexpired, unverified) challenges permitted per destination, counted
  * across every signup attempt rather than per signupId.
  *
@@ -60,6 +83,22 @@ export const SIGNUP_OTP_MAX_RESENDS = 5;
  * 10^6 space, and that ceiling does not move when the attacker adds IPs.
  */
 export const SIGNUP_OTP_MAX_LIVE_PER_DESTINATION = 3;
+
+/**
+ * Live challenges one IP may hold for a single address, on top of the ceiling
+ * above. SEEKER-ONLY, and not part of the identical-to-recruiter set.
+ *
+ * The ceiling bounds GUESSES, which is what it was written for, but it counts
+ * rows without regard to who created them. That was survivable while a code was
+ * optional; this branch makes a verified challenge MANDATORY at /auth/register,
+ * so occupying those slots stops being "you must wait for a code" and becomes
+ * "you cannot register at all". One unauthenticated caller could take all three
+ * for any address from a single IP, comfortably inside the 5/min throttle.
+ *
+ * At 1, cornering an address costs an attacker SIGNUP_OTP_MAX_LIVE_PER_DESTINATION
+ * distinct IPs instead of one request, and the guess ceiling is unchanged.
+ */
+export const SIGNUP_OTP_MAX_LIVE_PER_IP = 1;
 
 /** Emergency stop for new account creation. ON means signup is DISABLED. */
 const NEW_REGISTRATIONS_KILLSWITCH_FLAG = 'killswitch.new_registrations';
@@ -97,6 +136,15 @@ export interface RequestSignupOtpResult {
   signupId: string;
   expiresAt: string;
   resendAvailableAt: string;
+  /**
+   * The cooldown as a DURATION, which is what the client actually counts down
+   * from. `resendAvailableAt` is kept for display and logging, but a client
+   * that derived the countdown by subtracting its own clock from that instant
+   * would be wrong by exactly the device's skew — and a phone minutes out of
+   * true is ordinary, especially on Android in India. A duration plus locally
+   * elapsed time has no such term.
+   */
+  resendInSeconds: number;
 }
 
 @Injectable()
@@ -168,6 +216,10 @@ export class SignupOtpService {
               statusCode: HttpStatus.TOO_MANY_REQUESTS,
               message: `Please wait ${secondsLeft}s before requesting another code.`,
               resendAvailableAt: resendAvailableAt.toISOString(),
+              // The duration matters more than the instant here: this is the
+              // response that re-arms the button, and it is the one a skewed
+              // device clock would otherwise get wrong.
+              resendInSeconds: secondsLeft,
             },
             HttpStatus.TOO_MANY_REQUESTS,
           );
@@ -180,7 +232,15 @@ export class SignupOtpService {
         }
       }
 
-      // The per-destination ceiling. Only LIVE rows count: an expired one can
+      // The per-destination ceiling. NOTE the scope: this bounds challenges
+      // issued by THIS service. RecruiterOtpService writes the same table and
+      // takes a destination lock under a DIFFERENT advisory namespace, so the
+      // two do not exclude each other and a genuine seeker/recruiter race on
+      // one address can leave 4 live rows rather than 3. Raised for the
+      // recruiter owner as a WORKLOG notice rather than fixed here, since
+      // aligning the namespaces means editing their file.
+      //
+      // Only LIVE rows count: an expired one can
       // no longer be guessed against, and a verified one short-circuits before
       // any comparison. A row with spent attempts DOES still count — it holds
       // its slot for the rest of its TTL, which is what stops "burn five, start
@@ -199,6 +259,33 @@ export class SignupOtpService {
           'Too many codes have recently been requested for this email address. Try again in a few minutes.',
           HttpStatus.TOO_MANY_REQUESTS,
         );
+      }
+
+      // The per-IP sub-cap (see SIGNUP_OTP_MAX_LIVE_PER_IP). Deliberately
+      // SKIPPED when the IP is unknown: an absent IP would otherwise collapse
+      // every such caller into one shared bucket and lock them all out at the
+      // first request. Those are still bound by the ceiling above.
+      //
+      // The message is character-for-character the ceiling's, so a caller
+      // cannot tell which limit they hit — knowing that would reveal whether
+      // somebody else is mid-signup on this address.
+      if (ipAddress) {
+        const liveFromThisIp = await tx.otpChallenge.count({
+          where: {
+            channel: CHANNEL,
+            destination,
+            ipAddress,
+            verifiedAt: null,
+            expiresAt: { gt: now },
+            NOT: { signupId },
+          },
+        });
+        if (liveFromThisIp >= SIGNUP_OTP_MAX_LIVE_PER_IP) {
+          throw new HttpException(
+            'Too many codes have recently been requested for this email address. Try again in a few minutes.',
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
       }
 
       // Upsert, not insert: @@unique([signupId, channel]) means a resend
@@ -252,12 +339,12 @@ export class SignupOtpService {
       });
     this.devOnlyLogCode(destination, code);
 
+    const resendAt = new Date(row.lastSentAt.getTime() + SIGNUP_OTP_RESEND_COOLDOWN_MS);
     return {
       signupId,
       expiresAt: row.expiresAt.toISOString(),
-      resendAvailableAt: new Date(
-        row.lastSentAt.getTime() + SIGNUP_OTP_RESEND_COOLDOWN_MS,
-      ).toISOString(),
+      resendAvailableAt: resendAt.toISOString(),
+      resendInSeconds: Math.max(0, Math.round((resendAt.getTime() - row.lastSentAt.getTime()) / 1000)),
     };
   }
 
@@ -268,14 +355,17 @@ export class SignupOtpService {
       // `attempts` is deliberately NOT selected: the budget is enforced by the
       // conditional UPDATE below, and a snapshot here would invite gating on
       // the stale value again.
-      select: { id: true, code: true, expiresAt: true, verifiedAt: true },
+      select: { id: true, code: true, destination: true, expiresAt: true, verifiedAt: true },
     });
     if (!row) throw new BadRequestException('Request a code first.');
 
     // Idempotent, and checked BEFORE expiry: an address verified inside the
-    // window stays verified for the rest of the signup even once the code ages
-    // out, so a slow registrant does not lose a tick they earned. register()
-    // re-checks expiry separately.
+    // window stays verified even once the code ages out, so a slow registrant
+    // does not lose a tick they earned. That promise is only kept because
+    // register() bounds the challenge by SIGNUP_OTP_COMPLETION_MS from
+    // `verifiedAt` rather than by the code's own `expiresAt` — checked in
+    // assertVerifiedEmail below. Tying it to `expiresAt` would make this
+    // early return hollow: the tick would survive here and be refused there.
     if (row.verifiedAt) return { verified: true };
 
     const now = new Date();
@@ -308,7 +398,45 @@ export class SignupOtpService {
       );
     }
 
-    await prisma.otpChallenge.update({ where: { id: row.id }, data: { verifiedAt: now } });
+    // Compare-and-swap, NOT update-by-id. Everything above ran off the snapshot
+    // read at the top of this method, and `request()` rewrites `destination`,
+    // `code` and `expiresAt` on this very row (there is exactly one per
+    // signupId+channel) inside a transaction holding two advisory locks that
+    // verify() does not take. Stamping by id alone would therefore mark
+    // whatever the row points at NOW as verified — including an address a
+    // concurrent request() swapped in — using a code the caller was
+    // legitimately shown for a DIFFERENT address. That is the reported bug
+    // reintroduced one layer down, so the write re-asserts the exact pair it
+    // matched and touches 0 rows if anything moved.
+    const stamped = await prisma.otpChallenge.updateMany({
+      where: {
+        id: row.id,
+        code: row.code,
+        destination: row.destination,
+        verifiedAt: null,
+      },
+      data: { verifiedAt: now },
+    });
+
+    if (stamped.count === 0) {
+      // Two ways to get here, and they are not the same. A concurrent verify()
+      // may have stamped this IDENTICAL challenge, which is the outcome we
+      // wanted anyway — that is idempotent success, matching the early return
+      // above. Anything else means the row moved, and must not be verified.
+      const current = await prisma.otpChallenge.findUnique({
+        where: { id: row.id },
+        select: { code: true, destination: true, verifiedAt: true },
+      });
+      const sameChallengeAlreadyVerified =
+        current !== null &&
+        current.verifiedAt !== null &&
+        current.code === row.code &&
+        current.destination === row.destination;
+      if (!sameChallengeAlreadyVerified) {
+        throw new BadRequestException('That code is no longer valid. Request a new one.');
+      }
+    }
+
     return { verified: true };
   }
 
@@ -324,13 +452,16 @@ export class SignupOtpService {
   async assertVerifiedEmail(signupId: string, email: string): Promise<void> {
     const row = await prisma.otpChallenge.findUnique({
       where: { signupId_channel: { signupId, channel: CHANNEL } },
-      select: { destination: true, verifiedAt: true, expiresAt: true },
+      select: { destination: true, verifiedAt: true },
     });
     const now = new Date();
+    // Bounded from `verifiedAt`, NOT from the code's `expiresAt`: see
+    // SIGNUP_OTP_COMPLETION_MS. `expiresAt` gates entering the code; this gates
+    // finishing the form, and they are different deadlines.
     const ok =
       row !== null &&
       row.verifiedAt !== null &&
-      row.expiresAt > now &&
+      now.getTime() - row.verifiedAt.getTime() <= SIGNUP_OTP_COMPLETION_MS &&
       row.destination.toLowerCase() === email.trim().toLowerCase();
 
     if (!ok) {

@@ -119,6 +119,40 @@ describe('AuthService.register (auto-login on sign-up)', () => {
     expect(mocked.session.create).not.toHaveBeenCalled();
   });
 
+  // The comment on register() promises the spend is a compare-and-swap whose
+  // loser "deletes 0 rows and is rejected". That only happens if the spend runs
+  // BEFORE the insert — otherwise the loser dies on the User.email unique index
+  // first and never reaches consume() at all. The recruiter path already orders
+  // it this way (recruiter-registration.service.ts deletes, then creates).
+  it('spends the verified challenge BEFORE creating the user', async () => {
+    const consume = vi.fn().mockResolvedValue(undefined);
+    await service.register(validInput, undefined, undefined, { signupId: 's', consume });
+
+    expect(consume).toHaveBeenCalledWith(expect.anything(), 's');
+    expect(consume.mock.invocationCallOrder[0]!).toBeLessThan(
+      mocked.user.create.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  // Two registrations for the same address can both clear the pre-check and
+  // race to the insert. The loser hits the unique index and Prisma raises
+  // P2002, which nothing on this path caught — SentryGlobalFilter maps a
+  // non-HttpException to 500, so a plain double-submit produced a server error
+  // instead of the same 409 the pre-check returns a millisecond earlier.
+  it('turns a lost insert race into 409, not 500', async () => {
+    const p2002 = Object.assign(new Error('Unique constraint failed on the fields: (`email`)'), {
+      code: 'P2002',
+    });
+    mocked.user.create.mockRejectedValue(p2002);
+
+    await expect(
+      service.register(validInput, undefined, undefined, {
+        signupId: 's',
+        consume: vi.fn().mockResolvedValue(undefined),
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
   it('rejects a duplicate email without creating a user or session', async () => {
     mocked.user.findUnique.mockResolvedValue({ id: 1, email: validInput.email });
     await expect(service.register(validInput, undefined, undefined)).rejects.toBeInstanceOf(

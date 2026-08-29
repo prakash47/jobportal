@@ -81,6 +81,33 @@ skewed, which is a lot of them.
 | `POST /v1/auth/mobile/refresh` | `{ refreshToken }` | Refresh token goes in the **body**, not a cookie. Rotated on every use — store the new one and discard the old immediately. |
 | `POST /v1/auth/mobile/logout` | `{ refreshToken }` | Revokes that session server-side. |
 
+### Email verification on signup — website only, for now
+
+The **website** no longer creates an account until a 6-digit code sent to the
+address comes back. Two new endpoints back that flow, and neither is part of the
+mobile surface today:
+
+| Route | Body | Returns |
+|---|---|---|
+| `POST /auth/signup/otp/request` | `{ email, name, signupId? }` | `{ signupId, expiresAt, resendAvailableAt, resendInSeconds }` |
+| `POST /auth/signup/otp/verify` | `{ signupId, code }` | `{ verified: true }` |
+
+`POST /auth/register` (the website route) now additionally requires a
+`signupId` that has been verified **for that exact address**.
+
+⚠️ **`POST /v1/auth/mobile/register` is deliberately unchanged** and still
+creates accounts with no email verification, so the app keeps working as-is.
+That is an owner decision, not an oversight. The impact is bounded — applying
+already requires a verified email — but until the app implements the two-step
+flow, an unverified account can still be created through the mobile route.
+
+Two notes if you do implement it. **`resendInSeconds` is a DURATION**, like
+`expiresIn` on login: run the resend countdown from it plus elapsed local time.
+Do not subtract a device clock from `resendAvailableAt` — that bakes the phone's
+clock skew into the countdown, which is a bug the web client shipped and had to
+fix. And the cooldown **429 body carries `resendInSeconds` too**, so a rejected
+resend still tells you exactly when to re-arm the button.
+
 **Password rule:** 8+ characters with at least one digit **and** one special character.
 A letter is *not* required. Mirror that exactly or your client-side validation will
 reject passwords the server accepts.

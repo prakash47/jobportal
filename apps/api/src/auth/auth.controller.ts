@@ -126,6 +126,13 @@ export class AuthController {
     const parsed = RegisterWithOtpDto.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
 
+    // The L3 killswitch, checked HERE and not only in request(), mirroring
+    // recruiter-registration.service.ts. Gating just the code request leaves an
+    // emergency stop on account creation bypassable for a whole
+    // SIGNUP_OTP_COMPLETION_MS by anyone already holding a verified challenge —
+    // which is exactly the window the switch is thrown to close.
+    await this.signupOtp.assertNewRegistrationsOpen();
+
     // Bound to the address being registered, not merely to a verified handle.
     // Without re-checking the destination a caller could verify their own
     // address and then submit somebody else's — the same bug one layer down.
@@ -143,27 +150,24 @@ export class AuthController {
     // Auto-login: set the session cookies so the new seeker lands authenticated
     // on the onboarding step (no separate sign-in).
     setAuthCookies(res, result.accessToken, result.refreshToken, cookieEnvFromProcess());
-    // SRS §4.13 — registration confirmation + email-verification fire as
-    // separate templates so the welcome message is not coupled to the
-    // verification token TTL. Don't gate on killswitch here: an emergency
-    // killswitch should not silently break account creation; the worker's
-    // L3 no-op is sufficient and a reasonable failure mode (user signs up,
-    // emails are deferred until killswitch lifts).
-    // Belt-and-suspenders: the account + session + cookies are already committed
-    // above, so an email failure must NEVER 500 the request and strand a
-    // created-but-"failed" account. Swallow it — the user can request a fresh
-    // verification email later. (enqueue() also log-and-drops on a down queue;
-    // this also covers any failure in token creation.)
-    // NO verification link is sent here any more. The account was created with
-    // emailVerified: true because a code sent to this address came back, so a
-    // second "please confirm your email" message would ask the user to re-prove
-    // something they just proved — and would arrive for an address that is by
-    // construction already reachable. `emailVerify.issueAndSend` still serves
-    // the resend endpoint and the mobile route, which has no OTP step yet.
-    // Fire-and-log: enqueue is fast, but a Redis blip should not flip a
-    // successful registration into a 5xx. The verify email above IS awaited
-    // because the user can't apply without it; this welcome email is
-    // strictly cosmetic.
+    // SRS §4.13 — EXACTLY ONE email is sent from this handler now: the welcome
+    // message. There is no longer a verification link, because the account was
+    // created with emailVerified: true — a code sent to this address came back,
+    // which is what verification means. Asking the user to confirm an address
+    // they just proved they receive mail at would be asking twice for the same
+    // fact. (`emailVerify.issueAndSend` still exists and is still used, by the
+    // resend endpoint below and by the mobile route, which has no OTP step yet.)
+    //
+    // Not gated on the transactional-email killswitch: an emergency switch
+    // should not silently break account creation. The worker's own no-op is
+    // sufficient, and deferring a welcome email until the switch lifts is a
+    // reasonable failure mode.
+    //
+    // Fire-and-log rather than awaited. The account, session and cookies are
+    // already committed, so a Redis blip must never flip a successful
+    // registration into a 5xx and strand a created-but-"failed" account. Since
+    // nothing here gates the user's ability to apply any more, this email is
+    // strictly cosmetic — which is precisely why it is safe not to await.
     this.email
       .enqueueRegistrationConfirmation(parsed.data.email, result.user.id, {
         name: parsed.data.name,

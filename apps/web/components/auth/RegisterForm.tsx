@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Label } from '@jobportal/ui';
-import { apiErrorMessage } from '../../lib/auth/api-error';
+import { ApiError, apiErrorMessage } from '../../lib/auth/api-error';
 import { PasswordInput } from './PasswordInput';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -41,6 +41,24 @@ type Step = 'details' | 'code' | 'password';
  * Google sign-up skips all of this: Google has already verified the address, so
  * asking the user to prove it again would be theatre.
  */
+const SIGNUP_STORAGE_KEY = 'cq.signup.otp';
+
+function rememberSignup(signupId: string, email: string): void {
+  try {
+    window.sessionStorage.setItem(SIGNUP_STORAGE_KEY, JSON.stringify({ signupId, email }));
+  } catch {
+    // Non-fatal: see the restore effect.
+  }
+}
+
+function forgetSignup(): void {
+  try {
+    window.sessionStorage.removeItem(SIGNUP_STORAGE_KEY);
+  } catch {
+    // Non-fatal: see the restore effect.
+  }
+}
+
 export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormProps) {
   const router = useRouter();
   const [step, setStep] = useState<Step>('details');
@@ -52,6 +70,11 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
   const [phone, setPhone] = useState('');
 
   const [signupId, setSignupId] = useState('');
+  // Which address the handle above was issued for. Sending it alongside a
+  // DIFFERENT address would re-point that challenge, which the server allows
+  // (it is the caller's own row) but which silently invalidates the code
+  // already sitting in the first inbox.
+  const [signupIdEmail, setSignupIdEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,13 +82,43 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
 
   const codeRef = useRef<HTMLInputElement>(null);
 
-  // Countdown from a DURATION derived once at response time, never by comparing
-  // the server's absolute timestamp against the device clock on every tick. A
-  // phone whose clock is minutes out — common on Android in India — would
-  // otherwise show a resend that never unlocks, or one that unlocks instantly.
-  const startResendCountdown = useCallback((resendAvailableAt: string) => {
-    const seconds = Math.max(0, Math.ceil((Date.parse(resendAvailableAt) - Date.now()) / 1000));
-    setResendIn(Number.isFinite(seconds) ? seconds : 0);
+  // The signupId is the handle to a live challenge and it lived only in React
+  // state, so a reload — or Back out of the flow and in again — minted a SECOND
+  // challenge for the same address. That was merely wasteful before; with the
+  // per-IP sub-cap in SignupOtpService it means the user's own abandoned row
+  // locks them out of their own signup. sessionStorage rather than
+  // localStorage: the handle should live exactly as long as the tab that owns
+  // it, and not persist on a shared machine after the tab is closed.
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(SIGNUP_STORAGE_KEY);
+      if (!raw) return;
+      const saved: unknown = JSON.parse(raw);
+      if (saved && typeof saved === 'object') {
+        const { signupId: id, email: addr } = saved as Record<string, unknown>;
+        if (typeof id === 'string' && typeof addr === 'string') {
+          setSignupId(id);
+          setSignupIdEmail(addr);
+          setEmail(addr);
+        }
+      }
+    } catch {
+      // Private mode, a full quota, or a corrupt value must never stop someone
+      // signing up — a lost handle just costs one extra challenge.
+    }
+  }, []);
+
+  // Counts down from the DURATION the server sends (`resendInSeconds`) plus
+  // time elapsed locally on this device. Deliberately NOT
+  // `Date.parse(serverInstant) - Date.now()`: that subtracts the device clock
+  // from the server's, so the whole skew lands in the seed value. A phone
+  // minutes out of true — ordinary on Android in India — then shows either a
+  // resend that never unlocks, or one that appears unlocked immediately and
+  // 429s on every press. Doing the subtraction once rather than per tick does
+  // not remove the skew; sending a duration does.
+  const startResendCountdown = useCallback((seconds: unknown) => {
+    const n = typeof seconds === 'number' ? seconds : Number.NaN;
+    setResendIn(Number.isFinite(n) && n > 0 ? Math.ceil(n) : 0);
   }, []);
 
   useEffect(() => {
@@ -88,7 +141,11 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
       body: JSON.stringify(body),
     });
     const parsed = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new Error(apiErrorMessage(parsed, 'Something went wrong'));
+    // Carry the parsed body on the error, not just its message. The cooldown
+    // 429 is the response that re-arms the Resend button, and flattening it to
+    // a string threw away the `resendInSeconds` it exists to deliver — leaving
+    // the button permanently enabled and every press failing.
+    if (!res.ok) throw new ApiError(apiErrorMessage(parsed, 'Something went wrong'), parsed);
     return parsed;
   }
 
@@ -101,16 +158,24 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
       // Echo the existing signupId on a resend so the SAME challenge row is
       // replaced. Omitting it would mint a second live code for this address
       // and burn one of its three slots for no reason.
+      const reusable = signupId && signupIdEmail === email.trim().toLowerCase();
       const out = await post('/auth/signup/otp/request', {
         email,
         name,
-        ...(signupId ? { signupId } : {}),
+        ...(reusable ? { signupId } : {}),
       });
-      if (typeof out.signupId === 'string') setSignupId(out.signupId);
-      if (typeof out.resendAvailableAt === 'string') startResendCountdown(out.resendAvailableAt);
+      if (typeof out.signupId === 'string') {
+        setSignupId(out.signupId);
+        setSignupIdEmail(email.trim().toLowerCase());
+        rememberSignup(out.signupId, email.trim().toLowerCase());
+      }
+      startResendCountdown(out.resendInSeconds);
       setStep('code');
       setNotice(`We sent a 6-digit code to ${email}.`);
     } catch (err) {
+      // A cooldown 429 is not a dead end: it tells us exactly how long is left,
+      // so re-arm the countdown from it instead of stranding the button.
+      if (err instanceof ApiError) startResendCountdown(err.body.resendInSeconds);
       setError(err instanceof Error ? err.message : 'Could not send the code');
     } finally {
       setLoading(false);
@@ -145,6 +210,10 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
         signupId,
         ...(phone ? { phone } : {}),
       });
+      // The challenge was consumed server-side inside the register
+      // transaction, so the stored handle is now dead — leaving it behind would
+      // have the next signup in this tab present an already-spent id.
+      forgetSignup();
       // Created AND auto-logged-in → straight to onboarding.
       onSuccess?.();
       router.push('/onboarding');
