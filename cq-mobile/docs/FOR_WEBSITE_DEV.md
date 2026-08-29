@@ -1,9 +1,9 @@
 # What the CQ mobile app needs from the website & backend
 
-**20 August 2026 · verified against `origin/develop` (including last night's 47 commits)**
+**22 August 2026 · re-verified against `origin/develop` after your 83 commits**
 
-The Flutter app is code-complete for the seeker journey: 509 tests, analyzer
-clean, 61% line coverage. It cannot be released, and **none of the remaining
+The Flutter app is code-complete for the seeker journey: 593 tests, analyzer
+clean, 73% line coverage. It cannot be released, and **none of the remaining
 blockers are in the app**.
 
 Everything below was checked by opening the file, not inferred. Each item says
@@ -13,65 +13,73 @@ what to change and what the app cannot do until it lands.
 
 ## First, the good news
 
-**The API contract is clean.** All 33 route+verb combinations the app calls exist
-on `origin/develop` with the correct prefix, and none of last night's 47 commits
-changed a request or response shape the app depends on. Nothing you have merged
-has broken the app.
+**The contract is clean again.** Every route the app calls exists on
+`origin/develop` with the correct prefix. One shape did change under us — see the
+next section — and the app has been updated to match; nothing else in your 83
+commits touched a request or response the app depends on.
 
 ---
 
-## Do this one today
+## Two things about the app you could not have known
 
-### Job alerts are silently burning their own matches
+**1. The app is on `/auth/*`, not the mobile surface.** Your WORKLOG notice says
+the app keeps working because `POST /v1/auth/mobile/register` was deliberately
+left unchanged. The reasoning is right; the premise is not — **the app has never
+called a single route on `/v1/auth/mobile/*`**. It uses the browser routes
+throughout, so `POST /auth/register` requiring a `signupId` broke every
+registration in the app the moment it landed.
 
-`alerts.processor.ts:128` calls `this.email.sendJobAlert(...)`, which reaches
-`ResendClient` directly. With `RESEND_API_KEY` blank the client **logs and
-returns void** — success, as far as every caller can tell. Lines 138–142 then
-commit:
+Not your fault: nothing recorded where the app actually sits. It is recorded now,
+and it matters going forward — **a change to the `/auth/*` browser routes changes
+the app too.** The routes the app depends on are `/auth/login`, `/auth/register`,
+`/auth/logout`, `/auth/me`, `/auth/forgot-password`, `/auth/verify-reset-otp`,
+`/auth/reset-password`, `/auth/resend-verification`, and now the two signup-OTP
+routes.
 
-```ts
-lastSentJobIds: persistedIds,
-lastSentAt: new Date(),
-```
+**2. That notice is now stale and can be deleted.** The app implements the same
+two-step flow as of today, so the open path it describes — an unverified address
+becoming an account through the app — is closed. Both of your contract warnings
+were worth having and both are honoured: `resendInSeconds` is treated as a
+duration, and the cooldown 429's copy of it re-arms the resend button.
 
-Those job ids are now permanently deduped. **They will never be emailed, even
-after the key is provisioned.** Every day this runs, more matches are lost for
-good, and the app's own "send test alert" button
-(`alerts_repository.dart:112`) burns real matches the same way.
-
-Either provision Resend (below) or pause the alerts queue until you do. This is
-the only item on this page that gets worse with time.
+Moving the app to the mobile surface was the other option and was rejected
+deliberately: that endpoint returns tokens in the body, and this app's session is
+entirely cookie-based, so registration would have succeeded and left the user
+signed out. If you would rather the app moved there eventually, say so and we
+will plan it — it is a session-layer change, not a URL swap.
 
 ---
+
+## Email: working, but not yet shippable
+
+Delivery is proven and the alerts problem this page used to open with is gone.
+What remains is configuration, and two details will bite a first deploy:
+
+- **`.env.example` still ships `RESEND_API_KEY=""`.** The key exists on your
+  machine, not in anything a deploy would read.
+- **`RESEND_FROM` still defaults to `JobPortal <onboarding@resend.dev>`.** That
+  address only delivers to your own Resend account's address. A tester, a store
+  reviewer, or any real user gets nothing. It needs to be an address on a domain
+  verified in Resend.
+- **`WEB_URL` is still `http://localhost:3000`**, so the verification link in
+  every email points at localhost — see the `/verify-email` item below, which is
+  still open.
 
 ## Launch blockers
 
-### 1. Transactional email does not send — and it locks users out of applying
+### 1. Get the sending identity into a deploy
 
-`apps/api/src/email/resend-client.ts:22-29` returns early when `RESEND_API_KEY`
-is unset. `.env.example:16` ships it empty.
+Delivery works; the configuration does not travel. See *Email* above — the key
+lives only on your machine, `RESEND_FROM` still points at `onboarding@resend.dev`
+which reaches nobody but you, and `WEB_URL` is still localhost.
 
-That alone would be a nuisance. What makes it a blocker is
-`applications.service.ts:86-95`: **apply is hard-gated on `emailVerified`.** So
-the chain is —
+This stays a launch blocker because of what sits behind it:
+`applications.service.ts:86-95` hard-gates apply on `emailVerified`. A user who
+registers and never receives the mail can never apply — the app's primary action.
 
-> register in the app → `emailVerified = false` → tap Apply → `403 "Verify your
-> email before applying."` → the verify sheet's "Send again" returns 204 → no
-> email exists → **there is no way past this wall.**
-
-Apply is the app's primary action. Also silently dead: password reset (the app
-shows a live countdown for a code that was never sent — `requestCode()` returns
-200 for every outcome by design, so nothing surfaces), application-status
-notifications, and recruiter invites.
-
-**To fix:** verify a real sending domain in Resend, set `RESEND_API_KEY` and
-`RESEND_FROM` to an address on it. The in-code default
-`JobPortal <noreply@jobportal.com>` is unverified and Resend will reject it, and
-`onboarding@resend.dev` only delivers to your own account address so it is no use
-for testers. Set `WEB_URL` at the same time — see the next item.
-
-*Worth 10 minutes while you are in there:* make `ResendClient` throw, or at least
-`warn`, in production when the key is missing, so a keyless deploy fails loudly.
+*Worth 10 minutes:* make `ResendClient` throw, or at least `warn`, in production
+when the key is missing, so a keyless deploy fails loudly instead of dropping
+every email in silence.
 
 **Effort:** 1–2h, configuration only.
 
@@ -204,7 +212,7 @@ the deploy runbook and dry-run it once against a throwaway database.
 | Item | Detail |
 |---|---|
 | **`endDate` should be nullable** | `apps/api/src/profile/dto.ts:85` is `z.iso.datetime().optional()` — not nullable — so sending `null` is a 400 and **a past job can never be turned into a current one**. Education got this right (`endYear: yearInt.nullable().optional()`). Needs the field plus its four `.refine` predicates. **~45 min.** |
-| **`ParseInt32IdPipe` on mobile routes** | You wrote it last night for exactly this bug; it is only on admin/recruiter routes. The app's `applications`, `education` and `experience` controllers still use plain `ParseIntPipe`, so a large id overflows Postgres `int4` and throws a **500** instead of a clean 404. ~18 decorator swaps across 8 files. **~30 min.** |
+| **`ParseInt32IdPipe` on mobile routes** | You wrote it for exactly this bug, and it is still only on admin/recruiter routes. The app's `applications`, `education` and `experience` controllers still use plain `ParseIntPipe`, so a large id overflows Postgres `int4` and throws a **500** instead of a clean 404. ~18 decorator swaps across 8 files. **~30 min.** |
 | **ES sync has no retry** | A failed `syncJob` is logged and forgotten — no retry, no reconciliation sweep. A job silently stops being searchable. **1.5–2 days.** |
 | **Production start script** | Depends on devDependencies, and `prisma generate` never runs in the pnpm build. Will bite on first deploy. **3–4h.** |
 | **CI** | See below. |
@@ -251,7 +259,7 @@ Not blockers — the screens degrade — but each is small and already mostly bu
 
 ---
 
-## New gap created by last night's work
+## The notification feed — still nothing can read a candidate broadcast
 
 `/sadmin/broadcasts` can now write in-app `Notification` rows to
 `ALL_CANDIDATES`, and the console reports them delivered. **Nothing can read
@@ -275,7 +283,7 @@ Mount it as `@Controller({ path: 'me/notification-feed', version: '1' })` —
 | Your item | What I cannot do |
 |---|---|
 | API host | Build anything shippable — the app has no host to point at |
-| Email + `/verify-email` | Ship at all: users could register and never apply |
+| A real sending identity + `/verify-email` | Ship at all: users could register and never apply |
 | Elasticsearch | Show a single job |
 | R2 | Trust that an uploaded résumé still exists |
 | Privacy + terms + deletion pages | Make the app's own Terms/Privacy text tappable, or complete either store's forms |
@@ -284,6 +292,11 @@ Mount it as `@Controller({ path: 'me/notification-feed', version: '1' })` —
 Everything else on the app side is done and pushed to `app/cq-mobile`.
 
 ---
+
+*Re-verified against `origin/develop` on 22 August: deploy config, the four web
+pages, `endDate`, `ParseInt32IdPipe` on the app's controllers, the candidate
+notification feed, R2 and `TRUST_PROXY` are all still open. Email is the one item
+that moved.*
 
 *Full item-by-item detail is in `TRACKER.xlsx`. The app-side picture is in
 `PUBLISHING_READINESS.md`. Both are in this folder on the `app/cq-mobile` branch.*

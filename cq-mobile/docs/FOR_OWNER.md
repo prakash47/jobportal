@@ -1,9 +1,9 @@
 # CQ Mobile — what only you can provide
 
-**20 August 2026**
+**22 August 2026**
 
-The app is code-complete for the job-seeker journey: 509 automated tests,
-analyzer clean, 61% line coverage, everything pushed. **It cannot be published,
+The app is code-complete for the job-seeker journey: 593 automated tests,
+analyzer clean, 73% line coverage, everything pushed. **It cannot be published,
 and none of the remaining work is app development.**
 
 This page is the part that needs you: accounts, money, a signing key, a Mac, and
@@ -175,15 +175,23 @@ acceptable.
 
 ---
 
-## 8. One thing to ask the website developer about today
+## 8. What moved since the first version of this page
 
-Not a decision, just something worth knowing: **job alerts are currently
-destroying their own matches.** Because email is not configured, the alert worker
-"sends" nothing but still marks those jobs as already sent — so they will never be
-emailed, even after email is fixed. It gets worse every day it runs.
+**Email now works.** That was the biggest blocker on the list and the website
+developer has closed it — delivery is proven end to end. The alerts problem this
+section used to warn about is gone with it.
 
-The fix is either configuring email or pausing that queue. It is item one on their
-page.
+One caveat to carry into the deploy, not a reason to worry now: the key lives on
+their machine, and the "from" address still defaults to one that only reaches
+their own inbox. Both need setting on the real host before a tester or a store
+reviewer can receive anything. It is on their page.
+
+**The app's registration was broken and is fixed.** Their signup work started
+requiring a verified email code before an account can exist, and the app was
+still registering the old way — so every signup in the app failed. The app now
+does the same two-step flow, which also closes a hole on our side: until today
+someone could create an account through the app without proving they owned the
+address.
 
 ---
 
@@ -210,9 +218,9 @@ Items 1–4 are yours, cost $25, and none of them wait on anybody else.
 | | |
 |---|---|
 | Seeker features | Complete — search, apply, save, alerts, applications, profile, résumé, companies, articles, account deletion |
-| Automated tests | 509, all passing |
+| Automated tests | 593, all passing |
 | Analyzer warnings | 0 |
-| Line coverage | 61% |
+| Line coverage | 73% |
 | Security review | Session storage, logout, cloud backup, credential logging — all closed |
 | Store compliance | Six dead sign-in buttons removed, iOS metadata corrected, large-text clipping fixed, in-app deletion built |
 | Known defects | None outstanding on the app side |
