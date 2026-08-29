@@ -1906,6 +1906,34 @@ Full **seeker dashboard redesign**. The dashboard lives at `/profile` (the codeb
 
 **Deferred / notes:** dark mode stays dormant (no `ThemeProvider`), so the navy rail is fixed-dark in both modes by design; the daily-apply quota pill is hidden below `sm` (tight top bar); the education form, like onboarding, manages exactly one degree + Class 12 — extra legacy rows from the old free-form editor stay in the DB untouched but aren't shown.
 
+### Seeker onboarding redesign — `develop` commit `0ae7a79` · 2026-06-22
+
+The post-registration onboarding was rebuilt from a single form into a guided **multi-step wizard**, and the auth entry points were reworked to flow straight into it (SRS §4.3 + §4.12). Committed **directly to `develop`** (CLI, no PR — same pattern as the recent recruiter merges). Work spanned several sessions; the popup-login half landed earlier on `feature/navbar-ui` (PR #43).
+
+**Auth → onboarding flow:**
+- Login + Register are now a **tabbed popup modal** opened from the navbar (Sign in / Register tabs), not standalone pages. Includes **Sign in / Sign up with Google** (server-side OAuth, flag-gated **off** by default) and a show/hide password toggle.
+- Registering (email+password **or** Google) now **auto-logs-in and redirects straight to onboarding** — name pre-filled + editable, email locked — instead of the old "account created, sign in to continue".
+
+**The wizard** (`apps/web/components/onboarding/`, replaces the deleted `OnboardingForm.tsx`) — **3 data steps + a done screen**, each step skippable and saved as you go:
+1. **Employment & professional** — work status (Fresher / Experienced toggle), looking-for (Job / Internship / Both), and (when Experienced) total experience, current salary, company, designation, current city, industry, notice period; **skills** (autosuggest from the catalogue + type-your-own, which find-or-creates a `Skill`); **projects** and **languages** sub-lists (add / remove, each persisted immediately).
+2. **Education** — First Degree + Class 12 (institute / degree / specialization, start–end year, CGPA, "currently pursuing"). Reuses the existing `/me/education` model + API.
+3. **Headline & preferences** — resume headline (250 chars), highlighted position/role, preferred work locations, preferred salary, gender.
+- **Done** screen → a single **"Go to dashboard"** button (`/profile`).
+
+**Chrome / layout:** a top **navbar**, a left **vertical progress rail** (`StepTracker`), a right **quick-tips** panel, and the shared **site footer** — a 3-column layout with **sticky side rails** + a wider card; fully responsive (rails collapse below `lg`/`xl`; the card falls back to its inline step bar on mobile). Flat navy/cyan brand, no gradients.
+
+**Schema** (additive): new `Project` + `CandidateLanguage` models; `Candidate` gains `workStatus`, `lookingFor`, `currentCompanyName`, `currentCityName`, `industryId`, `gender`; new enums `WorkStatus` / `LookingFor` / `LanguageProficiency` / `Gender`; `Skill.isCustom`. All additive — existing rows untouched.
+
+**API** (`apps/api/src/profile/`): new ownership-scoped `GET/POST/DELETE /me/projects` + `/me/languages`; `ProfilePatchDto` extended with the new candidate fields; `/me/skills` accepts free-text `customSkills` and find-or-creates catalogue rows (race-safe `createMany`, 50-skill cap enforced **before** any write); `auth` register returns an auto-login session. New unit tests for the DTOs, `slugifySkill`, and register auto-login.
+
+**Reviewed:** each major slice went through an adversarial multi-agent review. Confirmed + fixed: a **stored-XSS** sink (a `javascript:`/`data:` project URL → restricted to http(s) at the DTO + guarded on render), WCAG-AA contrast misses (eyebrow / step-label `fg-subtle` → `fg-muted`; dark-mode helper text), the segmented control's broken `radiogroup` keyboard model (roving tabindex + arrow nav), custom-skill catalogue rows being written before the cap check, and a couple of controlled-`<select>` desync edges.
+
+**Recorded late (2026-08-29).** This entry sat unmerged on `chore/update-progress-seeker-onboarding` (authored 2026-06-27) for two months, so work that shipped to `develop` in June had no PR-log entry until now. Only the entry was rescued: that branch also rewrote the then-current snapshot and listed two branches as in-flight, both of which are long since merged — merging it verbatim would have reintroduced stale claims.
+
+**What those two follow-on branches turned out to contain**, both now on `develop`:
+- **`feature/seeker-onboarding-changes`** — three onboarding-input refinements: salary fields render **Indian thousands-separators** (display only; state stays raw digits so the rupees→paise math is untouched); **Current city** became a searchable city-catalogue dropdown with an "Other" free-text fallback; and a **PDF resume upload** was added to the Headline step, reusing the shipped `/me/resume` pipeline (PDF-only, 5 MB, ClamAV-scanned, R2 in prod / in-memory in dev, writes a `Resume` row and sets `activeResumeId`). A companion `chore` commit removed a stray `package-lock.json` and gitignored `package-lock.json` / `yarn.lock` — this repo is **pnpm-only**.
+- **`feature/seeker-dashboard-ui-layout-update`** — the seeker dashboard (`/profile`) layout work.
+
 ### `feature/recruiter-profile-edit` · 2026-06-21
 
 Recruiter **Profile tab is now editable** (refinement of SRS §4.9.1). CLI merge (no PR). Scoped to recruiter code paths + `packages/db` — **`apps/web` and candidate auth/profile (`apps/api/src/auth`, `apps/api/src/profile`) are byte-untouched** (verified via `git status`).
