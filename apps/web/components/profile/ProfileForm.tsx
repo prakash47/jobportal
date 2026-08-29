@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Label, Textarea, cn } from '@jobportal/ui';
 import { api } from '../../lib/profile/api-client';
+import { CountryCodeSelect } from '../ui/CountryCodeSelect';
+import { joinPhone, splitPhone } from '../../lib/phone/format';
 
 type WorkStatus = 'FRESHER' | 'EXPERIENCED';
 
@@ -39,7 +41,12 @@ export interface ProfileFormProps {
 export function ProfileForm({ initial }: ProfileFormProps) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
-  const [phone, setPhone] = useState(initial.phone ?? '');
+  // Split the single stored `phone` column into a country and a national
+  // number. Rows written before this control existed have no dial code and
+  // fall back to the default rather than becoming uneditable.
+  const initialPhone = splitPhone(initial.phone);
+  const [phone, setPhone] = useState(initialPhone.national);
+  const [phoneIso, setPhoneIso] = useState(initialPhone.iso);
   const [headline, setHeadline] = useState(initial.headline ?? '');
   const [summary, setSummary] = useState(initial.summary ?? '');
   // "Working or fresher?" gate. New profiles default to Working so the work
@@ -65,7 +72,10 @@ export function ProfileForm({ initial }: ProfileFormProps) {
     setSaved(false);
 
     const patch: Record<string, unknown> = { name, workStatus };
-    if (phone) patch['phone'] = phone;
+    // Same join as signup, so the two forms cannot drift into storing
+    // different shapes for the same column.
+    const joinedPhone = joinPhone(phoneIso, phone);
+    if (joinedPhone) patch['phone'] = joinedPhone;
     if (headline) patch['headline'] = headline;
     if (summary) patch['summary'] = summary;
     // Work-history fields only apply to experienced candidates. When "Fresher"
@@ -99,7 +109,18 @@ export function ProfileForm({ initial }: ProfileFormProps) {
         <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
       </Field>
       <Field id="phone" label="Phone" hint="Optional. Recruiters won't see this until you apply.">
-        <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} />
+        <div className="flex gap-2">
+          <CountryCodeSelect value={phoneIso} onChange={setPhoneIso} />
+          <Input
+            id="phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel-national"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            maxLength={15}
+          />
+        </div>
       </Field>
       <Field id="headline" label="Headline" hint="One line, e.g. 'Staff Engineer building dev tools'.">
         <Input id="headline" value={headline} onChange={(e) => setHeadline(e.target.value)} maxLength={200} />
