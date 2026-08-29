@@ -66,6 +66,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/seeker-phone-country-code` | **Country dial-code selector on the seeker phone fields.** New `apps/web/lib/phone/countries.ts` (generated, ~250 rows), `apps/web/public/flags.webp` sprite + `apps/web/components/ui/CountryCodeSelect.tsx` (searchable combobox, default **+91 IN**). Wired into `RegisterForm.tsx` step 3 and `ProfileForm.tsx` so the two cannot drift. Flag EMOJI were ruled out on measurement - Windows ships no flag glyphs, so they render as letters. **No API, Zod, schema or flag-key change**: stored value stays inside `phone` min(7)/max(20) and matches the `+91 98765 43002` shape the seed data already uses. | **None.** No schema, no theme tokens, no shared types, no `keys.ts`, no barrels. |
 
 ---
 
