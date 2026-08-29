@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Label } from '@jobportal/ui';
 import { ApiError, apiErrorMessage } from '../../lib/auth/api-error';
+import { CountryCodeSelect } from '../ui/CountryCodeSelect';
+import { DEFAULT_COUNTRY_ISO } from '../../lib/phone/countries';
+import { joinPhone } from '../../lib/phone/format';
 import { PasswordInput } from './PasswordInput';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -68,6 +71,9 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
+  // The dial code is a separate control, so the number field holds only the
+  // NATIONAL part; joinPhone puts them back together at submit time.
+  const [phoneIso, setPhoneIso] = useState(DEFAULT_COUNTRY_ISO);
 
   const [signupId, setSignupId] = useState('');
   // Which address the handle above was issued for. Sending it alongside a
@@ -208,7 +214,9 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
         email,
         password,
         signupId,
-        ...(phone ? { phone } : {}),
+        // An empty number omits `phone` entirely rather than sending a bare
+        // "+91", which is not a phone number and would fail the API's min(7).
+        ...(joinPhone(phoneIso, phone) ? { phone: joinPhone(phoneIso, phone) } : {}),
       });
       // The challenge was consumed server-side inside the register
       // transaction, so the stored handle is now dead — leaving it behind would
@@ -357,17 +365,28 @@ export function RegisterForm({ onSuccess, idPrefix = 'register' }: RegisterFormP
         </p>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor={phoneId}>
+        <Label htmlFor={phoneId} id={`${phoneId}-label`}>
           {/* fg-subtle measures 2.57:1 and is banned for meaningful text. */}
           Phone <span className="text-[var(--color-fg-muted)]">(optional)</span>
         </Label>
-        <Input
-          id={phoneId}
-          type="tel"
-          autoComplete="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
+        <div className="flex gap-2">
+          <CountryCodeSelect
+            value={phoneIso}
+            onChange={setPhoneIso}
+            ariaLabelledBy={`${phoneId}-label`}
+          />
+          {/* autoComplete narrows from `tel` to `tel-national`: the country part
+              now lives in its own control, so letting the browser autofill a
+              full international number here would double the dial code. */}
+          <Input
+            id={phoneId}
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel-national"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+        </div>
       </div>
       {feedback}
       <Button type="submit" loading={loading} className="w-full">
