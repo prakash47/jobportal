@@ -6,10 +6,39 @@ import 'auth_user.dart';
 
 /// A user-friendly auth failure. [message] is safe to show directly in the UI.
 class AuthException implements Exception {
-  const AuthException(this.message);
+  const AuthException(this.message, {this.resendInSeconds});
   final String message;
+
+  /// Seconds to wait before another code may be requested.
+  ///
+  /// Present on the signup-OTP cooldown 429, whose body carries it precisely so
+  /// a rejected resend still knows when to re-arm rather than guessing.
+  final int? resendInSeconds;
+
   @override
   String toString() => message;
+}
+
+/// What `POST /auth/signup/otp/request` hands back.
+///
+/// The website now verifies an address BEFORE any account row exists, and the
+/// app has to do the same: `/auth/register` refuses a body without a
+/// [signupId] that has been verified for that exact address.
+class SignupChallenge {
+  const SignupChallenge({required this.signupId, required this.resendInSeconds});
+
+  final String signupId;
+
+  /// A DURATION, not an instant — run the countdown from this plus elapsed
+  /// local time. Subtracting a device clock from the server's
+  /// `resendAvailableAt` bakes the phone's clock skew into the countdown, which
+  /// is a bug the web client shipped and had to fix.
+  final int resendInSeconds;
+
+  factory SignupChallenge.fromJson(Map<String, dynamic> j) => SignupChallenge(
+    signupId: j['signupId'] as String? ?? '',
+    resendInSeconds: (j['resendInSeconds'] as num?)?.toInt() ?? 30,
+  );
 }
 
 /// Timing for the password-reset OTP (durations in seconds, per the contract —
@@ -52,10 +81,63 @@ class AuthRepository {
     }
   }
 
+  /// Ask the server to email a 6-digit code, before any account exists.
+  ///
+  /// Pass [signupId] back on a resend so the same challenge row is replaced
+  /// rather than a second one created for the same address.
+  Future<SignupChallenge> requestSignupOtp({
+    required String name,
+    required String email,
+    String? signupId,
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/auth/signup/otp/request',
+        data: {
+          'name': name,
+          'email': email,
+          if (signupId != null && signupId.isNotEmpty) 'signupId': signupId,
+        },
+      );
+      return SignupChallenge.fromJson(res.data ?? const {});
+    } on DioException catch (e) {
+      // The cooldown 429 is the one failure the caller can act on precisely, so
+      // its seconds travel with the message instead of being flattened away.
+      final data = e.response?.data;
+      final seconds = data is Map ? (data['resendInSeconds'] as num?)?.toInt() : null;
+      throw AuthException(
+        _messageFor(e, fallback: 'Could not send the code. Please try again.'),
+        resendInSeconds: seconds,
+      );
+    }
+  }
+
+  /// Confirm the emailed code. The account still does not exist after this —
+  /// it is [register] that creates it, using the now-verified [signupId].
+  Future<void> verifySignupOtp({
+    required String signupId,
+    required String code,
+  }) async {
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        '/auth/signup/otp/verify',
+        data: {'signupId': signupId, 'code': code},
+      );
+    } on DioException catch (e) {
+      // The server counts down ("2 attempts left"), says when the code has
+      // expired, and says when the budget is spent — each needs a different
+      // move from the user, so its sentence is surfaced rather than replaced.
+      throw AuthException(
+        _messageFor(e, fallback: 'Could not check that code. Please try again.'),
+      );
+    }
+  }
+
   Future<AuthUser> register({
     required String name,
     required String email,
     required String password,
+    required String signupId,
     String? phone,
   }) async {
     try {
@@ -65,6 +147,9 @@ class AuthRepository {
           'name': name,
           'email': email,
           'password': password,
+          // Required since the website's signup-OTP work: the server refuses to
+          // create a User row for an address it has not just verified.
+          'signupId': signupId,
           if (phone != null && phone.isNotEmpty) 'phone': phone,
         },
       );

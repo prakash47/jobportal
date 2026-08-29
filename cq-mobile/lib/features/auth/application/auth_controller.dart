@@ -153,10 +153,13 @@ class AuthController extends Notifier<AuthState> {
     state = AuthAuthenticated(user);
   }
 
+  /// Creates the account. [signupId] must already have been verified through
+  /// the emailed code — the server refuses to create a User row without it.
   Future<void> register({
     required String name,
     required String email,
     required String password,
+    required String signupId,
     String? phone,
   }) async {
     final repo = await _repo;
@@ -164,6 +167,7 @@ class AuthController extends Notifier<AuthState> {
       name: name,
       email: email,
       password: password,
+      signupId: signupId,
       phone: phone,
     );
     await _cache.write(user);

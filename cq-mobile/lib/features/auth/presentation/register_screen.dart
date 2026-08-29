@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'signup_code_screen.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -61,16 +62,32 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     setState(() => _submitting = true);
     try {
-      await ref
-          .read(authControllerProvider.notifier)
-          .register(
+      // Signing up is two steps now: the server emails a code and refuses to
+      // create the account until it comes back verified. Nothing is saved here
+      // — the details travel to the code screen and the account is created
+      // there, so an address nobody has proved they own never becomes a User.
+      final challenge = await (await ref.read(authRepositoryProvider.future))
+          .requestSignupOtp(
+            name: _name.text.trim(),
+            email: _email.text.trim(),
+          );
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => SignupCodeScreen(
             name: _name.text.trim(),
             email: _email.text.trim(),
             password: _password.text,
             phone: _phone.text.trim(),
-          );
-      // Success → the API auto-logs-in and the router sends us to /home.
-      await _applyMarketingChoice();
+            challenge: challenge,
+          ),
+        ),
+      );
+      // Back here means they did not finish. The marketing choice belongs to a
+      // real account, so it is applied only once one exists.
+      if (!mounted) return;
+      final auth = ref.read(authControllerProvider);
+      if (auth is AuthAuthenticated) await _applyMarketingChoice();
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {

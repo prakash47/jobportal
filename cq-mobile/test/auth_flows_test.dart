@@ -186,6 +186,7 @@ void main() {
         name: 'Priya',
         email: 'priya@example.com',
         password: 'hunter2!',
+        signupId: 'sid_test',
       );
 
       expect(rec.requests.single.method, 'POST');
@@ -224,7 +225,8 @@ void main() {
       // A stray /v1 here is a 404, and a 404 reads to the user as a wrong
       // password, so nothing in the app would ever point at the URL.
       await repo.login(email: 'a@b.com', password: 'x');
-      await repo.register(name: 'A', email: 'a@b.com', password: 'x');
+      await repo.register(
+          name: 'A', email: 'a@b.com', password: 'x', signupId: 'sid_test');
       await repo.requestPasswordResetOtp('a@b.com');
       await repo.verifyResetOtp(email: 'a@b.com', code: '123456');
       await repo.resetPassword(ticket: 't', password: 'x');
@@ -273,12 +275,16 @@ void main() {
         email: 'priya@example.com',
         password: 'hunter2!',
         phone: '',
+        signupId: 'sid_test',
       );
 
       expect(rec.requests.single.data, {
         'name': 'Priya',
         'email': 'priya@example.com',
         'password': 'hunter2!',
+        // Required since the signup-OTP work: the server will not create a
+        // User row for an address it has not just verified.
+        'signupId': 'sid_test',
       });
     });
 
@@ -287,6 +293,7 @@ void main() {
         name: 'Priya',
         email: 'priya@example.com',
         password: 'hunter2!',
+        signupId: 'sid_test',
       );
 
       expect((rec.requests.single.data as Map).containsKey('phone'), isFalse);
@@ -298,12 +305,14 @@ void main() {
         email: 'priya@example.com',
         password: 'hunter2!',
         phone: '9876543210',
+        signupId: 'sid_test',
       );
 
       expect(rec.requests.single.data, {
         'name': 'Priya',
         'email': 'priya@example.com',
         'password': 'hunter2!',
+        'signupId': 'sid_test',
         'phone': '9876543210',
       });
     });
@@ -355,6 +364,7 @@ void main() {
         name: 'Priya',
         email: 'priya@example.com',
         password: 'hunter2!',
+        signupId: 'sid_test',
       );
 
       expect(user.name, 'Priya');
@@ -484,6 +494,7 @@ void main() {
             name: 'Priya',
             email: 'taken@example.com',
             password: 'hunter2!',
+            signupId: 'sid_test',
           ),
         ),
         'An account with this email already exists.',
@@ -523,6 +534,7 @@ void main() {
           name: 'Priya',
           email: 'priya@example.com',
           password: 'short',
+          signupId: 'sid_test',
         ),
       );
 
@@ -979,6 +991,7 @@ void main() {
           name: 'Priya',
           email: 'a@b.com',
           password: 'hunter2!',
+          signupId: 'sid_test',
         ),
         throwsA(isA<AuthException>()),
       );
@@ -1042,6 +1055,7 @@ void main() {
             name: 'Priya',
             email: 'priya@example.com',
             password: 'hunter2!',
+            signupId: 'sid_test',
           );
 
       final state = container.read(authControllerProvider);
