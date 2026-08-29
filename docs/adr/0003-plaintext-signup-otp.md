@@ -1,4 +1,12 @@
-# ADR 0002 — Plaintext signup OTPs, relayed by staff
+# ADR 0003 — Plaintext signup OTPs, relayed by staff
+
+> Renumbered from 0002 to 0003 on 2026-08-29. It collided with
+> `0002-public-rest-api-for-mobile.md`, which had been local-only on another
+> machine until that day. This document moved rather than that one because
+> "ADR 0002" is cited in 25+ source comments across `apps/api`, `apps/web` and
+> `apps/recruiter` (decisions 2, 6, 7, 8; §3, §4; steps 5 and 10) and every one
+> of them means the REST-API document, while nothing anywhere referenced this
+> file by number. Content is unchanged; only the number and filename moved.
 
 - **Status**: Accepted
 - **Date**: 2026-07-29
