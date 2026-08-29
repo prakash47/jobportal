@@ -7,6 +7,7 @@ import type {
   EmailVerificationPayload,
   JobPostedConfirmationPayload,
   PasswordResetPayload,
+  SignupOtpPayload,
   PaymentReceiptPayload,
   RecruiterInvitePayload,
   AdminStaffInvitePayload,
@@ -64,6 +65,16 @@ export class EmailService {
       userId,
       payload,
     });
+  }
+
+  /**
+   * Seeker signup verification code.
+   *
+   * `userId` is null and always will be — the whole point of this flow is that
+   * no User row exists until the code is entered.
+   */
+  enqueueSignupOtp(to: string, payload: SignupOtpPayload): Promise<void> {
+    return this.queue.enqueue({ kind: 'signup_otp', to, userId: null, payload });
   }
 
   enqueueApplicationSubmitted(

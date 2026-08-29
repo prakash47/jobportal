@@ -13,6 +13,22 @@ export const RegisterDto = z.object({
 });
 export type RegisterInput = z.infer<typeof RegisterDto>;
 
+/**
+ * Website registration — RegisterDto plus proof the address is real.
+ *
+ * A SEPARATE schema rather than a field on RegisterDto, because the mobile
+ * controller parses RegisterDto and the owner's decision is that the app keeps
+ * working unchanged until its two-step flow ships. Extending the shared schema
+ * would have broken it the moment this merged.
+ *
+ * `signupId` is deliberately NOT optional here: optional would leave the exact
+ * hole this closes reachable by omitting the field.
+ */
+export const RegisterWithOtpDto = RegisterDto.extend({
+  signupId: z.string().min(1).max(128),
+});
+export type RegisterWithOtpInput = z.infer<typeof RegisterWithOtpDto>;
+
 export const LoginDto = z.object({
   email: z.string().email().toLowerCase(),
   password: z.string().min(1),
@@ -85,3 +101,28 @@ export const MobileAppleDto = z
   })
   .strict();
 export type MobileAppleInput = z.infer<typeof MobileAppleDto>;
+
+// Seeker signup email verification (SRS §4.12). EMAIL only — no phone channel,
+// because no SMS provider is configured and seekers are the drop-off-sensitive
+// audience.
+
+export const RequestSignupOtpDto = z
+  .object({
+    email: z.string().email().toLowerCase(),
+    name: z.string().trim().min(1).max(120),
+    // Omitted on the first request; echoed back on a resend so the same
+    // challenge row is replaced rather than a second one created.
+    signupId: z.string().min(1).max(128).optional(),
+  })
+  .strict();
+export type RequestSignupOtpInput = z.infer<typeof RequestSignupOtpDto>;
+
+export const VerifySignupOtpDto = z
+  .object({
+    signupId: z.string().min(1).max(128),
+    // Exactly six digits. `.length(6)` rather than a number type: a leading
+    // zero must survive, and Number would silently eat it.
+    code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code'),
+  })
+  .strict();
+export type VerifySignupOtpInput = z.infer<typeof VerifySignupOtpDto>;

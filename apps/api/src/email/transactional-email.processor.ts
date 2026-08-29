@@ -32,6 +32,12 @@ export type TransactionalEmailJob =
       payload: TemplatePayload<'password_reset'>;
     }
   | {
+      kind: 'signup_otp';
+      to: string;
+      userId: number | null;
+      payload: TemplatePayload<'signup_otp'>;
+    }
+  | {
       kind: 'application_submitted';
       to: string;
       userId: number | null;
@@ -88,6 +94,9 @@ const PREFERENCE_GATE: Record<TemplateKind, keyof PrefRow | null> = {
   registration_confirmation: null,
   email_verification: null,
   password_reset: null,
+  // Not gated, and cannot be: no User row exists yet, so there is no
+  // preference row to read — and identity verification is exempt anyway.
+  signup_otp: null,
   application_submitted: 'applicationStatusEnabled',
   application_status_change: 'applicationStatusEnabled',
   job_posted_confirmation: null,

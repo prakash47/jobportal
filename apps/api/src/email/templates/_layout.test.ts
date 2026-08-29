@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { esc, renderLayout } from './_layout';
-import { renderTemplate, type TemplateKind } from './index';
+import { renderTemplate, type TemplateKind, type TemplatePayload } from './index';
 
 describe('email layout', () => {
   it('escapes user-controlled HTML', () => {
@@ -47,23 +47,20 @@ describe('email layout', () => {
   });
 });
 
-const ALL_KINDS: TemplateKind[] = [
-  'registration_confirmation',
-  'email_verification',
-  'password_reset',
-  'application_submitted',
-  'application_status_change',
-  'job_posted_confirmation',
-  'payment_receipt',
-  'support_contact_message',
-  'support_ticket_opened',
-];
 
-const fixtures = {
+
+// Exhaustive by TYPE: `Record<TemplateKind, ...>` makes `tsc` reject a missing
+// kind, so a new template cannot be added without a fixture.
+const fixtures: { [K in TemplateKind]: TemplatePayload<K> } = {
   registration_confirmation: { name: 'Aisha' },
   email_verification: { verifyUrl: 'https://jobportal.com/verify?token=t' },
   password_reset: {
     code: '481920',
+    expiresInMinutes: 15,
+  },
+  signup_otp: {
+    code: '481920',
+    name: 'Aisha',
     expiresInMinutes: 15,
   },
   application_submitted: {
@@ -116,6 +113,15 @@ const fixtures = {
     description: 'The publish button does nothing when I click it.',
   },
 } as const;
+
+// DERIVED, never hand-maintained. This was a literal array, and it had silently
+// drifted three kinds behind `TemplateMap` — signup_otp, recruiter_invite and
+// admin_staff_invite were rendered by NO test at all, which was proved by making
+// renderSignupOtp throw unconditionally and watching all 1520 tests still pass.
+// `TemplateKind[]` cannot catch that: a short list is a valid array. Deriving the
+// list from the exhaustively-typed fixtures above makes the omission
+// unrepresentable rather than merely discouraged.
+const ALL_KINDS = Object.keys(fixtures) as TemplateKind[];
 
 describe.each(ALL_KINDS)('renderTemplate(%s)', (kind) => {
   it('produces non-empty subject + html + text + footer', () => {

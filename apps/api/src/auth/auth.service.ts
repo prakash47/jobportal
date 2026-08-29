@@ -5,7 +5,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { prisma } from '@jobportal/db';
+import { prisma, type Prisma } from '@jobportal/db';
 import type { User } from '@jobportal/db';
 import {
   type AccessClaims,
@@ -28,15 +28,50 @@ async function dummyHash(): Promise<string> {
   return dummyHashCache;
 }
 
+/**
+ * Prisma's unique-constraint code. Matched structurally rather than with
+ * `instanceof PrismaClientKnownRequestError` because the generated client is
+ * mocked in unit tests, where the thrown value is a plain object.
+ */
+function isEmailUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code?: unknown }).code === 'P2002'
+  );
+}
+
 @Injectable()
 export class AuthService {
   // Registration auto-logs the new seeker in (issues a session) so they land
-  // straight on the onboarding step — no separate sign-in. Email verification
-  // still fires from the controller and gates applying/posting per FR-4.12.8.
+  // straight on the onboarding step — no separate sign-in.
+  //
+  // Email verification no longer happens AFTER this call on the website path:
+  // it happens BEFORE it, as the OTP the controller requires, which is why the
+  // account is created already verified. FR-4.12.8 still gates applying on a
+  // verified address; that gate is simply satisfied on arrival now. The mobile
+  // route is the exception and still issues a verification link afterwards.
   async register(
     input: RegisterInput,
     deviceInfo: string | undefined,
     ipAddress: string | undefined,
+    /**
+     * A signup challenge already proven to hold this exact address (SRS §4.12).
+     *
+     * OPTIONAL, and that is a deliberate, owner-approved asymmetry rather than
+     * an oversight: the WEBSITE always supplies it, so no web account can be
+     * created for an address nobody received mail at. The mobile
+     * `/v1/auth/mobile/register` route does not yet implement the two-step
+     * flow, and gating it here would have broken the app the moment this
+     * merged. That gap is recorded as a Notice in WORKLOG.md for the app
+     * developer; until it closes, the mobile route can still create unverified
+     * accounts — bounded, because applying already requires a verified email.
+     *
+     * When present, the challenge is spent in the SAME transaction that creates
+     * the user, so a verified code can never be replayed into a second account.
+     */
+    verified?: { signupId: string; consume: (tx: Prisma.TransactionClient, signupId: string) => Promise<void> },
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     if (!isStrongPassword(input.password)) {
       throw new BadRequestException('Password too weak');
@@ -46,15 +81,53 @@ export class AuthService {
     if (existing) throw new ConflictException('Email already registered');
 
     const passwordHash = await hashPassword(input.password);
-    const user = await prisma.user.create({
-      data: {
-        email: input.email,
-        passwordHash,
-        name: input.name,
-        phone: input.phone ?? null,
-        role: 'CANDIDATE',
-      },
-    });
+
+    // ONE transaction, and the ORDER of the two statements inside it is
+    // load-bearing rather than incidental.
+    //
+    // The challenge is spent FIRST. `consumeVerified` is a conditional delete,
+    // so of two registrations racing on the same verified handle exactly one
+    // removes a row and the other removes none and is rejected — but that only
+    // decides anything if it runs BEFORE the insert. Creating first inverts it:
+    // the loser blocks on the User.email unique index and dies with P2002
+    // without ever reaching the spend, so the compare-and-swap adjudicates
+    // nothing and the caller gets a 500. The recruiter path orders it this same
+    // way (recruiter-registration.service.ts deletes, then creates).
+    //
+    // Being one transaction is what makes the ordering safe: either both
+    // persist or neither does, so no account can exist with its challenge
+    // unspent, and no challenge is spent without an account.
+    let user: User;
+    try {
+      user = await prisma.$transaction(async (tx) => {
+        if (verified) await verified.consume(tx, verified.signupId);
+        return tx.user.create({
+          data: {
+            email: input.email,
+            passwordHash,
+            name: input.name,
+            phone: input.phone ?? null,
+            role: 'CANDIDATE',
+            // The code proved they receive mail at this address, which is
+            // exactly what verification means — so they can apply immediately
+            // instead of chasing a second confirmation link for a fact already
+            // established.
+            emailVerified: verified !== undefined,
+          },
+        });
+      });
+    } catch (err: unknown) {
+      // The findUnique above closes the common case, but two registrations can
+      // both clear it and race to the insert. The loser hits the unique index,
+      // and that is the SAME condition the pre-check reports as 409 a
+      // millisecond earlier — so it must not reach SentryGlobalFilter, which
+      // maps any non-HttpException to a 500.
+      if (isEmailUniqueViolation(err)) {
+        throw new ConflictException('Email already registered');
+      }
+      throw err;
+    }
+
     return this.issueSession(user, deviceInfo, ipAddress);
   }
 
