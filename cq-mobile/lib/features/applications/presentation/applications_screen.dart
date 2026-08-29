@@ -70,9 +70,12 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
     return repo;
   }
 
-  Future<void> _load({String? status, int page = 1}) async {
+  Future<void> _load({String? status, int page = 1, bool refresh = false}) async {
     setState(() {
-      _loading = true;
+      // Mounted only for pull-to-refresh — see the note in companies_screen.
+      // Every other path replaces the results, and staying mounted opens
+      // the next page at the bottom where the reader already was.
+      if (!refresh || _page == null) _loading = true;
       _error = null;
       if (status != null) _status = status;
     });
@@ -191,7 +194,7 @@ class _ApplicationsScreenState extends ConsumerState<ApplicationsScreen> {
       return _Empty(filtered: _status != 'ALL');
     }
     return RefreshIndicator(
-      onRefresh: () => _load(page: _currentPage),
+      onRefresh: () => _load(page: _currentPage, refresh: true),
       child: ListView.separated(
         padding: const EdgeInsets.all(AppSpacing.lg),
         itemCount: page.hits.length + 1,

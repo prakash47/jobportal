@@ -910,14 +910,16 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('an article whose body never arrived still names itself', (
+    testWidgets('an article with no body says so, and offers the website', (
       tester,
     ) async {
-      // CURRENT BEHAVIOUR, reported rather than fixed. `ArticleDetail.fromJson`
-      // treats a missing body as the empty string, so an API that renames the
-      // column — or an editor who publishes an empty draft — produces a 200,
-      // no error, no retry, and a page with a headline and a byline over
-      // nothing. The reader is left to guess whether to scroll or reload.
+      // `ArticleDetail.fromJson` treats a missing body as the empty string, so
+      // an API that renames the column — or an editor who publishes an empty
+      // draft — produces a 200 with no error and nothing to read. This used to
+      // render as a headline and a byline over blankness, leaving the reader to
+      // guess whether to scroll or reload. The screen now says which of the two
+      // it is and hands them the website copy, which renders the same article
+      // through a different pipeline.
       //
       // Tags are empty here so no related request fires and the emptiness
       // underneath the headline is unambiguous.
@@ -940,22 +942,21 @@ void main() {
       );
       await _pumpFrames(tester);
 
-      // What is missing, stated: the app bar, the headline, the byline — and
-      // then nothing. No prose, no failure to retry, no line anywhere telling
-      // the reader the article is empty.
+      // Not an error state — the request succeeded — so no retry. What the
+      // reader gets instead is a sentence and a way out.
       expect(find.text('Try again'), findsNothing);
+      expect(find.text('This article has no text yet.'), findsOneWidget);
+      expect(find.text('Open on the website'), findsOneWidget);
+      // The headline and byline still stand above it.
+      expect(find.text(_resumeTitle), findsOneWidget);
       expect(
-        _visibleLines(tester),
-        unorderedEquals([
-          'Article',
-          _resumeTitle,
-          contains('Meera Rao'),
-        ]),
+        _visibleLines(tester).any((l) => l.contains('Meera Rao')),
+        isTrue,
       );
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('a response the app cannot read leaves a blank page', (
+    testWidgets('a response the app cannot read is explained, not blank', (
       tester,
     ) async {
       // CURRENT BEHAVIOUR, reported rather than fixed. Every field in
@@ -973,9 +974,17 @@ void main() {
       await _pumpFrames(tester);
 
       expect(find.text('Loading article…'), findsNothing);
+      // Still not an error state — the request DID succeed, so there is nothing
+      // to retry. But the reader is no longer left on white space.
       expect(find.text('Try again'), findsNothing);
-      expect(_visibleLines(tester), ['Article'],
-          reason: 'nothing on the page but the app bar it was opened from');
+      expect(find.text('This article has no text yet.'), findsOneWidget);
+      expect(find.text('Open on the website'), findsOneWidget);
+
+      // The honest limit of this fix, worth stating: a drifted response and a
+      // genuinely empty draft are indistinguishable to the app — both arrive as
+      // a 200 that parses into an article with no body — so both land on the
+      // same sentence. Telling them apart needs the API to stop letting every
+      // field fall back, which is a backend change.
       expect(tester.takeException(), isNull);
     });
   });

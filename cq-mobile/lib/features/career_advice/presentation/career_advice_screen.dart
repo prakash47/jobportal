@@ -57,9 +57,15 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
   /// Returns false when the request failed and the PREVIOUS results were kept.
   /// See _selectTag: a topic chip lights up before its results arrive, and a
   /// failure would otherwise leave it lit above the unfiltered list.
-  Future<bool> _load(int page) async {
+  Future<bool> _load(int page, {bool refresh = false}) async {
     setState(() {
-      if (_page == null) _loading = true; // keep the list mounted during refresh
+      // The list stays mounted ONLY for pull-to-refresh, where the same page
+      // is reloading under the user's finger and the RefreshIndicator is
+      // already the feedback. Every other path — the pager above all —
+      // replaces the results wholesale. Staying mounted there swaps the
+      // content under a reader who is still scrolled to the bottom, so
+      // page 2 opens at its end; rebuilding starts it back at the top.
+      if (!refresh || _page == null) _loading = true;
       _error = null;
     });
     try {
@@ -199,7 +205,7 @@ class _CareerAdviceScreenState extends ConsumerState<CareerAdviceScreen> {
       );
     }
     return RefreshIndicator(
-      onRefresh: () => _load(_currentPage),
+      onRefresh: () => _load(_currentPage, refresh: true),
       child: ListView.separated(
         padding: const EdgeInsets.all(AppSpacing.lg),
         itemCount: page.hits.length + 1,

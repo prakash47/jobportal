@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/widgets/cq_buttons.dart';
+import '../../../core/network/external_link.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/format/job_format.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -113,7 +116,17 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
         Divider(height: 1, color: cq.border),
         const SizedBox(height: AppSpacing.lg),
 
-        SimpleMarkdown(a.body),
+        // An article whose body is empty is not a blank page. The parser falls
+        // back through body / bodyMarkdown / bodyHtml to '', so an editor who
+        // published an empty draft — or a response whose shape drifted — arrives
+        // here as a 200 with nothing to show and no error anywhere. Saying so is
+        // the difference between "this article has no text" and "this app is
+        // broken", and it points the reader at the website, which renders the
+        // same content through a different pipeline.
+        if (a.body.trim().isEmpty)
+          _NoBody(slug: a.slug)
+        else
+          SimpleMarkdown(a.body),
 
         if (a.faqs.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xl),
@@ -288,3 +301,52 @@ class _FaqTile extends StatelessWidget {
   }
 }
 
+
+/// Shown when an article arrives with no body at all.
+///
+/// Rare, and silent when it happens: the parser falls back through body /
+/// bodyMarkdown / bodyHtml to '', so an empty draft and a drifted response
+/// both render as a headline over nothing. A reader deserves to be told which
+/// of "there is no text" and "something went wrong" they are looking at, and
+/// to be handed the copy on the website, which renders the same article
+/// through a different pipeline.
+class _NoBody extends StatelessWidget {
+  const _NoBody({required this.slug});
+
+  final String slug;
+
+  @override
+  Widget build(BuildContext context) {
+    final cq = context.cq;
+    final text = Theme.of(context).textTheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: cq.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: cq.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('This article has no text yet.', style: text.titleSmall),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'It may still be a draft. You can read the published version on the '
+            'website.',
+            style: text.bodyMedium?.copyWith(color: cq.fgMuted),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          CqPrimaryButton(
+            label: 'Open on the website',
+            icon: Icons.open_in_new_rounded,
+            onPressed: () => openExternalLink(
+              '${AppConfig.webBaseUrl}/career-advice/$slug',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
