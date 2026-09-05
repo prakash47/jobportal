@@ -916,6 +916,35 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `chore/eslint-setup` - `pnpm lint` goes from a no-op to a real gate - 2026-09-05
+
+CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.** Follows the discovery made while fixing `bugfix/anon-render-null-session`: the repo asked for lint in CLAUDE.md §10 and had none.
+
+**What was actually broken.** ESLint and Prettier were **not installed anywhere** (0 packages in the pnpm store), there was **no `.husky`, no git hooks and no `.github`**, and `next lint` - which four of the five apps invoked - **was removed in Next 16**, so those scripts errored out as an unknown command. Eight of the thirteen workspaces ran `echo 'no lint configured yet'`. `pnpm lint` could not fail, and had never failed.
+
+**Now**: one flat config at the repo root (`eslint.config.mjs`), every workspace's script is `eslint .`, and **`pnpm lint` runs 13/13 workspaces over 1,080 files and exits 0**. New root dev-dependencies, flagged per CLAUDE.md §10: `eslint`, `@eslint/js`, `typescript-eslint`, `eslint-config-next`, `globals`.
+
+**ESLint 9, not 10, and that was measured rather than assumed.** ESLint 10 installed cleanly but left `eslint-plugin-react`, `eslint-plugin-jsx-a11y` and `eslint-plugin-import` - all pulled in by `eslint-config-next` - on unmet peers, which means rules that throw at runtime rather than report. ESLint 9.39.5 satisfies every plugin in the chain, and `typescript-eslint` 8 supports both. `eslint-config-next` is held to the 16.2 line to match `next@16.2.5`.
+
+**Calibrated to pass clean rather than to look strict.** A lint that lands with thousands of errors is one everybody switches off in week one. Correctness rules are errors; judgement calls are warnings; anything `tsc` already reports (`no-unused-vars` against `noUnusedLocals`, `no-undef` against the type checker) is off rather than reported twice. The result today is **0 errors, 33 warnings** - every warning visible in the editor and in the CLI, none of them blocking. Every `off` and every `warn` in that file carries the reason it is set that way.
+
+**Three findings the first run produced, all fixed here:** `@next/next/no-html-link-for-pages` warns on its own absence in an App-Router-only repo (off); `eslint-config-next` ships its rules scoped to `**/*` , which at a monorepo root applies React and a11y rules to the NestJS API (re-scoped to the Next apps plus `packages/ui`); and four files already carried `eslint-disable` comments for `react/no-danger` and `react/no-array-index-key` written by developers who assumed lint existed - one of which was a **hard error** ("Definition for rule was not found") because the plugin was not in scope there. Those rules are now on, so the suppressions are meaningful again, and the one unsanitised-looking `dangerouslySetInnerHTML` without a comment (`JobBody.tsx`) got the justification it was missing (it is sanitised - `renderArticleMarkdown` runs `rehype-sanitize`).
+
+**The bug we just fixed is now a lint rule too.** `no-restricted-syntax` bans `(await readUserFromCookie())!` and the `getHeaderUser` laundering variant by AST selector, with the full explanation in the message - so it fires in the editor as you type, where the vitest guard only fires in the gate. Scoped to `apps/web`; mutation-tested.
+
+**Turbo caching was fixed as part of this.** `eslint.config.mjs` and `tsconfig.base.json` are now in `globalDependencies`, because a root config file lives outside every package - without that, changing a rule would not invalidate any package's cached lint result and `pnpm lint` would keep replaying stale passes. Verified: editing a page invalidated exactly `@jobportal/web#lint` and failed the run, 12 others stayed cached.
+
+**Two `no-useless-escape` fixes in a triplicated password regex** (`packages/auth/src/password.ts`, `apps/api/src/auth/dto.ts`) - `\[` inside a character class does nothing. **Behaviour proven identical across 11 inputs including literal `[` and `]` before committing.** The third copy is in `apps/api/src/recruiter-auth/dto.ts` and belongs to another developer, so the rule is downgraded for **that one directory** with a comment saying to delete the block once cleared, rather than the rule being weakened repo-wide.
+
+⚠️ **20 React Compiler findings are warnings, not errors, and that is the one judgement call worth challenging.** `eslint-plugin-react-hooks` v7 adds `set-state-in-effect` (14), `immutability` (5) and `refs` (3). They are real, but clearing one is a component refactor, and **13 of the 20 sit in `apps/recruiter` and `apps/sadmin`**, which belong to other developers. Refactoring their components inside a tooling change is exactly the surprise CLAUDE.md §15 exists to prevent, and smuggling a behavioural refactor into a config PR is how a safe change becomes a regression. Per-owner counts are in the WORKLOG notice; promote to `error` per app as each owner clears their sites.
+
+**Deliberately NOT done - three owner decisions, with recommendations:**
+1. **Prettier.** Adding it reformats ~1,100 files. Two other developers have branches in flight, so it would produce a guaranteed repo-wide conflict for both. Recommendation: do it as its own commit at a quiet moment when all branches are merged, plus a `.git-blame-ignore-revs` so the reformat does not poison `git blame`.
+2. **Husky + lint-staged.** It activates through a `prepare` script, so it would silently begin blocking teammates' commits on their next `pnpm install` - a change to other people's workflow that should be announced, not shipped.
+3. **CI.** `.github/workflows/ci.yml` is listed in CLAUDE.md §3.1 and has never existed; there is no `.github` directory at all. This is the real gap - Husky is a local convenience, CI is the thing that actually stops a bad merge. It needs decisions I cannot make (Actions minutes, and service containers for Postgres/Redis/Elasticsearch so `pnpm test` can run). Remote is `github.com/prakash47/jobportal`.
+
+**CLAUDE.md §10 was corrected** in the same change: it claimed "ESLint + Prettier - pre-commit via Husky + lint-staged", none of which was true. It now describes what exists, names the two deliberate omissions, and states plainly that there is no CI.
+
 ### `bugfix/anon-render-null-session` - RPT: the profile page threw on every logged-out request - 2026-09-05
 
 CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key, no lock taken.** The owner reported "fix the profile page error" after seeing a `TypeError` in the dev-server log.

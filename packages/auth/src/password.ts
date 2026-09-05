@@ -21,7 +21,7 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
 }
 
 // Per SRS §4.12.1: 8+ chars, must include digit + special char.
-const PASSWORD_RE = /^(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]).{8,}$/;
+const PASSWORD_RE = /^(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
 
 export function isStrongPassword(plain: string): boolean {
   return PASSWORD_RE.test(plain);

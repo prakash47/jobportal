@@ -7,7 +7,7 @@
     "build": "nest build",
     "dev": "node -r @swc-node/register src/main.ts",
     "start": "node -r @swc-node/register dist/apps/api/src/main.js",
-    "lint": "eslint \"src/**/*.ts\"",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

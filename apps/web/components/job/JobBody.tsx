@@ -26,6 +26,9 @@ export async function JobBody({ description, descriptionMarkdown }: JobBodyProps
     return (
       <section aria-label="Job description" className="space-y-4">
         <h2 className="text-lg font-semibold text-[var(--color-fg)]">About the role</h2>
+        {/* eslint-disable-next-line react/no-danger -- renderArticleMarkdown
+            runs the body through rehype-sanitize, so no raw HTML or scripts
+            survive; same pipeline and same reasoning as ArticleBody. */}
         <div className={PROSE} dangerouslySetInnerHTML={{ __html: html }} />
       </section>
     );

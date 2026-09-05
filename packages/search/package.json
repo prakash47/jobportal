@@ -6,7 +6,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "lint": "echo 'no lint configured yet'",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "search:bootstrap": "tsx scripts/bootstrap.ts",
     "search:reindex": "tsx scripts/reindex.ts",

@@ -15,7 +15,7 @@
     "db:seed:demo:full": "tsx prisma/seed-demo.ts && tsx prisma/seed-demo-applications.ts && pnpm --filter @jobportal/search search:reindex",
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
-    "lint": "echo 'no lint configured yet'",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

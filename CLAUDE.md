@@ -252,7 +252,9 @@ Lighthouse CI runs on every PR. Regressions block merge.
 ## 10. Code Standards
 
 - **TypeScript 5.9 strict mode** — `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` on
-- **ESLint + Prettier** — pre-commit via Husky + lint-staged
+- **ESLint 9 (flat config)** — one `eslint.config.mjs` at the repo root; every workspace's `lint` script is `eslint .`, so `pnpm lint` covers all 13. Correctness rules are errors, judgement calls are warnings, and anything `tsc` already reports is off there rather than reported twice. Run `pnpm lint:fix` to auto-fix. Read the header of `eslint.config.mjs` before changing rule levels — every `off` and every `warn` records why it is set that way
+- **Prettier and Husky are NOT set up** — deliberately, not by oversight (see `PROGRESS.md` → `chore/eslint-setup`). Adding Prettier reformats ~1,100 files and would collide with every branch in flight; Husky silently starts gating teammates' commits on their next `pnpm install`. Both are owner decisions, not drive-by additions
+- **There is no CI.** `.github/workflows/ci.yml` appears in §3.1 above but has never existed. The real gate is a human running `pnpm lint && pnpm typecheck && pnpm test && pnpm build` before merging
 - **File naming**: kebab-case for files, PascalCase for components, camelCase for utilities
 - **Commit format**: Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, `perf:`)
 - **Commit body** must reference SRS section when implementing a feature: `feat(jobs): implement job search SRP per SRS §4.1`
