@@ -2,10 +2,10 @@
   "name": "@jobportal/domain",
   "version": "0.1.0",
   "private": true,
-  "description": "Shared domain logic — URL slugs, job visibility, and the SRP/directory/article param parsers. Imported by apps/web (SSR) and apps/api (REST) so the two cannot drift.",
+  "description": "Shared domain logic \u2014 URL slugs, job visibility, and the SRP/directory/article param parsers. Imported by apps/web (SSR) and apps/api (REST) so the two cannot drift.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "//exports": "Explicit subpath map, matching @jobportal/ui and @jobportal/observability. Named rather than a './*' wildcard so the public surface is documented and internals cannot be reached. tsconfig paths alone are not enough — vitest and Node resolve through this map, and without it a subpath import typechecks but fails at runtime.",
+  "//exports": "Explicit subpath map, matching @jobportal/ui and @jobportal/observability. Named rather than a './*' wildcard so the public surface is documented and internals cannot be reached. tsconfig paths alone are not enough \u2014 vitest and Node resolve through this map, and without it a subpath import typechecks but fails at runtime.",
   "exports": {
     ".": "./src/index.ts",
     "./slug": "./src/slug.ts",
@@ -17,7 +17,8 @@
     "./home-queries": "./src/home-queries.ts",
     "./asset-url": "./src/asset-url.ts",
     "./txn-log-params": "./src/txn-log-params.ts",
-    "./admin-permissions": "./src/admin-permissions.ts"
+    "./admin-permissions": "./src/admin-permissions.ts",
+    "./profile-completeness": "./src/profile-completeness.ts"
   },
   "scripts": {
     "lint": "echo 'no lint configured yet'",
