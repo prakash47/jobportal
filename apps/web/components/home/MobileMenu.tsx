@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Menu, X, ArrowRight, Loader2, LogOut } from '@jobportal/ui/icons';
 import { ACCOUNT_LINKS, type HeaderUser } from '../shell/UserMenu';
+import { usePathname } from 'next/navigation';
+import { isActiveNavPath } from '../../lib/nav/active-path';
 
 interface NavLink {
   label: string;
@@ -39,6 +41,7 @@ export function MobileMenu({
   signingOut?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!open) return;
@@ -104,16 +107,28 @@ export function MobileMenu({
               ) : null}
 
               <nav className="flex flex-col" aria-label="Mobile">
-                {links.map((l) => (
-                  <Link
-                    key={l.href}
-                    href={l.href}
-                    onClick={() => setOpen(false)}
-                    className="rounded-lg px-3 py-3 text-base font-medium text-[var(--color-fg)] transition-colors hover:bg-[var(--color-bg-muted)]"
-                  >
-                    {l.label}
-                  </Link>
-                ))}
+                {links.map((l) => {
+                  // A phone has no hover, so the current page is the ONLY
+                  // wayfinding signal available here — the drawer needs this
+                  // more than the desktop nav does, not less.
+                  const active = isActiveNavPath(pathname, l.href);
+                  return (
+                    <Link
+                      key={l.href}
+                      href={l.href}
+                      onClick={() => setOpen(false)}
+                      aria-current={active ? 'page' : undefined}
+                      className={
+                        'rounded-lg px-3 py-3 text-base font-medium transition-colors ' +
+                        (active
+                          ? 'bg-[var(--color-bg-muted)] text-[var(--color-fg)]'
+                          : 'text-[var(--color-fg)] hover:bg-[var(--color-bg-muted)]')
+                      }
+                    >
+                      {l.label}
+                    </Link>
+                  );
+                })}
               </nav>
 
               {user ? (
