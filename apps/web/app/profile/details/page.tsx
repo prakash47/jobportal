@@ -1,5 +1,5 @@
 import { prisma } from '@jobportal/db';
-import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { requireUser } from '../../../lib/auth/require-user';
 import { PageHeader } from '../../../components/dashboard/PageHeader';
 import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { ProfileForm } from '../../../components/profile/ProfileForm';
@@ -27,9 +27,9 @@ async function loadProfile(userId: number) {
 }
 
 export default async function ProfileDetailsPage() {
-  // The layout's requireUser already redirects anonymous users; we're
-  // guaranteed a session here. The non-null assertion narrows the type.
-  const session = (await readUserFromCookie())!;
+  // Guarded here, not only by the layout: layout and page render
+  // concurrently, so the layout's redirect cannot gate this body.
+  const session = await requireUser();
   const { user, candidate } = await loadProfile(session.sub);
 
   return (

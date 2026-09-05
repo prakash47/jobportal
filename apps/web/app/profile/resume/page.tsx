@@ -1,6 +1,6 @@
 import { prisma } from '@jobportal/db';
 import { isFlagEnabled } from '@jobportal/feature-flags';
-import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { requireUser } from '../../../lib/auth/require-user';
 import { PageHeader } from '../../../components/dashboard/PageHeader';
 import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { ResumeManager } from '../../../components/profile/ResumeManager';
@@ -8,7 +8,7 @@ import { ResumeManager } from '../../../components/profile/ResumeManager';
 const RESUME_DOWNLOAD_FLAG = 'feature.resume_download_pdf';
 
 export default async function ResumePage() {
-  const session = (await readUserFromCookie())!;
+  const session = await requireUser();
   const candidate = await prisma.candidate.findUnique({
     where: { userId: session.sub },
     include: { activeResume: true },
