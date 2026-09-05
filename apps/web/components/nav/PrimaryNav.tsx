@@ -46,7 +46,16 @@ const navLinkIdle =
   // being open says "you are looking at this", the pill says "you are here".
   'data-[open=true]:bg-[var(--color-bg-muted)] data-[open=true]:text-[var(--color-fg)]';
 
-const navLinkActive = 'bg-[var(--color-bg-muted)] text-[var(--color-fg)]';
+// Brand cyan, not the neutral pill the other navs use — the owner wants the
+// current tab to carry the brand.
+//
+// The foreground is pinned to the brand NAVY rather than `--color-fg`, and that
+// is deliberate: `--color-accent-500` is defined once on `:root`, so the pill is
+// the SAME cyan in both themes, while `--color-fg` flips to near-white in dark.
+// Pairing them would give white-on-cyan at 2.95:1 in dark mode. Navy on cyan
+// measures 5.20:1 and is identical in both themes, clearing the 4.5:1 that a
+// 15px label needs.
+const navLinkActive = 'bg-[var(--color-accent-500)] text-[var(--color-primary-600)]';
 
 function navLinkClassFor(active: boolean): string {
   return `${navLinkBase} ${active ? navLinkActive : navLinkIdle}`;
