@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const PASSWORD_RE = /^(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]).{8,}$/;
+const PASSWORD_RE = /^(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{8,}$/;
 const passwordSchema = z
   .string()
   .regex(PASSWORD_RE, 'Password must be 8+ chars and include at least one digit and one special character');
