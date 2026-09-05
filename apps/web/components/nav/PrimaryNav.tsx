@@ -46,16 +46,15 @@ const navLinkIdle =
   // being open says "you are looking at this", the pill says "you are here".
   'data-[open=true]:bg-[var(--color-bg-muted)] data-[open=true]:text-[var(--color-fg)]';
 
-// Brand cyan, not the neutral pill the other navs use — the owner wants the
-// current tab to carry the brand.
+// A LIGHT cyan tint, not the solid brand cyan — the pill has text sitting on
+// it, so the background has to stay pale enough for that text to read.
 //
-// The foreground is pinned to the brand NAVY rather than `--color-fg`, and that
-// is deliberate: `--color-accent-500` is defined once on `:root`, so the pill is
-// the SAME cyan in both themes, while `--color-fg` flips to near-white in dark.
-// Pairing them would give white-on-cyan at 2.95:1 in dark mode. Navy on cyan
-// measures 5.20:1 and is identical in both themes, clearing the 4.5:1 that a
-// 15px label needs.
-const navLinkActive = 'bg-[var(--color-accent-500)] text-[var(--color-primary-600)]';
+// color-mix against `--color-bg` rather than a fixed light cyan is what makes
+// this work in both themes without a second rule: `--color-bg` flips, so the
+// tint resolves to pale cyan on white and a deep desaturated cyan on the dark
+// ground, and `--color-fg` stays readable on either. (The first attempt used
+// solid `accent-500`, which forced a navy foreground and was too heavy.)
+const navLinkActive = 'bg-[color-mix(in_oklch,var(--color-accent-500)_18%,var(--color-bg))] text-[var(--color-fg)]';
 
 function navLinkClassFor(active: boolean): string {
   return `${navLinkBase} ${active ? navLinkActive : navLinkIdle}`;
