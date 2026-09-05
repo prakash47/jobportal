@@ -9,7 +9,7 @@
 export { CompletenessIndicator } from './CompletenessIndicator';
 export { EducationOnboardingForm } from './EducationOnboardingForm';
 export { ExperienceManager } from './ExperienceManager';
-export { NextSteps, type ProfileStep } from './NextSteps';
+export { NextSteps } from './NextSteps';
 export { ProfileForm, type ProfileFormProps } from './ProfileForm';
 export { ResumeManager } from './ResumeManager';
 export { SkillsManager } from './SkillsManager';

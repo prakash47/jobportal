@@ -26,3 +26,4 @@ export * from './company-highlights';
 export * from './article-params';
 export * from './home-queries';
 export * from './asset-url';
+export * from './profile-completeness';
