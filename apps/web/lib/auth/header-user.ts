@@ -1,11 +1,22 @@
 import { cache } from 'react';
 import { prisma } from '@jobportal/db';
 import { readUserFromCookie } from './server-session';
+import { resolveStoredAssetUrl } from '@jobportal/domain/asset-url';
 
 export interface HeaderSessionUser {
   name: string;
   email: string;
   role: string;
+  /**
+   * The profile photo, already re-derived against the CURRENT asset bases.
+   *
+   * Resolved here rather than at each render site so every consumer gets a URL
+   * that is right for the environment it is running in — a photo uploaded while
+   * R2_PUBLIC_URL was blank has a localhost origin frozen into the row, and
+   * only resolving on read makes those self-heal. Null when the user has no
+   * photo; a Google avatar URL passes through untouched.
+   */
+  imageUrl: string | null;
 }
 
 // Server-side resolution of the signed-in user for the shared site header.
@@ -24,8 +35,18 @@ export const getHeaderUser = cache(async (): Promise<HeaderSessionUser | null> =
   if (!claims) return null;
   const row = await prisma.user.findUnique({
     where: { id: claims.sub },
-    select: { name: true },
+    select: { name: true, image: true },
   });
   const name = row?.name?.trim() ? row.name : claims.email;
-  return { name, email: claims.email, role: String(claims.role) };
+  return {
+    name,
+    email: claims.email,
+    role: String(claims.role),
+    // Resolved here rather than at the render site so every consumer of
+    // getHeaderUser gets a URL that is correct for the CURRENT asset bases.
+    imageUrl: resolveStoredAssetUrl(row?.image ?? null, {
+      publicBase: process.env.R2_PUBLIC_URL ?? '',
+      apiBase: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000',
+    }),
+  };
 });

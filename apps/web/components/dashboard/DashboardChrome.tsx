@@ -11,7 +11,7 @@ import { NAV_GROUPS, isNavItemActive } from './nav-items';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export interface DashboardChromeProps {
-  user: { name: string; email: string };
+  user: { name: string; email: string; imageUrl?: string | null };
   /** Server-rendered slot (the daily-apply quota pill) placed in the top bar. */
   quotaSlot?: ReactNode;
   children: ReactNode;
@@ -34,7 +34,7 @@ function SidebarContent({
   onSignOut,
   signingOut,
 }: {
-  user: { name: string; email: string };
+  user: { name: string; email: string; imageUrl?: string | null };
   pathname: string;
   onNavigate?: () => void;
   onSignOut: () => void;

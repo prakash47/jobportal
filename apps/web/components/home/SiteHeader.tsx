@@ -74,7 +74,9 @@ export async function SiteHeader() {
           links={NAV_LINKS}
           recruiterUrl={RECRUITER_URL}
           googleEnabled={googleEnabled}
-          {...(headerUser ? { user: { name: headerUser.name, email: headerUser.email } } : {})}
+          {...(headerUser
+            ? { user: { name: headerUser.name, email: headerUser.email, imageUrl: headerUser.imageUrl } }
+            : {})}
         />
       </div>
     </ScrollHeaderChrome>

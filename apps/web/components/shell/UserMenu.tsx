@@ -15,6 +15,8 @@ import {
 export interface HeaderUser {
   name: string;
   email: string;
+  /** Already resolved against the current asset bases by getHeaderUser. */
+  imageUrl?: string | null;
 }
 
 type IconType = React.ComponentType<React.SVGProps<SVGSVGElement>>;
@@ -58,8 +60,16 @@ export function UserMenu({
           aria-label="Account menu"
           className="rounded-full transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg-elevated)]"
         >
+          {/*
+            The Avatar primitive already supported `src`; nothing passed it, so
+            an uploaded (or Google) photo existed in the column and was never
+            shown. Radix falls back to the initials on its own if the image
+            fails to load, so a dead URL degrades instead of leaving a hole.
+          */}
           <Avatar
             size="md"
+            {...(user.imageUrl ? { src: user.imageUrl } : {})}
+            alt=""
             fallback={userInitials(user)}
             className="bg-[var(--color-primary-600)] text-white"
           />
