@@ -916,6 +916,24 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/seeker-nav-active-tab` - RPT: the navbar never shows which page you are on - 2026-09-05
+
+**Bug #3 from the tester run.** CLI merge to `develop` (`--no-ff`). **No API, schema, migration or flag change.** The primary nav gave no sign of the current page, so a seeker could not tell where they were.
+
+**Reproduced before changing anything, and the report was half right in a useful way.** The nav DID have a hover effect - an underline animating from zero to full width - but it was `after:h-px`, a **1-pixel line** in `--color-accent-500`, which measures **2.95:1** on white. One pixel at that contrast is imperceptible, which is why it was reported as "no hovering effect" even though the CSS was present. The **active state was genuinely absent**: `usePathname()` was already being called in `PrimaryNav.tsx`, but only to close the mega-menu on navigation - it was never compared against the link - and there was **no `aria-current` anywhere in the nav**, so screen readers could not announce the current page either. That made it an accessibility gap, not just a cosmetic one, and the nav was the outlier: `AdminNav`, `DashboardChrome` and `CompanyProfileNav` all already mark their current item.
+
+**Owner chose the pill (option C of three shown in an interactive artifact), knowingly not the underline they had originally referenced** - the deciding argument being one active-state language across the product rather than a third invention. Filled `--color-bg-muted` background plus full-strength foreground, replacing the underline machinery entirely. An open mega-panel now gets the *hover* treatment rather than the active one, so "you are looking at this" and "you are here" stay visually distinct.
+
+**Fixed on BOTH surfaces.** `MobileMenu.tsx` had the identical gap, and it matters more there: a phone has no hover, so the current page is the only wayfinding signal available.
+
+**The matching rules are prefix-aware, and derived from the real routes rather than guessed.** The nav has three hrefs but the seeker browses far more: the LIST pages are `/jobs` and `/companies` while the DETAIL pages are `/job/[slug]` and `/company/[handle]` (singular), and the `[...path]` dispatcher serves four SEO landings - `/jobs-in-<city>`, `/<skill>-jobs`, `/<skill>-jobs-in-<city>` (job searches) and `/working-at-<slug>` (a company surface). Exact matching would drop the highlight the moment a user opened a result, which is the confusion the feature exists to remove. New `apps/web/lib/nav/active-path.ts` owns the rules so the two surfaces cannot drift.
+
+⚠️ **A test caught a real bug in the first implementation.** `/saved-jobs` is a genuine page, but it also matches the `/<skill>-jobs` landing shape with "saved" as the skill - so the Jobs tab lit up while the user was on their saved jobs. The fix mirrors Next's own precedence (static routes beat a catch-all, as the dispatcher's header comment states): a `RESERVED_SEGMENTS` set, built by enumerating the real route directories, gates the SEO patterns. `startsWith` is also explicitly avoided and tested against - `/jobseeker-terms` starts with `/jobs`.
+
+✅ **Browser-verified** on a running stack: Jobs pilled on `/jobs`, still pilled on the singular `/job/sahaj-pay-...-100013`, Companies on `/companies`, Career advice on `/career-advice`, and the mobile drawer measured through computed styles (the class-name check was a false positive, since the idle class contains `hover:bg-[var(--color-bg-muted)]`) - exactly one row with a filled background and `aria-current="page"`, the others transparent. web 173 -> 200 tests.
+
+**Environment noise, not caused by this branch**: Docker's host port proxy for Elasticsearch failed twice mid-session (healthy inside the container, unreachable from the host) and a Turbopack panic on `globals.css` (`0xc0000142`, a failed subprocess spawn) took the dev server down until `.next` was cleared. Both are recurring on this machine and worth watching. The `jobs-v2` index is also stale - `pnpm --filter @jobportal/search search:reindex` when convenient.
+
 ### RPT: "forgot password is not working" - investigated, no code change needed - 2026-09-05
 
 **Bug #2 from the tester run. Closed by diagnosis: the flow was already correct, and the real fault was fixed earlier the same day.** Reported as three symptoms - no OTP email arriving, a password-reset *link* being sent instead of a code, and no way to set a new password. Reproduced before changing anything, and every layer already implemented exactly what the report asked for:

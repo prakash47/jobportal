@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { isActiveNavPath } from '../../lib/nav/active-path';
 
 // Desktop primary nav with hover/focus mega-menus under Jobs & Companies.
 // The triggers stay real <Link>s — a plain click/Enter ALWAYS navigates; the
@@ -27,11 +28,29 @@ type MenuKey = 'jobs' | 'companies';
 const OPEN_DELAY = 120;
 const CLOSE_DELAY = 180;
 
-const navLinkClass =
-  'relative text-[15px] font-semibold text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)] ' +
-  "after:absolute after:-bottom-1 after:left-0 after:h-px after:w-0 after:bg-[var(--color-accent-500)] after:content-[''] " +
-  'after:transition-[width] after:duration-[var(--duration-base)] after:ease-[var(--ease-out)] hover:after:w-full ' +
-  'data-[open=true]:text-[var(--color-fg)] data-[open=true]:after:w-full';
+// The current page is marked with a filled pill, matching what AdminNav and
+// DashboardChrome already do for their current item — one active-state language
+// across the product rather than a third invention.
+//
+// This REPLACES a 1px `accent-500` underline that only ever appeared on hover.
+// Two things were wrong with it: it marked nothing at all when you were sitting
+// ON the page, and at 2.95:1 a single pixel was too faint to read as a state
+// change, so it was reported as "no hover effect" even though the CSS was there.
+const navLinkBase =
+  'rounded-[var(--radius-md)] px-3 py-1.5 text-[15px] font-semibold ' +
+  'transition-colors duration-[var(--duration-base)] ease-[var(--ease-out)]';
+
+const navLinkIdle =
+  'text-[var(--color-fg-muted)] hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-fg)] ' +
+  // An open mega-panel gets the hover treatment, not the active one: the panel
+  // being open says "you are looking at this", the pill says "you are here".
+  'data-[open=true]:bg-[var(--color-bg-muted)] data-[open=true]:text-[var(--color-fg)]';
+
+const navLinkActive = 'bg-[var(--color-bg-muted)] text-[var(--color-fg)]';
+
+function navLinkClassFor(active: boolean): string {
+  return `${navLinkBase} ${active ? navLinkActive : navLinkIdle}`;
+}
 
 export function PrimaryNav({
   links,
@@ -131,7 +150,7 @@ export function PrimaryNav({
   const plainLinks = links.filter((l) => l.href !== '/jobs' && l.href !== '/companies');
 
   return (
-    <nav className="hidden items-center gap-6 lg:ml-6 lg:flex" aria-label="Primary">
+    <nav className="hidden items-center gap-3 lg:ml-4 lg:flex" aria-label="Primary">
       {menus.map(({ key, href, label, regionLabel, panel }) => {
         const isOpen = open === key;
         return (
@@ -163,8 +182,9 @@ export function PrimaryNav({
               }}
               aria-expanded={isOpen}
               aria-controls={`nav-panel-${key}`}
+              aria-current={isActiveNavPath(pathname, href) ? 'page' : undefined}
               data-open={isOpen}
-              className={navLinkClass}
+              className={navLinkClassFor(isActiveNavPath(pathname, href))}
             >
               {label}
             </Link>
@@ -186,11 +206,19 @@ export function PrimaryNav({
           </div>
         );
       })}
-      {plainLinks.map((l) => (
-        <Link key={l.href} href={l.href} className={navLinkClass}>
-          {l.label}
-        </Link>
-      ))}
+      {plainLinks.map((l) => {
+        const active = isActiveNavPath(pathname, l.href);
+        return (
+          <Link
+            key={l.href}
+            href={l.href}
+            aria-current={active ? 'page' : undefined}
+            className={navLinkClassFor(active)}
+          >
+            {l.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
