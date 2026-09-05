@@ -54,7 +54,7 @@ const navLinkIdle =
 // tint resolves to pale cyan on white and a deep desaturated cyan on the dark
 // ground, and `--color-fg` stays readable on either. (The first attempt used
 // solid `accent-500`, which forced a navy foreground and was too heavy.)
-const navLinkActive = 'bg-[color-mix(in_oklch,var(--color-accent-500)_18%,var(--color-bg))] text-[var(--color-fg)]';
+const navLinkActive = 'bg-[color-mix(in_oklch,var(--color-accent-500)_11%,var(--color-bg))] text-[var(--color-fg)]';
 
 function navLinkClassFor(active: boolean): string {
   return `${navLinkBase} ${active ? navLinkActive : navLinkIdle}`;
