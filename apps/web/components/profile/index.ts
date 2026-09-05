@@ -14,3 +14,4 @@ export { ProfileForm, type ProfileFormProps } from './ProfileForm';
 export { ResumeManager } from './ResumeManager';
 export { SkillsManager } from './SkillsManager';
 export { StatCard } from './StatCard';
+export { ProfilePhotoCard } from './ProfilePhotoCard';

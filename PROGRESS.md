@@ -916,6 +916,24 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/seeker-profile-photo` - seekers can set a profile photo - 2026-09-05
+
+CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key, and the schema lock was never taken.** The owner asked for a way to choose a profile picture "so that the recruiter can be able to see the seekers original image".
+
+**No new column was needed: `User.image` already existed** - it is where Google sign-in stores an OAuth avatar. Reusing it is safe rather than merely convenient, and that was verified rather than assumed: `GoogleOAuthService` links an existing account with `image: byEmail.image ?? profile.picture` (google-oauth.service.ts:156), so an uploaded photo WINS and is never clobbered on a later sign-in; the only path that assigns Google's picture outright is account creation, where there is nothing to overwrite.
+
+**Modelled on the company-logo upload, not the resume one.** The resume path is the wrong template (private, signed URLs, its own table). `RecruiterProfileService.uploadLogo` is a raster-image, public-URL, replace-in-place flow that a seeker photo copies almost line for line: validate -> ClamAV scan -> `putObject` -> update the row -> delete the orphan if the update fails -> best-effort delete of the PREVIOUS object -> audit. That file belongs to the recruiter developer, so it was read as a precedent and **nothing in their surface was modified**.
+
+**Shipped**: `apps/api/src/profile/photo-validators.ts` (+14 tests), `photo.service.ts`, `POST`/`DELETE /me/profile/photo`, a `profile-photos/:file` route on the shared media controller, `ProfilePhotoCard` on /profile/details, and the photo now renders in the header avatar - the `Avatar` primitive already accepted `src` and simply nothing had ever passed it, so a Google avatar existed in the column and was never displayed.
+
+**Stored URLs are re-derived on read, everywhere.** `getPublicUrl` writes an ABSOLUTE origin into the row, so a photo uploaded while `R2_PUBLIC_URL` is blank keeps a `http://localhost:4000` origin permanently - the same trap `bugfix/asset-url-origin` fixed for company logos. Every read path (`photo.service`, the details page, `getHeaderUser`, `DashboardShell`) serialises through `resolveStoredAssetUrl`, so those rows self-heal when R2 is provisioned.
+
+✅ **Verified live end to end** with a hand-built valid PNG, not a stub: upload -> **201** with a resolved URL; the served file returns `Content-Type: image/png` **and `X-Content-Type-Options: nosniff`**; SVG **400**; SVG bytes wearing a `.png` name **400**; double extension `a.png.exe` **400**; unauthenticated **401**; DELETE -> 200, column cleared, **the old object 404s** (orphan cleanup works), and both actions wrote `PROFILE_UPDATE` audit rows. DB restored to baseline.
+
+⚠️ **THE STATED GOAL IS NOT YET MET, and this cannot be fixed from seeker-owned files.** `recruiter-applicants.service.ts:59-63` selects only `id, name, email` from `user`, so the photo never reaches a recruiter. Two changes are needed in files the OTHER developer owns - add `image: true` to that select, and render it - raised as a **WORKLOG notice** rather than edited. Until they act, this feature is seeker-visible only.
+
+**Follow-ups (2026-09-05)**: (1) **EXIF is not stripped.** A phone photo carries GPS coordinates, and publishing a job seeker's home location to recruiters is a real privacy leak. Stripping it means re-encoding, which needs `sharp` - pre-allowlisted in the root `pnpm.onlyBuiltDependencies` but NOT a dependency of any workspace, so adding it is a new top-level dependency needing the owner's sign-off (CLAUDE.md §10). (2) ⚠️ **The photo is served from a PUBLIC, unauthenticated URL**, guessing-resistant via a random key but not access-controlled - the company-logo model. That is a deliberate copy of an existing pattern, but a candidate's face is not a company logo: `kyc-validators.ts` deliberately keeps KYC documents on signed URLs only, citing DPDP Act 2023. **Owner decision pending** on whether a seeker photo belongs in the public tier or the signed tier. (3) No magic-byte check - the allowlist is extension + declared MIME, matching the logo path; re-encoding via sharp would close this at the same time as EXIF. (4) ClamAV remains a no-op stub returning CLEAN, unchanged and pre-existing.
+
 ### `feature/seeker-profile-checklist` - RPT: the dashboard shows a completion % with no breakdown, and contradicts itself - 2026-09-05
 
 **Bug #4 from the tester run.** CLI merge to `develop` (`--no-ff`). **No API-contract, schema, migration or flag change.** Reported as "94% complete" shown beside "All sections filled in", with no indication of what was missing.
