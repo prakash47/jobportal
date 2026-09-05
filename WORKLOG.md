@@ -67,6 +67,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/seeker-nav-active-tab` | **RPT: the navbar never shows which page you are on.** Reproduced: hover DOES exist but is a 1px `accent-500` line (2.95:1) so it reads as absent, and there is **no active state and no `aria-current` at all** — `usePathname()` is already called in `PrimaryNav.tsx` but only to close the mega-menu. Owner picked the **pill** treatment (option C), matching `AdminNav` and `DashboardChrome`. New `apps/web/lib/nav/active-path.ts` + tests; wired into `PrimaryNav.tsx` (desktop) AND `MobileMenu.tsx` (same gap, no hover on touch). Prefix-aware so `/job/[slug]`, `/company/[handle]` and the four `[...path]` SEO landings keep their section lit. | **None.** No schema, no theme tokens, no shared types, no `keys.ts`, no barrels. |
 
 ---
 
