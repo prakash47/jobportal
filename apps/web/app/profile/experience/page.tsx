@@ -1,11 +1,11 @@
 import { prisma } from '@jobportal/db';
-import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { requireUser } from '../../../lib/auth/require-user';
 import { PageHeader } from '../../../components/dashboard/PageHeader';
 import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { ExperienceManager } from '../../../components/profile/ExperienceManager';
 
 export default async function ExperiencePage() {
-  const session = (await readUserFromCookie())!;
+  const session = await requireUser();
   const candidate = await prisma.candidate.findUnique({
     where: { userId: session.sub },
     select: { id: true },

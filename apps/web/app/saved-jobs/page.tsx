@@ -1,5 +1,5 @@
 import { prisma } from '@jobportal/db';
-import { readUserFromCookie } from '../../lib/auth/server-session';
+import { requireUser } from '../../lib/auth/require-user';
 import { PageHeader } from '../../components/dashboard/PageHeader';
 import { ContentCard } from '../../components/dashboard/ContentCard';
 import { Pagination } from '../../components/dashboard/Pagination';
@@ -65,7 +65,7 @@ async function loadSavedJobsPage(userId: number, page: number) {
 }
 
 export default async function SavedJobsPage({ searchParams }: PageProps) {
-  const session = (await readUserFromCookie())!;
+  const session = await requireUser();
   const sp = await searchParams;
   const page = readPage(sp);
 

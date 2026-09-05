@@ -1,6 +1,6 @@
 import { prisma } from '@jobportal/db';
 import { Bell, Bookmark, ClipboardList, Eye } from '@jobportal/ui/icons';
-import { readUserFromCookie } from '../../lib/auth/server-session';
+import { requireUser } from '../../lib/auth/require-user';
 import { PageHeader } from '../../components/dashboard/PageHeader';
 import { NextSteps, StatCard } from '../../components/profile';
 import { completenessBreakdown } from '@jobportal/domain/profile-completeness';
@@ -55,9 +55,13 @@ async function loadDashboard(userId: number) {
 }
 
 export default async function DashboardPage() {
-  // The layout's requireUser already redirects anonymous users; the non-null
-  // assertion narrows the type for the page.
-  const session = (await readUserFromCookie())!;
+  // Guard here, not just in the layout. A layout and its page render
+  // CONCURRENTLY in the App Router, so the layout's redirect() does not gate
+  // this body — an anonymous request used to reach `(await
+  // readUserFromCookie())!` and throw on `session.sub` before the redirect
+  // resolved. requireUser() returns non-null claims or redirects, so there is
+  // nothing left to assert.
+  const session = await requireUser();
   const data = await loadDashboard(session.sub);
 
   const firstName = (data.name ?? '').trim().split(/\s+/)[0] || null;

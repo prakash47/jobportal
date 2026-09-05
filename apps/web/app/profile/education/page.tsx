@@ -1,12 +1,12 @@
 import { prisma } from '@jobportal/db';
-import { readUserFromCookie } from '../../../lib/auth/server-session';
+import { requireUser } from '../../../lib/auth/require-user';
 import { PageHeader } from '../../../components/dashboard/PageHeader';
 import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { EducationOnboardingForm } from '../../../components/profile/EducationOnboardingForm';
 import { CLASS12_DEGREE } from '../../../components/onboarding/education-constants';
 
 export default async function EducationPage() {
-  const session = (await readUserFromCookie())!;
+  const session = await requireUser();
 
   // Race-safe lazy create so the section's POST /me/education always has a
   // candidate to attach to (mirrors the dashboard home / details pages).

@@ -2,7 +2,6 @@ import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { isFlagEnabled } from '@jobportal/feature-flags';
 import { ACCESS_COOKIE } from '@jobportal/auth';
-import { readUserFromCookie } from '../../../../lib/auth/server-session';
 import { requireUser } from '../../../../lib/auth/require-user';
 
 const RESUME_DOWNLOAD_FLAG = 'feature.resume_download_pdf';
@@ -16,8 +15,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 //     guard).
 
 export default async function ResumeDownloadPage() {
-  await requireUser();
-  const session = (await readUserFromCookie())!;
+  const session = await requireUser();
 
   const allowed = await isFlagEnabled(RESUME_DOWNLOAD_FLAG, { userId: session.sub });
   if (!allowed) notFound();

@@ -916,6 +916,22 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/anon-render-null-session` - RPT: the profile page threw on every logged-out request - 2026-09-05
+
+CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key, no lock taken.** The owner reported "fix the profile page error" after seeing a `TypeError` in the dev-server log.
+
+**The reported symptom was one page; it was ten.** Reproduced 10/10 - every anonymous GET to `/profile`, `/profile/details`, `/profile/education`, `/profile/experience`, `/profile/skills`, `/profile/resume`, `/applications`, `/applications?status=...`, `/saved-jobs` and `/settings/notifications` logged `TypeError: Cannot read properties of null (reading 'sub')` and then still returned a correct `307` to `/login`.
+
+**Root cause: a comment that was simply false.** Nine pages opened with `const session = (await readUserFromCookie())!;` above the claim *"the layout's requireUser already redirects anonymous users; the non-null assertion narrows the type"*. **A layout and its child page render CONCURRENTLY in the App Router** - the layout's `redirect()` does not gate the page body. So the page ran with no session, the `!` lied, and `session.sub` threw. **This is exactly why it survived so long: the redirect still won the HTTP status, so the user-visible behaviour was correct and only the server log showed the crash.**
+
+**Fix**: all nine now `await requireUser()`, which returns non-null claims or redirects - so there is no assertion left to be wrong, and TypeScript enforces it. `/profile/resume/download` had been calling `requireUser()` AND re-reading with the `!` on the next line; that redundancy is gone. Verified live both ways: anonymous -> 10/10 `307` with the correct `?next=` (`/applications?status=APPLIED` keeps its query string) and **zero errors in the log**; signed in as a demo candidate -> 10/10 `200` with real content (the dashboard renders "Welcome back, Arjun" and 71% with its derived checklist), zero errors.
+
+**Prevention - `apps/web/lib/auth/no-unchecked-session.test.ts` (6 tests).** Rule 1: no file under `app/` or `lib/` may assert or cast away a nullable session read. Rule 2: no `page.tsx` under a `requireUser()`/`requireAdmin()` layout may reach for one at all - and the guarded route list is **derived from the layouts**, not hardcoded, so a new private section is covered the day it is added. Both rules were mutation-checked (reintroduce the bug -> both fail, naming the file); Rule 2's auto-extension was confirmed by accident when a scratch `/billing` route left behind by a stopped review agent was caught by the gate. A laundering bypass found during review - `{ sub: (await getHeaderUser())!.email }`, the same lie via the helper that wraps the same call - was closed before merge.
+
+⚠️ **The recruiter app has seven identical sites** (`(authed)/jobs/page.tsx:99`, `jobs/[id]/page.tsx:35`, `jobs/[id]/edit/page.tsx:27`, `jobs/[id]/applicants/page.tsx:58`, `kyc/page.tsx:19`, `post-job/page.tsx:61`, `profile/page.tsx:14`). **Not touched - recruiter surface is theirs**; notice raised. Their own newer files already use the right pattern, so this is drift, not disagreement.
+
+⚠️ **Discovered while looking for a lint rule: `pnpm lint` cannot fail.** ESLint and Prettier are **not installed anywhere** (0 packages in the pnpm store), there is **no `.husky`, no git hooks, and no `.github` directory**, and `next lint` **was removed in Next 16** - there is no `next-lint.js` in the CLI, so the script errors out as an unknown command rather than checking anything. CLAUDE.md §10 states *"ESLint + Prettier - pre-commit via Husky + lint-staged"*, which is aspirational rather than current. The real gate is a human running `typecheck` + `test` + `build`, which is why the regression guard was written as a **test** rather than a lint rule. **Owner decision pending** on whether to wire ESLint + CI or amend §10 to match reality.
+
 ### `feature/seeker-profile-photo` - seekers can set a profile photo - 2026-09-05
 
 CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key, and the schema lock was never taken.** The owner asked for a way to choose a profile picture "so that the recruiter can be able to see the seekers original image".
