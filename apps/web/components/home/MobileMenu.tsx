@@ -121,7 +121,7 @@ export function MobileMenu({
                       className={
                         'rounded-lg px-3 py-3 text-base font-medium transition-colors ' +
                         (active
-                          ? 'bg-[var(--color-bg-muted)] text-[var(--color-fg)]'
+                          ? 'bg-[var(--color-accent-500)] text-[var(--color-primary-600)]'
                           : 'text-[var(--color-fg)] hover:bg-[var(--color-bg-muted)]')
                       }
                     >
