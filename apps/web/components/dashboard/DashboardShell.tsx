@@ -1,9 +1,11 @@
 import { cache } from 'react';
+import { cookies } from 'next/headers';
 import { prisma } from '@jobportal/db';
 import type { AccessClaims } from '@jobportal/auth';
 import { DashboardChrome } from './DashboardChrome';
 import { DailyApplyIndicator } from '../profile/DailyApplyIndicator';
 import { resolveStoredAssetUrl } from '@jobportal/domain/asset-url';
+import { SIDEBAR_COOKIE, isCollapsedValue } from './sidebar-preference';
 
 // Memoised per request so the shell's name lookup dedupes across re-renders
 // (and any page that adopts this helper) instead of hitting the DB each time.
@@ -36,8 +38,18 @@ export async function DashboardShell({
     apiBase: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000',
   });
 
+  // Read on the SERVER so the rail is painted at its final width on the first
+  // frame. Handing this to the client to discover would mean rendering 16rem
+  // and snapping to 4rem after hydration on every single navigation.
+  const jar = await cookies();
+  const sidebarCollapsed = isCollapsedValue(jar.get(SIDEBAR_COOKIE)?.value);
+
   return (
-    <DashboardChrome user={{ name, email: user.email, imageUrl }} quotaSlot={<DailyApplyIndicator />}>
+    <DashboardChrome
+      user={{ name, email: user.email, imageUrl }}
+      quotaSlot={<DailyApplyIndicator />}
+      defaultCollapsed={sidebarCollapsed}
+    >
       {children}
     </DashboardChrome>
   );

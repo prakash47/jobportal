@@ -916,6 +916,24 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/sidebar-collapse` - RPT: no collapse/expand control on the dashboard sidebar - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.** Reported alongside the bug list, but this is a **feature request rather than a defect** — nothing was broken; the control simply did not exist.
+
+**The whole difficulty here is persistence, not the toggle.** The rail is server-rendered inside `DashboardShell`. Had the preference lived in `localStorage`, the server could not know it, so every page load would paint the 16rem rail and snap to 4rem once an effect ran — a visible jump on **every navigation**, and precisely the hydration-mismatch shape this codebase has already been bitten by once (`bugfix/profile-details-hydration`). So the choice is a **cookie** (`jp_sidebar_collapsed`), read on the server in `DashboardShell` and passed down as `defaultCollapsed`. The client seeds `useState` from the same value, so server and client agree byte for byte.
+
+**Proven, not asserted.** Curling the page with the cookie set both ways returns different HTML from the server — `w-16` with `jp_sidebar_collapsed=1`, `w-64` with `=0`. The collapsed rail is in the initial document, so there is nothing to correct after hydration and no flash to see.
+
+**Shipped**: a chevron toggle at the **bottom** of the rail (one of the two positions the reporter suggested) that rotates 180° between states; rail animates 16rem <-> 4rem over 200ms ease-out (CLAUDE.md §2's 150-250ms band, and `transition-[width]` specifically rather than `transition-all`, which would drag a dozen unrelated colour transitions along and feel mushy). Collapsed: the wordmark, group headings, and the name/email block are dropped; nav rows centre their icons; the account disc and sign-out stack vertically.
+
+**Accessibility was the part worth care.** The toggle carries `aria-expanded` plus `aria-controls` pointing at the nav (verified to resolve). Collapsed nav labels are **not** replaced by `aria-label` — the real text stays in the DOM under `sr-only`, so the accessible name cannot drift from the visible one, with `title` added for sighted hover (legitimate here: the rail is `md:` and up, so hover genuinely exists). Group headings degrade to a `<hr aria-hidden>` rather than vanishing, because the grouping is real information. The account disc flips from `aria-hidden` to `title`d when collapsed — expanded it is redundant beside the name, collapsed it is the only thing identifying the account.
+
+**The mobile drawer deliberately gets no toggle.** It shares `SidebarContent`, but `onToggleCollapse` is only passed by the rail. There is no width to reclaim on a phone, the drawer already has its own close button, and a drawer the user deliberately opened and then has to squint at would be worse than what it replaced. Verified: the only collapse button in the document belongs to the `display:none` rail and is not inside the drawer.
+
+**Verified live**: expanded 256px -> collapsed 64px -> expanded 256px, cookie flipping 1/0 in step; `aria-expanded` and the button label inverting together; labels going `sr-only` and back with `title` appearing and disappearing; group rules appearing and headings returning; the cyan active-row bar from `bugfix/sidebar-active-state` still reading correctly in the narrow rail; and a fresh load on a **different route** (`/applications`) rendering collapsed straight from the cookie.
+
+⚠️ **A measurement trap worth recording for whoever tests this next.** The Browser pane pauses compositing while it is hidden, so a CSS transition never advances and `getBoundingClientRect()` returns the value from *before* the transition — the collapsed rail read as 256px for several minutes while the class was correctly `w-16` and the CSS rule was correctly `width: calc(var(--spacing) * 16)`. Setting `element.style.transition = 'none'` and forcing a reflow before measuring gives the true settled value (64px). The same artefact produced two bogus `overflow: true` readings during `bugfix/apply-quota-pill-label`. **Measure transitioned properties with the transition disabled, or you will chase a bug that is not there.**
+
 ### `bugfix/sidebar-active-state` - RPT: the active sidebar item does not stand out - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.**
