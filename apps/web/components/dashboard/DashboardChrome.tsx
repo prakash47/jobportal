@@ -453,7 +453,26 @@ export function DashboardChrome({
           </header>
 
           <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-            <div className="mx-auto w-full max-w-5xl">{children}</div>
+            {/*
+              max-w-6xl (1152px), up from max-w-5xl (1024px). Reported as
+              "excessive blank whitespace and fixed narrow card width" on the
+              saved-jobs list.
+
+              Measured at a 1600px viewport before changing anything: the
+              container sat at 1024px with 152px of margin either side, which is
+              a reasonable reading width — so the container was NOT the main
+              problem. The row was: its title column was 813px wide holding
+              roughly 250px of text, leaving ~550px of dead space in every row.
+              Filling that with real metadata (location / experience / salary)
+              was the substantive fix.
+
+              This is the smaller half of it. 1152px keeps line lengths
+              comfortable while giving dense list rows more room, and it is
+              applied to the SHELL so every dashboard page moves together —
+              widening one page and not its siblings is how a dashboard starts
+              looking assembled from parts.
+            */}
+            <div className="mx-auto w-full max-w-6xl">{children}</div>
           </main>
         </div>
       </div>
