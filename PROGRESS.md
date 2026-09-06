@@ -916,6 +916,20 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/saved-jobs-bulk-undo` - Saved jobs RPT #3, #5: undo on remove, and bulk selection - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). Final two of the seven saved-jobs reports, taken together because both are about removing.
+
+**#3 — undo, NOT a confirmation dialog, and that was a deliberate choice between the two options the report offered.** Un-saving a job is low-stakes, instantly reversible, and something a candidate does repeatedly while triaging a list. A modal in front of every removal makes the common path slower to guard against a rare mistake — the trade a confirm dialog is only worth when the action is destructive or irreversible. Sign-out got a dialog earlier today precisely because you cannot un-sign-out; this gets an undo because you can simply put it back. **The undo is a real re-save (`POST /me/saved-jobs/:jobId`), not a local rollback**, so it survives a refresh.
+
+**#5 — multi-select with a bulk bar.** A checkbox per row plus a persistent "Select all" strip in the list header. The strip is deliberately in the header rather than inside the bulk bar: the bulk bar only appears once something is selected, so putting select-all there would mean selecting all requires first selecting one. The bulk bar itself shows the count, "Select all"/"Clear selection", and "Remove selected".
+
+**The Toast primitive existed and had never been used by anything.** `packages/ui/.../Toast.tsx` wraps `sonner` and its own comment says *"Mount `<Toaster />` once at AppShell"* — which had never happened, so `toast()` calls anywhere in the app would have been silent. Mounted in `DashboardChrome` rather than the root layout: that covers every authed page while keeping sonner out of the bundle for the public marketing and SEO pages.
+
+**Structural change**: the list is now a client component (`SavedJobsList`) owning selection and the undo, with `SavedJobRow` becoming a client component that takes fully-serialised data. `savedAt` is passed as a **pre-formatted string** rather than a `Date` — formatting on both sides of the boundary is how an ICU/timezone difference becomes a hydration mismatch, the same lesson the applications list learned. Single-row and bulk removal share one code path, one toast and one undo, so they cannot diverge. `RemoveSavedButton` was deleted; its job moved into the list.
+
+**Verified live against the API, not the DOM**: single remove **13 → 12**, Undo **→ 13**. Bulk with two rows selected: bar read "2 selected", remove **13 → 11**, toast read "2 saved jobs removed", Undo **→ 13**. A 404 on delete is treated as success, because the end state is the one that was wanted.
+
 ### `feature/saved-jobs-search-sort` - Saved jobs RPT #2: search and sort - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`).
