@@ -3,7 +3,16 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Button, cn } from '@jobportal/ui';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  cn,
+} from '@jobportal/ui';
 import { ChevronLeft, LogOut, Loader2, Menu, Search, X } from '@jobportal/ui/icons';
 import { Logo } from '../brand/Logo';
 import { NAV_GROUPS, isNavItemActive } from './nav-items';
@@ -227,6 +236,7 @@ export function DashboardChrome({
   // Seeded from the server-read cookie, so this matches what was painted.
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [signingOut, setSigningOut] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
@@ -299,6 +309,18 @@ export function DashboardChrome({
     };
   }, [open]);
 
+  // The sidebar button now ASKS; only the dialog's confirm actually signs out.
+  // Signing out is one click away from every dashboard page and sits directly
+  // beside the account card, so a mis-click cost a session with no undo.
+  function requestSignOut() {
+    // Close the mobile drawer first. It runs its own focus trap and Escape
+    // handler and marks the background `inert`; layering a Radix dialog on top
+    // means two modals fighting over focus, and one Escape press reaching both.
+    // On desktop this is already false and the call is a no-op.
+    setOpen(false);
+    setConfirmSignOut(true);
+  }
+
   async function signOut() {
     setSigningOut(true);
     try {
@@ -328,7 +350,7 @@ export function DashboardChrome({
           <SidebarContent
             user={user}
             pathname={pathname}
-            onSignOut={signOut}
+            onSignOut={requestSignOut}
             signingOut={signingOut}
             collapsed={collapsed}
           />
@@ -448,12 +470,57 @@ export function DashboardChrome({
               user={user}
               pathname={pathname}
               onNavigate={() => setOpen(false)}
-              onSignOut={signOut}
+              onSignOut={requestSignOut}
               signingOut={signingOut}
             />
           </aside>
         </div>
       ) : null}
+
+      {/*
+        Rendered ONCE here, not inside SidebarContent. SidebarContent is mounted
+        twice — the desktop rail and the mobile drawer — so putting the dialog
+        in it would mount two, and Radix would have two roots competing for the
+        same focus and Escape.
+
+        Not dismissible while the request is in flight: `onOpenChange` ignores
+        close attempts once `signingOut` is true. The confirm handler ends in
+        window.location.assign, so the component is about to be torn down —
+        letting the user close the dialog in that window would show them a
+        working-looking page that is already navigating away.
+      */}
+      <Dialog
+        open={confirmSignOut}
+        onOpenChange={(next) => {
+          if (!next && signingOut) return;
+          setConfirmSignOut(next);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sign out?</DialogTitle>
+            <DialogDescription>
+              You&rsquo;ll need to sign in again to see your applications, saved jobs and
+              alerts. Nothing is deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmSignOut(false)}
+              disabled={signingOut}
+            >
+              Cancel
+            </Button>
+            {/* `primary`, not `danger`. Signing out destroys nothing and is
+                reversible by signing back in — colouring it as destructive
+                would overstate it and devalue danger where it is warranted. */}
+            <Button variant="primary" loading={signingOut} onClick={() => void signOut()}>
+              Sign out
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
