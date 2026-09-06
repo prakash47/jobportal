@@ -916,6 +916,22 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/sidebar-collapse-handle-position` - the collapse control moves onto the rail's edge - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). Follow-up to `feature/sidebar-collapse`, same day, on the owner's review of the shipped result.
+
+**The complaint was precise and correct**: a full-width toggle row directly beneath the account card "makes the account detail section look odd". It did — the row read as one more nav entry, and it visually annexed the account block instead of letting it end the rail. The owner asked for the account card to end the sidebar and the control to move outside it, "at the center... on the border of the sidebar".
+
+**Now a 24px disc straddling the rail's right edge, vertically centred** — `absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2`, so half sits on the navy and half on the page, which is what makes it read as a hinge rather than a button that belongs to either side. Measured: the button's centre is at x=256 against an aside whose right edge is x=256 (offset **0px**), and at y=360 in a 720px-tall rail (offset **0px**). It tracks the edge when collapsed too — centre x=64 against a 64px rail, still 0px offset.
+
+Beyond looking right, the centre is **reachable regardless of nav scroll position**, which the bottom was not once the nav list grows past the viewport.
+
+**A token bug caught before merge**: the handle first used `focus-visible:ring-[var(--color-focus-ring)]`. That token is a **22%-transparent wash** (`theme.css:100`) intended for a soft glow, not a focus ring — it would have produced a barely-visible ring. The solid `--color-ring` is what the other **23** focus rings in `apps/web` use. Corrected, with the distinction recorded at the call site since the two names are one word apart and the wrong one fails silently.
+
+**Verified live**: account card is the last element in the rail (`border-t border-white/10`) with no toggle inside it; handle straddles the edge at both widths; `aria-expanded` / `aria-controls` still correct and resolving; collapse round-trip 256px <-> 64px with the cookie flipping in step; chevron rotates to 180° when collapsed.
+
+⚠️ The paused-compositor artefact from the parent branch bit twice more here — the chevron read `rotate: 0deg` and every `getBoundingClientRect()` returned zeros while the pane was hidden. Both were measurement artefacts, not defects: forcing a paint (a screenshot) fixes the zero rects, and disabling the transition before reading gives the true `180deg`. Recorded again because it is now three separate occasions in one day.
+
 ### `feature/sidebar-collapse` - RPT: no collapse/expand control on the dashboard sidebar - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.** Reported alongside the bug list, but this is a **feature request rather than a defect** — nothing was broken; the control simply did not exist.
