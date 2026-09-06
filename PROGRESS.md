@@ -916,6 +916,34 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `chore/github-actions-ci` - the repo's first CI, and the strict-env bug that would have made it worthless - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.** Closes the gap `chore/eslint-setup` surfaced: CLAUDE.md §3.1 has always listed `.github/workflows/ci.yml`, and there was no `.github` directory at all. Until now the only thing between a broken commit and `develop` was a person remembering to run four commands - with three developers merging into one branch.
+
+**Shipped**: one job, `lint -> typecheck -> test -> build`, exactly the documented gate. Triggers on push and PR to `develop`/`main`, with concurrency cancellation on PR runs only (a push to develop keeps its result as the record of whether that commit was green).
+
+**⚠️ THE FINDING THAT MATTERS: without a turbo.json fix, this CI would have reported green having never touched a database.** Turborepo 2 defaults to `envMode: "strict"` - a task receives ONLY the variables declared in turbo.json - and this repo declared **none**. `turbo run build --dry=json` reported `environmentVariables: []`, with not even `NEXT_PUBLIC_*` inferred. Every variable set in a CI job would have been stripped before vitest or `next build` saw it.
+
+**This has never been noticed because it cannot be noticed locally.** Every machine has `.env` files on disk, which dotenv and Next read directly; turbo can strip an environment but it cannot strip a file read. So the repo has only ever worked in environments that happen to have those files - which is a latent bug well beyond CI (a container, or a teammate exporting shell variables, hits the same wall).
+
+**Measured in both directions**, with the root `.env` moved aside and `DATABASE_URL` supplied only as an environment variable:
+- **without** the declarations - `10 tests SKIPPED`, and **vitest still exits 0**
+- **with** them - `23 passed, 0 skipped`
+
+The first of those is the false green. `turbo.json` now declares `env`/`passThroughEnv` per task.
+
+**Why the skip is dangerous rather than untidy.** `packages/db/src/advisory-lock.test.ts` and `sequence.test.ts` skip rather than fail when they cannot reach a local database - correct on a laptop with no Docker, a trap in CI. advisory-lock.test.ts exists because `RecruiterBillingService.activatePaidOrder` shipped a `$queryRaw` against `pg_advisory_xact_lock()`, which returns void and cannot be deserialized; every other test mocks Prisma, so **the first real execution would have been a live payment capture, failing after the customer was charged**. A CI that silently skips that test is worse than no CI. The workflow therefore greps the real `pnpm test` output and fails the run if either suite reports SKIPPED.
+
+**Only Postgres, and that was measured rather than assumed.** A full `pnpm build` ran against a migrated-but-empty Postgres with `REDIS_URL` and `ELASTICSEARCH_URL` pointed at dead ports: **5/5 in 3m06s**. Every Redis path is behind `isFlagEnabled` (per-request only), the one Redis-touching test uses `vi.mock('ioredis')`, `packages/search` has no tests, and the Elasticsearch routes read `searchParams` so Next renders them on demand. An Elasticsearch container would have cost ~90s per run to protect against nothing.
+
+**Three other things established and recorded in the file's comments** so nobody re-derives them: `prisma generate` needs only the DATABASE_URL *string*, never a reachable server (tested against a dead port); `DATABASE_URL` must use `localhost` and NOT the `postgres` service alias, because both integration suites gate on a `/localhost|127\.0\.0\.1|::1/` pattern and would skip against `postgres:5432`; and turbo.json's `dependsOn: ["^build"]` is **dormant** - not one of the eight `packages/*` defines a `build` script, so nothing upstream is ever built.
+
+**A `prisma migrate deploy` step is included for its own sake.** The tests do not need it - sequence.test.ts creates and drops its own table and advisory-lock.test.ts only calls `pg_advisory_xact_lock()` - but it proves the full 44-migration chain still applies to an empty database, which is what a deploy does and what nothing else checked. Verified to apply cleanly from empty before the workflow was written.
+
+**Verified end to end**: the complete gate was run locally with the root `.env` moved aside and only the workflow's own environment block set - generate, migrate, lint, typecheck, test and build, plus the skip guard.
+
+⚠️ **NOT PUSHED. CI does not exist until someone pushes.** `develop` is now 5 commits ahead of `origin/develop` (last pushed: `71dcec9`). Nothing runs on GitHub until those are pushed, and the first push will be the workflow's first real execution - the `pnpm@10.0.0` + Node 24 combination has never run on a clean machine. **Owner decision**: whether to push, and whether to make this a required status check on `develop` in GitHub branch protection (a CI nobody is required to pass is a suggestion).
+
 ### `chore/eslint-setup` - `pnpm lint` goes from a no-op to a real gate - 2026-09-05
 
 CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.** Follows the discovery made while fixing `bugfix/anon-render-null-session`: the repo asked for lint in CLAUDE.md §10 and had none.
