@@ -55,3 +55,17 @@ describe('buildCanonical', () => {
     expect(buildCanonical('/x')).toBe('http://localhost:3000/x');
   });
 });
+
+// Added with feature/applications-back-navigation.
+describe('buildCanonical — UI-state params', () => {
+  it('excludes ?from= so one posting has one canonical', () => {
+    expect(buildCanonical('/job/engineer-acme-1', 'from=applications')).toBe(
+      buildCanonical('/job/engineer-acme-1'),
+    );
+  });
+
+  it('keeps genuine content params alongside it', () => {
+    expect(buildCanonical('/jobs', 'from=applications&page=2')).toContain('?page=2');
+    expect(buildCanonical('/jobs', 'from=applications&page=2')).not.toContain('from');
+  });
+});

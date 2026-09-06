@@ -86,14 +86,16 @@ export function ApplicationRow({
       <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
         <div className="min-w-0 flex-1">
           <Link
-            href={`/job/${job.canonicalSlug}`}
+            // ?from= lets the destination offer a way back. See
+            // components/job/BackToApplications for why it is `from` and not `ref`.
+            href={`/job/${job.canonicalSlug}?from=applications`}
             className="block text-sm font-medium text-[var(--color-fg)] hover:underline after:absolute after:inset-0 after:content-['']"
           >
             <span className="block truncate">{job.title}</span>
           </Link>
           <p className="mt-0.5 truncate text-sm text-[var(--color-fg-muted)]">
             <Link
-              href={`/company/${job.company.slug}-overview-${job.company.id}`}
+              href={`/company/${job.company.slug}-overview-${job.company.id}?from=applications`}
               className="relative z-10 hover:text-[var(--color-fg)]"
             >
               {job.company.name}

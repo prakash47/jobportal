@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { prisma } from '@jobportal/db';
 import { Breadcrumbs, Container } from '@jobportal/ui';
+import { BackToApplications } from '../../../components/job/BackToApplications';
 import {
   CompanyAbout,
   CompanyHighlights,
@@ -32,6 +33,7 @@ const SITE = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
 interface PageProps {
   params: Promise<{ handle: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }
 
 async function loadCompany(id: number) {
@@ -110,8 +112,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function CompanyProfilePage({ params }: PageProps) {
+export default async function CompanyProfilePage({ params, searchParams }: PageProps) {
   const { handle } = await params;
+  // Same conditional back link as the job page — this is public too, so it only
+  // appears for visitors who actually arrived from their applications list.
+  const sp = searchParams ? await searchParams : {};
+  const cameFrom = Array.isArray(sp['from']) ? sp['from'][0] : sp['from'];
   const parsed = parseCompanySlug(handle);
   if (!parsed) notFound();
 
@@ -180,6 +186,10 @@ export default async function CompanyProfilePage({ params }: PageProps) {
       <JsonLd value={bc} />
 
       <Container size="lg" className="py-6 lg:py-8">
+        <div className="mb-4">
+          <BackToApplications from={cameFrom} />
+        </div>
+
         <Breadcrumbs
           className="mb-4"
           items={[
