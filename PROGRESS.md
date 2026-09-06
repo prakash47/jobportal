@@ -916,6 +916,34 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/apply-quota-pill-label` - RPT: "redundant daily search limit indicator (0/10 today)" - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.**
+
+**The reported mechanism was wrong, and the way it was wrong IS the bug.** There is no search or query quota anywhere in the product. `0/10 today` was the daily **application** quota (SRS §4.11.16-17, free tier, `apps/api/src/applications/quota.service.ts`), rendered by `DailyApplyIndicator` with **no noun at all** — the word "applications" existed only in its `aria-label`, so screen-reader users were told what it counted and sighted users were not. A tester looking straight at it concluded it was a search limit. That is not a careless reading: the pill sits in the header's `ml-auto` group between the search bar link and the "Find jobs" button, so everything around it is about search.
+
+Two things made the bare ratio worse than it looks. `0/10` at the start of a day reads just as easily as "0 remaining of 10" as "0 used of 10". And the dashboard body shows an **"Applications: 19"** stat card — a lifetime total — so a user sees 19 and 0/10 on one screen with nothing connecting them, and 19 > 10 makes the pair look self-contradictory.
+
+**Fix**: the visible text now reads **"Applied 0/10 today"**. USED framing was kept deliberately, against the tester's suggested "10 searches left today": the ring FILLS as usage grows, and both the at-limit button and the API's 429 are phrased around the limit being consumed, so a remaining-style count would run backwards against all three. The verb rather than the noun is what kills the "0 remaining" misread, and it is shorter — measured at the tightest breakpoint (640px, where the pill turns on) the widest string "Applied 10/10 today" leaves the header with no overflow.
+
+**The tester's second counter was real, not hypothetical.** `/alerts` renders `{n}/10 used` in its page description — a second `N/10` with the SAME denominator, on a page that also carries this pill. Before this change the screen showed two indistinguishable bare fractions. Left alone deliberately: its noun comes from the `PageHeader` title "Job alerts" directly above it, and naming the pill is what separates the pair.
+
+**Also fixed, same defect one step later**: the at-limit button said "Daily limit reached" — a limit of what? The WARNING state one component away already says "You've used N of M applications today", so the one moment a user actually hits the wall was the one place the noun was missing. Now "Daily application limit reached", matching the API's 429 text verbatim so server and client cannot drift.
+
+⚠️ **A contrast regression I introduced and then caught.** The ring's warning stroke was a hardcoded `oklch(0.65 0.15 80)` sitting between two tokens, which looks exactly like someone ignoring CLAUDE.md §2 — so I swapped in `var(--color-warning)`. **That was wrong**: canvas-sampled against the pill background, the token measures **1.95:1** where the literal measured **3.15:1**, so the "cleanup" pushed the ring under the 3:1 WCAG 1.4.11 floor. The literal had been contrast-tuned, not left behind. Replaced with `color-mix(in oklch, var(--color-warning), var(--color-fg) 30%)` — token-derived so it tracks brand changes, and self-correcting per theme because `--color-fg` inverts. Verified by forcing `data-theme`, not assumed: **3.72:1 light / 12.2:1 dark**.
+
+**That measurement then exposed a real pre-existing defect in the same expression**: the NORMAL-state stroke, `var(--color-primary-600)`, is **1.31:1 in dark mode** — brand navy on a near-black pill, i.e. an invisible ring across the whole 0-79% range, which is most of most days. Same treatment applied: **15.82:1 light / 4.86:1 dark**. Candidates were measured before choosing — `accent-500` fails light (2.83:1), `accent-600` passes both but repaints the ring cyan, a 30% mix clears dark by too little (3.09:1). `--color-danger` was measured and **left alone**: it already passes (4.22 light / 4.56 dark).
+
+**Accessibility**: `role="status"` and the `aria-label` are both gone. The component is a SERVER component whose value cannot change in place, so a live region could only fire on insertion — announcing a static number on every dashboard navigation — and once the visible text carried the noun the label competed with it rather than supplementing it. Each audience now gets its own string: an `sr-only` span carries "Applied to N of M jobs today" (screen readers pronounce "8/10" inconsistently), and the compact visible ratio is `aria-hidden`. `whitespace-nowrap` added so a long string can never wrap inside the `h-14` header.
+
+**Verified live** at 0/10, 8/10 (warning) and 10/10 (exhausted), in light and dark, at 640px / tablet / desktop, with the Redis counter driven directly and restored afterwards. No horizontal overflow at any width.
+
+**Considered and declined**: reordering the header to `[Find jobs][pill]` so the pill is not sandwiched between two search affordances. Naming the counter is what fixes the misread; moving it trades a solved problem for a fresh layout judgement.
+
+⚠️ **Found while sweeping, NOT fixed, spun off as its own task**: the dashboard's **"Profile views" stat is permanently 0**. `Candidate.profileViews` is read in three places and **written in none** — verified against the DB, 0 of 36 candidates non-zero. A seeker sees "nobody has viewed you" forever, which is both discouraging and untrue.
+
+⚠️ **The recruiter app carries the identical nounless `N/M today` pill** — another developer's surface, so a WORKLOG notice was raised rather than an edit.
+
 ### `chore/ci-next-typegen` - CI's first run found a real works-on-my-machine bug - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). The very first CI run (`34011503655`, pushed minutes after the workflow landed) **failed at Typecheck**, and it was right to.
