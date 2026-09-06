@@ -40,6 +40,13 @@ function readPage(sp: Record<string, string | string[] | undefined>): number {
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
 }
 
+/** `?app=<id>` — deep link to one application from elsewhere in the product. */
+function readAppId(sp: Record<string, string | string[] | undefined>): number | null {
+  const raw = Array.isArray(sp['app']) ? sp['app'][0] : sp['app'];
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 function readQuery(sp: Record<string, string | string[] | undefined>): string {
   const raw = Array.isArray(sp['q']) ? sp['q'][0] : sp['q'];
   // Trimmed and capped: this goes straight into a Prisma `contains`, and an
@@ -87,11 +94,56 @@ const formatAppliedAt = (d: Date) =>
     timeZone: 'Asia/Kolkata',
   });
 
+/**
+ * "Rows that sort before this one", expressed for each sort mode.
+ *
+ * This is what turns an application id into a page number. Each clause mirrors
+ * its `orderBy` exactly — get one backwards and the deep link lands a page off,
+ * which is the kind of bug that only shows up once a list outgrows one page.
+ *
+ * The `id` tiebreak is not decoration: `appliedAt` has second resolution, and
+ * two applications sent in the same second would otherwise have an ambiguous
+ * position, so the count could disagree with the page the row actually renders
+ * on.
+ */
+function positionFilter(
+  sort: ReturnType<typeof readSort>,
+  target: { id: number; appliedAt: Date; job: { title: string; company: { name: string } } },
+): Prisma.ApplicationWhereInput {
+  if (sort === 'oldest') {
+    return {
+      OR: [
+        { appliedAt: { lt: target.appliedAt } },
+        { appliedAt: target.appliedAt, id: { lt: target.id } },
+      ],
+    };
+  }
+  if (sort === 'company') {
+    return {
+      OR: [
+        { job: { company: { name: { lt: target.job.company.name } } } },
+        {
+          job: { company: { name: target.job.company.name } },
+          id: { lt: target.id },
+        },
+      ],
+    };
+  }
+  // 'recent' — newest first, so "before" means a LATER appliedAt.
+  return {
+    OR: [
+      { appliedAt: { gt: target.appliedAt } },
+      { appliedAt: target.appliedAt, id: { gt: target.id } },
+    ],
+  };
+}
+
 export default async function ApplicationsPage({ searchParams }: PageProps) {
   const session = await requireUser();
   const sp = await searchParams;
-  const page = readPage(sp);
+  const requestedPage = readPage(sp);
   const status = readStatus(sp);
+  const deepLinkId = readAppId(sp);
 
   const q = readQuery(sp);
   const sort = readSort(Array.isArray(sp['sort']) ? sp['sort'][0] : sp['sort']);
@@ -125,6 +177,34 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
       : sort === 'company'
         ? { job: { company: { name: 'asc' } } }
         : { appliedAt: 'desc' };
+
+  // A deep link names an application, not a page — and the row it wants is very
+  // often not on page 1. Resolve its position under the CURRENT ordering and
+  // jump straight there, so the link works at any list size.
+  //
+  // An explicit ?page= always wins: it means the user has since paged around,
+  // and yanking them back would fight their navigation.
+  let page = requestedPage;
+  if (deepLinkId !== null && !sp['page']) {
+    const target = await prisma.application.findFirst({
+      // userId scopes it: an id belonging to someone else must resolve to
+      // nothing rather than leak that it exists.
+      where: { id: deepLinkId, userId: session.sub },
+      select: { id: true, appliedAt: true, job: { select: { title: true, company: { select: { name: true } } } } },
+    });
+    if (target) {
+      // Count the rows that sort BEFORE it under the same orderBy. The id
+      // tiebreak matters: two applications sent in the same second would
+      // otherwise give an unstable position and an off-by-one page.
+      const before = await prisma.application.count({
+        where: {
+          ...where,
+          ...positionFilter(sort, target),
+        },
+      });
+      page = Math.floor(before / PAGE_SIZE) + 1;
+    }
+  }
 
   const [rows, total, grouped] = await Promise.all([
     prisma.application.findMany({
@@ -219,6 +299,7 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
               appliedAtIso={r.appliedAt.toISOString()}
               appliedAtLabel={formatAppliedAt(r.appliedAt)}
               history={parseHistory(r.statusHistory)}
+              deepLinked={r.id === deepLinkId}
               job={{
                 title: r.job.title,
                 canonicalSlug: r.job.canonicalSlug,

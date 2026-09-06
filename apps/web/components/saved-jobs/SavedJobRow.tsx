@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { Badge, Button, Checkbox } from '@jobportal/ui';
 import { ApplyButton } from '../job/ApplyButton';
-import { StatusPill } from '../applications/StatusPill';
+import { StatusPill, STATUS_LABELS } from '../applications/StatusPill';
+import { ChevronRight } from '@jobportal/ui/icons';
 import { formatExperienceYears, formatSalaryLpa } from '../../lib/job/format';
 import type { ApplicationStatus } from '@jobportal/db';
 
@@ -117,19 +118,29 @@ export function SavedJobRow({ data, selected, onSelectedChange, onRemove, busy }
 
       <div className="relative z-10 flex shrink-0 items-center gap-2">
         {applied ? (
-          // Links to the application it describes rather than being a dead
-          // badge, and uses StatusPill so the label and colour match the
-          // Applications page exactly.
+          // Deep link to THIS application with its panel open — `?app=<id>`.
+          // It previously pointed at `/applications?status=<STATUS>`, which
+          // merely filtered the list and left the user to find the row
+          // themselves; on a list past page one it did not even show it.
+          //
+          // Falls back to the plain list only when applicationId is somehow
+          // absent, which should not happen but must not produce a dead link.
           <Link
-            href={
-              applicationId !== null && appliedStatus
-                ? `/applications?status=${appliedStatus}`
-                : '/applications'
-            }
-            aria-label="View this application on the Applications page"
-            className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]"
+            href={applicationId !== null ? `/applications?app=${applicationId}` : '/applications'}
+            aria-label={`View this application${appliedStatus ? ` (${STATUS_LABELS[appliedStatus as ApplicationStatus] ?? appliedStatus})` : ''} in Applications`}
+            // The pill LOOKS clickable now. As a bare StatusPill inside a Link
+            // it had no affordance at all — no hover, no cursor change, nothing
+            // to distinguish it from the identical non-interactive pills on the
+            // applications list. It now carries a border, a hover lift, a
+            // pointer cursor and a chevron, which is what separates "a label
+            // that happens to be wrapped in an anchor" from "a control".
+            className="group inline-flex cursor-pointer items-center gap-1 rounded-full border border-[var(--color-border)] py-0.5 pl-0.5 pr-1.5 transition-colors hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]"
           >
             <StatusPill status={(appliedStatus ?? 'APPLIED') as ApplicationStatus} />
+            <ChevronRight
+              className="size-3.5 shrink-0 text-[var(--color-fg-muted)] transition-transform group-hover:translate-x-0.5"
+              aria-hidden="true"
+            />
           </Link>
         ) : (
           <ApplyButton
