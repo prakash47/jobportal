@@ -916,6 +916,26 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/applications-search-sort` - RPT #1, #2, #3: search, sort, pagination - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). Three of the seven Applications-page reports, taken together because they share one toolbar row and one query.
+
+**#1 Search — built.** A debounced box above the list, searching job title OR company name, case-insensitive. **Server-side and URL-driven** (`?q=`), which is the load-bearing decision: the list is paginated, so a client-side filter would only ever search the ten rows that happen to be on screen. It also makes a filtered view shareable and back/forward-able, matching the status chips beside it. `contains` (a SQL LIKE) rather than Elasticsearch — this searches one candidate's private list of at most a few hundred rows, not the public job corpus.
+
+**#2 Sort — built.** `Recent first` (default) / `Oldest first` / `Company A–Z`, as `?sort=`. Modelled on `components/srp/SortSelect` — native `<select>` in a `<label>`, `useTransition`, "Sort by" hidden below `sm` — so the two sort controls in this app behave identically rather than being two inventions.
+
+**#3 Pagination — it already existed.** `Pagination` renders "Page 1 of 2" exactly as the report described, but hides itself at a single page, and `PAGE_SIZE` was 20 against an account with 19 applications, so it had never once appeared. Lowered to **10** on the report's suggestion, which both halves the scroll on a phone and makes the control discoverable.
+
+**Two real bugs found and fixed during the work, neither caught by `tsc`:**
+
+1. **A client/server boundary error.** `readSort` first lived in the toolbar, which carries `'use client'` — and that marks *every* export of a module client-only, so the server page's call failed at runtime with *"Attempted to call readSort() from the server"*. Typecheck passes on this: it is a Next.js rule, not a type rule. Moved to `lib/applications/sort.ts`, which both sides import.
+
+2. **The search box ate keystrokes.** Syncing the input from the URL on every change loses characters during fast typing: type "Nimbus", the debounce fires after "Nim", the URL becomes `?q=Nim`, and the sync effect then overwrites the draft the user has already extended — the box visibly snaps back. Fixed with a ref recording the value *we* pushed, so the effect recognises its own echo and leaves the draft alone while still syncing for back/forward.
+
+**Chip counts were made to respect the search** — otherwise searching "Nimbus" left a chip reading "Shortlisted 2" above a list containing one. They still ignore the *status* filter, so each chip shows its own total.
+
+**Verified live against the server**, not just rendered: baseline 19 → `?q=Nimbus` **6** with only Nimbus rows → `?q=Engineer` **9**; `sort=oldest` returns a genuinely different first row (Rasta Logistics) from `sort=recent` (Kirana Stack); `sort=company` orders Kirana before Nimbus; and pagination emits `?sort=company&page=2` while the status chips emit `?sort=company&status=APPLIED`, so no control silently drops another's state.
+
 ### `feature/applications-badge-hierarchy` - RPT #7: badge colouring hierarchy - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). First of the seven Applications-page reports.
