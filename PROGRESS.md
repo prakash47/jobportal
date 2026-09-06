@@ -916,6 +916,22 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/applications-badge-hierarchy` - RPT #7: badge colouring hierarchy - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). First of the seven Applications-page reports.
+
+**The complaint was exact**: `IN_REVIEW`, `SHORTLISTED` and `INTERVIEWED` were **all** `warning`, so the three states a candidate most wants to tell apart rendered as the same amber chip. Scanning the list to see which applications are moving is the whole point, and one colour across three states threw that away. Now grey for the passive state, amber while someone is deciding, green once shortlisted, brand navy once interviewed — the mapping the report asked for, using variants that already existed.
+
+⚠️ **Measuring first caught a regression I was one commit from shipping.** The report asked for "high-contrast" badges, so the variants were canvas-measured rather than trusted. `success` was **2.65:1** and `danger` **3.61:1** — badge text is 12px/500, i.e. NORMAL text needing **4.5:1**, so both already failed AA. Moving `SHORTLISTED` onto green would have taken it from a passing 6.65 to a failing **2.65**: the colour the report asked for would have made that badge harder to read than the one it replaced.
+
+**Root cause of the failure**: `success` and `danger` took their text straight from `--color-success` / `--color-danger`. Those tokens are tuned to work as a **fill** (a solid button, a ring) and are far too light to sit as **text** on their own pale tint. `warning` had already solved this by hardcoding a darker text at lightness 0.45 — the other two simply never got the same treatment.
+
+**Fixed in `packages/ui/src/components/atoms/Badge.tsx`** by applying that existing recipe to `success` and `danger`. All five variants now sit in one 6-15:1 band and read as a set. **The `--color-success` / `--color-danger` TOKENS were deliberately left alone** — they are correct for fills, and changing them would move every button, ring and border across all three apps.
+
+**Blast radius checked before touching a shared package**: only **6** explicit `variant="success"|"danger"` call sites exist across web, recruiter and sadmin, and darkening text on an unchanged background is strictly a readability improvement, never a layout or hue change.
+
+**Verified live** by temporarily seeding the demo account with `REJECTED` and `OFFERED` so every badge rendered at once, then restoring it: Applied **7.14**, In review **6.65**, Shortlisted **6.09**, Interviewed **15.17**, Offered **6.09**, Rejected **6.66** — all clear of 4.5, where two of them failed before.
+
 ### `chore/applications-rejected-filter-investigation` - RPT: "add a Rejected filter pill" - already there - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). **No code change.** Recorded because a verified "this already works" is worth as much as a fix, and re-investigating it in three months would cost the same hour again.
