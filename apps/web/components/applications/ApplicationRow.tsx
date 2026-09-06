@@ -1,9 +1,10 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { cn } from '@jobportal/ui';
-import { ChevronDown } from '@jobportal/ui/icons';
+import { ChevronDown, Building2, Clock, FileText, MapPin } from '@jobportal/ui/icons';
+import { EMPLOYMENT_LABELS, WORK_MODE_LABELS } from '../../lib/job/format';
 import type { ApplicationStatus } from '@jobportal/db';
 import { StatusPill } from './StatusPill';
 import { WithdrawButton } from './WithdrawButton';
@@ -24,7 +25,38 @@ export interface ApplicationRowProps {
     title: string;
     canonicalSlug: string;
     company: { name: string; slug: string; id: number };
+    employmentType: string;
+    workMode: string;
+    cityNames: string[];
   };
+  /** Free-text note submitted with the application. Null for most. */
+  coverLetter: string | null;
+  /**
+   * The resume SNAPSHOT for this application — not the candidate's current CV.
+   * Null for the ~373 applications that predate Application.resumeId, where
+   * which file was actually sent is genuinely unknown and must not be guessed.
+   */
+  resume: { originalFilename: string; uploadedAtLabel: string; sizeBytes: number } | null;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// One "at a glance" job fact. Renders nothing when the value is absent, so a
+// sparse posting stays clean rather than showing a placeholder dash — the same
+// rule JobOverviewCard follows.
+function Fact({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
+      <span className="shrink-0" aria-hidden="true">
+        {icon}
+      </span>
+      {children}
+    </span>
+  );
 }
 
 // One application: title / company / date, status badge + actions, and an
@@ -37,6 +69,8 @@ export function ApplicationRow({
   appliedAtLabel,
   history,
   job,
+  coverLetter,
+  resume,
 }: ApplicationRowProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -93,9 +127,66 @@ export function ApplicationRow({
       {open && (
         <div
           id={panelId}
-          className="mt-4 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-4"
+          className="mt-4 space-y-4 rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] p-4"
         >
-          <StatusTimeline steps={steps} />
+          {/* Item #5 — the job facts a candidate needs to recall what they
+              applied to, without opening the posting. Same vocabulary and label
+              tables as JobOverviewCard so the two never describe the same job
+              differently. NOTE: no "Notice period" row — Job has no such field
+              (noticePeriodDays is on Candidate, i.e. the applicant's own notice,
+              not the posting's). Inventing one here would have meant showing a
+              number that means something else. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {job.cityNames.length > 0 && (
+              <Fact icon={<MapPin className="size-3.5" />}>{job.cityNames.join(', ')}</Fact>
+            )}
+            <Fact icon={<Building2 className="size-3.5" />}>
+              {WORK_MODE_LABELS[job.workMode] ?? job.workMode}
+            </Fact>
+            <Fact icon={<Clock className="size-3.5" />}>
+              {EMPLOYMENT_LABELS[job.employmentType] ?? job.employmentType}
+            </Fact>
+          </div>
+
+          {/* Item #4 — WHICH resume went with this application. */}
+          <div className="border-t border-[var(--color-border)] pt-4">
+            <h4 className="text-xs font-semibold text-[var(--color-fg)]">Submitted with</h4>
+            {resume ? (
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-fg-muted)]">
+                <FileText className="size-3.5 shrink-0" aria-hidden="true" />
+                <span className="font-medium text-[var(--color-fg)]">
+                  {resume.originalFilename}
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>{formatBytes(resume.sizeBytes)}</span>
+                <span aria-hidden="true">·</span>
+                <span>uploaded {resume.uploadedAtLabel}</span>
+              </p>
+            ) : (
+              // Deliberately not "your current resume": for these older rows the
+              // file that was actually sent is unknown, and claiming otherwise
+              // would be a guess presented as a fact.
+              <p className="mt-1.5 text-xs text-[var(--color-fg-muted)]">
+                Not recorded for this application.
+              </p>
+            )}
+          </div>
+
+          {coverLetter && (
+            <div className="border-t border-[var(--color-border)] pt-4">
+              <h4 className="text-xs font-semibold text-[var(--color-fg)]">Cover note</h4>
+              {/* whitespace-pre-line keeps the candidate's paragraph breaks;
+                  the value is rendered as TEXT, never as HTML. */}
+              <p className="mt-1.5 whitespace-pre-line text-xs leading-relaxed text-[var(--color-fg-muted)]">
+                {coverLetter}
+              </p>
+            </div>
+          )}
+
+          <div className="border-t border-[var(--color-border)] pt-4">
+            <h4 className="mb-3 text-xs font-semibold text-[var(--color-fg)]">Progress</h4>
+            <StatusTimeline steps={steps} />
+          </div>
         </div>
       )}
     </div>

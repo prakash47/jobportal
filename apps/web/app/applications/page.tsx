@@ -137,10 +137,21 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
         status: true,
         appliedAt: true,
         statusHistory: true,
+        coverLetter: true,
+        // The resume SNAPSHOT for this application, not the candidate's current
+        // one. Application.resumeId exists precisely so replacing your CV does
+        // not rewrite history — reading `Candidate.activeResume` here would
+        // reintroduce the bug that column was added to fix.
+        resume: {
+          select: { originalFilename: true, uploadedAt: true, sizeBytes: true },
+        },
         job: {
           select: {
             title: true,
             canonicalSlug: true,
+            cityIds: true,
+            employmentType: true,
+            workMode: true,
             company: { select: { id: true, name: true, slug: true } },
           },
         },
@@ -156,6 +167,15 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
       _count: { _all: true },
     }),
   ]);
+
+  // One query for every city on the page rather than one per row: cityIds is an
+  // Int[] on Job, so N rows would otherwise be N lookups.
+  const cityIds = [...new Set(rows.flatMap((r) => r.job.cityIds))];
+  const cities =
+    cityIds.length > 0
+      ? await prisma.city.findMany({ where: { id: { in: cityIds } }, select: { id: true, name: true } })
+      : [];
+  const cityNameById = new Map(cities.map((c) => [c.id, c.name]));
 
   const counts: Record<string, number> = {};
   let all = 0;
@@ -199,7 +219,29 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
               appliedAtIso={r.appliedAt.toISOString()}
               appliedAtLabel={formatAppliedAt(r.appliedAt)}
               history={parseHistory(r.statusHistory)}
-              job={r.job}
+              job={{
+                title: r.job.title,
+                canonicalSlug: r.job.canonicalSlug,
+                company: r.job.company,
+                employmentType: r.job.employmentType,
+                workMode: r.job.workMode,
+                cityNames: r.job.cityIds
+                  .map((id) => cityNameById.get(id))
+                  .filter((n): n is string => Boolean(n)),
+              }}
+              coverLetter={r.coverLetter}
+              resume={
+                r.resume
+                  ? {
+                      originalFilename: r.resume.originalFilename,
+                      // Formatted on the server for the same reason appliedAt is:
+                      // an ICU/timezone difference between server and client is a
+                      // hydration mismatch.
+                      uploadedAtLabel: formatAppliedAt(r.resume.uploadedAt),
+                      sizeBytes: r.resume.sizeBytes,
+                    }
+                  : null
+              }
             />
           ))}
         </ContentCard>
