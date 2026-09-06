@@ -1,6 +1,10 @@
-// Pure UI-state classifier — keeps the JD page and profile sidebar in sync on
-// when to render the "approaching limit" or "limit reached" banners. No
+// Pure UI-state classifier — keeps the JD page and the dashboard header pill in
+// sync on when to render the "approaching limit" or "limit reached" states. No
 // network, no React.
+//
+// (Said "profile sidebar" until 2026-09-06. There is no sidebar consumer and
+// there never was: grep for classifyQuota returns job/[slug]/page.tsx and
+// DailyApplyIndicator, which renders into DashboardChrome's header slot.)
 
 export type QuotaUiState = 'unlimited' | 'normal' | 'warning' | 'exhausted';
 
