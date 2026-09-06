@@ -916,6 +916,22 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/sidebar-email-truncation` - RPT: clipped user email in the sidebar footer - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.**
+
+**Reproduced and quantified**: in the 256px rail the footer's text column is **142px** wide, and `arjun.iyer+demo@jobportal.dev` needs **155px** — so it clips by 13px, and neither the name nor the email carried any way to see the rest. A longer address (or a longer display name) clips much harder.
+
+**Widening the column was rejected as a non-fix.** This address happens to miss by 13px; email addresses have no useful upper bound, so any width chosen would still clip somebody. Wrapping was rejected too — it makes the footer taller and ragged, and unboundedly so.
+
+**`title` on both the name and the email**, which is the reporter's own suggested remedy. Native `title` rather than the Radix `Tooltip` in `packages/ui`: that primitive is exported from the molecules barrel but **used by nothing in any app**, so adopting it here would mean mounting a `TooltipProvider` to put a hover hint on two lines of text. `title` is also already the established pattern — in this same file for the collapsed nav labels, and elsewhere for truncated text (`title={summaryValue}`).
+
+**The collapsed rail got the same treatment**, where it matters more: with the text column gone entirely, the initials disc is the only account affordance, so its title now carries `"{name} — {email}"` rather than just the name.
+
+**Worth being clear about what this is and is not**: truncation here was purely visual. The full string was always in the DOM, so screen readers already read the whole address and always did — this is a sighted-user affordance, not an accessibility fix.
+
+**Verified live**: title present on both lines and matching their full text exactly; email still visually clipped (by design) with the complete address available on hover; collapsed disc carrying name + address; collapse round-trip still clean.
+
 ### `bugfix/sidebar-collapse-handle-position` - the collapse control moves onto the rail's edge - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). Follow-up to `feature/sidebar-collapse`, same day, on the owner's review of the shipped result.

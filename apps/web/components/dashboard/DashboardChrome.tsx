@@ -160,7 +160,7 @@ function SidebarContent({
       >
         <span
           className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent-500)] text-[13px] font-medium text-[var(--color-primary-950)]"
-          {...(collapsed ? { title: user.name } : { 'aria-hidden': true })}
+          {...(collapsed ? { title: `${user.name} — ${user.email}` } : { 'aria-hidden': true })}
         >
           {initials(user.name)}
         </span>
@@ -171,8 +171,30 @@ function SidebarContent({
             other in both states. */}
         {!collapsed && (
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[13px] font-medium text-white">{user.name}</div>
-            <div className="truncate text-[11px] text-white/50">{user.email}</div>
+            {/*
+              `title` on both, because both are `truncate` and either can clip.
+              Measured in the 256px rail: the text column is 142px, and
+              "arjun.iyer+demo@jobportal.dev" needs 155px — so the email clips
+              for an ordinary address, and a longer one clips much harder.
+              Widening the column is not a general fix; addresses have no useful
+              upper bound.
+
+              Native `title` rather than the Radix Tooltip in packages/ui: that
+              primitive is exported but used by nothing in any app, so adopting
+              it here would mean mounting a TooltipProvider for a hover hint on
+              two lines of text. `title` is also already the pattern in this
+              file (the collapsed nav labels) and elsewhere for truncated text.
+
+              Note this is a SIGHTED-user affordance only. Truncation is purely
+              visual — the full string is in the DOM, so screen readers already
+              read the whole address and always did.
+            */}
+            <div title={user.name} className="truncate text-[13px] font-medium text-white">
+              {user.name}
+            </div>
+            <div title={user.email} className="truncate text-[11px] text-white/50">
+              {user.email}
+            </div>
           </div>
         )}
         <button
