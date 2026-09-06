@@ -71,8 +71,16 @@ export function ApplyButton({
   if (exhausted) {
     return (
       <div className="space-y-1.5">
+        {/*
+          Names the limit. The WARNING state one component away already says
+          "You've used N of M applications today" (job/[slug]/page.tsx), so a
+          bare "Daily limit reached" here meant the one moment a user actually
+          hits the wall was the one place the noun was missing. Wording matches
+          the API's own 429 message verbatim (quota.service.ts `over()`), so the
+          server and the client cannot drift into describing it differently.
+        */}
         <Button variant="primary" disabled>
-          Daily limit reached
+          Daily application limit reached
         </Button>
         <p className="text-xs text-[var(--color-fg-muted)]">
           {upgradeAvailable ? (
