@@ -916,6 +916,22 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/saved-jobs-card-metadata` - Saved jobs RPT #1, #4, #6, #7 - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). **No schema change** — every field was already on `Job` and simply never selected.
+
+**#1 "Apply Now" CTA — it already exists.** `SavedJobRow` has always rendered `ApplyButton` on the right for any saved job the candidate has not applied to; verified live, 6 of the 14 seeded rows show "Apply now". This is the third report in two batches for a feature that was already built, and the pattern is consistent: it is invisible until the data makes it appear.
+
+**#4 Metadata — built.** Location, experience and salary now sit under the company line, rendering as `Bangalore • 5–9 yrs • ₹38–62 LPA`. Uses `formatExperienceYears` / `formatSalaryLpa`, the same helpers `JobOverviewCard` uses, so a job cannot describe itself differently in two places. Cities resolve in **one** batched query for the page. Rendered as plain text with separators rather than bordered chips: three bordered pills across fourteen rows is a lot of noise for secondary information, and only facts that exist are shown, so a sparse posting reads "Bangalore" rather than "Bangalore • • ".
+
+**#6 Whitespace — diagnosed before being fixed, and the diagnosis changed the fix.** Measured at a 1600px viewport: the container was 1024px with 152px margins either side, which is a normal reading width — **the container was not the main problem**. The *row* was: its title column was 813px wide holding roughly 250px of text, leaving **~550px of dead space in every row**. Filling that with #4's metadata is the substantive fix. The container was then widened `max-w-5xl → max-w-6xl` (1024 → 1152px, margins 152 → 89) as the smaller half. Applied to the **shell**, so every dashboard page moves together — widening one page and not its siblings is how a dashboard starts looking assembled from parts. Confirmed no page overflow at 1600px, and it incidentally helps the Applications chip row, which now needs only 48px of internal scroll instead of 255px.
+
+**#7 The APPLIED pill — now a link, and two other things were wrong with it.** It points at `/applications?status=<STATUS>`, filtering the destination to that state. Beyond the link, it now uses `StatusPill`, which fixes two inconsistencies nobody had reported: the label read the raw enum (`IN REVIEW`) instead of `In review`, and **every status rendered as `primary`**, so a shortlisted job and a rejected one looked identical here while being green and red one page away.
+
+**Verified live**: 14 rows; metadata on every row; 8 status pills linking to the correct filtered URL (`?status=APPLIED`, `?status=INTERVIEWED`, `?status=SHORTLISTED`, `?status=IN_REVIEW`); 6 unapplied rows showing "Apply now"; no page overflow at 1600px.
+
+⚠️ **Local demo data was seeded** (14 saved jobs on the demo account, 8 overlapping existing applications) because both real accounts had **zero** saved jobs, so the page could not otherwise be developed or verified against anything.
+
 ### `bugfix/applications-show-zero-chips` - every status chip renders, including at zero - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). **Owner instruction, reversing a judgement recorded earlier the same day.**

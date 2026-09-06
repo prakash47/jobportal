@@ -36,6 +36,13 @@ async function loadSavedJobsPage(userId: number, page: number) {
             title: true,
             canonicalSlug: true,
             status: true,
+            // Metadata for the row pills. Selected here rather than fetched per
+            // row so the page stays one round-trip.
+            cityIds: true,
+            experienceMinYears: true,
+            experienceMaxYears: true,
+            salaryMinPaise: true,
+            salaryMaxPaise: true,
             company: { select: { id: true, name: true, slug: true } },
           },
         },
@@ -48,18 +55,39 @@ async function loadSavedJobsPage(userId: number, page: number) {
   const applications = jobIds.length
     ? await prisma.application.findMany({
         where: { userId, jobId: { in: jobIds } },
-        select: { jobId: true, status: true },
+        // `id` is new: the status pill links to the application it describes,
+        // so it needs to know which one.
+        select: { id: true, jobId: true, status: true },
       })
     : [];
-  const appliedByJobId = new Map<number, string>();
-  for (const a of applications) appliedByJobId.set(a.jobId, a.status);
+  const appliedByJobId = new Map<number, { id: number; status: string }>();
+  for (const a of applications) appliedByJobId.set(a.jobId, { id: a.id, status: a.status });
+
+  // One city lookup for the whole page — cityIds is an Int[] on Job, so doing
+  // this per row would be N queries.
+  const cityIds = [...new Set(savedRows.flatMap((r) => r.job.cityIds))];
+  const cities =
+    cityIds.length > 0
+      ? await prisma.city.findMany({
+          where: { id: { in: cityIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+  const cityNameById = new Map(cities.map((c) => [c.id, c.name]));
 
   return {
-    rows: savedRows.map((r) => ({
-      ...r,
-      applied: appliedByJobId.has(r.jobId),
-      appliedStatus: appliedByJobId.get(r.jobId) ?? null,
-    })),
+    rows: savedRows.map((r) => {
+      const app = appliedByJobId.get(r.jobId) ?? null;
+      return {
+        ...r,
+        applied: app !== null,
+        appliedStatus: app?.status ?? null,
+        applicationId: app?.id ?? null,
+        cityNames: r.job.cityIds
+          .map((id) => cityNameById.get(id))
+          .filter((n): n is string => Boolean(n)),
+      };
+    }),
     total,
   };
 }
@@ -91,8 +119,10 @@ export default async function SavedJobsPage({ searchParams }: PageProps) {
               jobId={r.jobId}
               savedAt={r.savedAt}
               job={r.job}
+              cityNames={r.cityNames}
               applied={r.applied}
               appliedStatus={r.appliedStatus}
+              applicationId={r.applicationId}
             />
           ))}
         </ContentCard>
