@@ -2399,7 +2399,7 @@ Companies directory + profile pages per SRS §4.7. `/companies` directory page. 
 
 ### PR #19 — `feature/application-tier-limits` · 2026-05-08
 
-Three-layer application quota enforcement per SRS §4.11.16-17. `ApplicationQuotaService` with daily counter + tier resolver (FREE: 5/day, paid tiers: unlimited via `feature.unlimited_applications`). `RedisModule` + ioredis for atomic INCR + DECR-revert on failure. L1 (UI button-disable in JD page + dashboard sidebar daily-apply indicator), L2 (`POST /me/applications` 429 with friendly body), L3 (atomic consume). `GET /me/applications/quota` for the L2 hint. `ApplyButton` 429 surface. Reviewer fixes: PAST_DUE filter, rollback logging, L1 guard test.
+Three-layer application quota enforcement per SRS §4.11.16-17. `ApplicationQuotaService` with daily counter + tier resolver (FREE: 5/day, paid tiers: unlimited via `feature.unlimited_applications`). `RedisModule` + ioredis for atomic INCR + DECR-revert on failure. L1 (UI button-disable in JD page + dashboard sidebar daily-apply indicator), L2 (`POST /me/applications` 429 with friendly body), L3 (atomic consume). `GET /me/applications/quota` for the L2 hint. `ApplyButton` 429 surface. Reviewer fixes: PAST_DUE filter, rollback logging, L1 guard test. **Correction (2026-09-06): the free-tier limit above is wrong — it reads "FREE: 5/day" but `quota.service.ts` sets `DEFAULT_LIMIT = 10` and always has. The live endpoint returns `{"limit":10}`. Overridable via `FREE_TIER_DAILY_APPLY_LIMIT`.**
 
 ### PR #18 — `feature/job-alerts-bullmq` · 2026-05-08
 
