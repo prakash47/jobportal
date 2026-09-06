@@ -916,6 +916,22 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/saved-jobs-search-sort` - Saved jobs RPT #2: search and sort - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`).
+
+A debounced search box and a sort select above the list, both **server-side and URL-driven** (`?q=` / `?sort=`) for the same reason the applications list is: the page is paginated, so a client-side filter would only ever search the rows currently on screen.
+
+**Deliberately the same shape as `ApplicationsToolbar`** — same 300ms debounce, same `replace`-not-`push` so typing does not bury the previous page under history entries, same last-pushed ref so a debounce landing mid-typing cannot snap the box back to a shorter value. A candidate who learns one dashboard list has learned the other, and the two cannot drift into behaving differently.
+
+Sort offers **Recently saved** (default) / **Oldest saved** / **Company A–Z** / **Job title A–Z**. The vocabulary lives in `lib/saved-jobs/sort.ts`, **outside** the `'use client'` component — repeating the applications toolbar's boundary mistake would have produced the same runtime error (*"Attempted to call readSort() from the server"*), which `tsc` cannot catch because it is a Next.js rule rather than a type rule.
+
+**`PAGE_SIZE` 20 → 10**, matching the applications list, which also makes the pagination control discoverable: it hides itself at a single page, so a 20 page size meant most accounts never saw it.
+
+The toolbar renders **even when a search returns nothing**, so the box the user just typed into does not vanish along with the results.
+
+**Verified live**: 14 saved → `?q=Nimbus` **7**, `?q=Engineer` **10**, `?q=zzzz` → "No saved jobs match". All four sorts return genuinely different first rows, and `sort=company` was checked to be truly alphabetical rather than coincidentally ordered (Nimbus ×7 → Sahaj ×2 → Veridian; the saved set spans only three companies). Both params thread through pagination.
+
 ### `feature/saved-jobs-card-metadata` - Saved jobs RPT #1, #4, #6, #7 - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). **No schema change** — every field was already on `Job` and simply never selected.

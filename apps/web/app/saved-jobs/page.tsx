@@ -1,14 +1,25 @@
-import { prisma } from '@jobportal/db';
+import { prisma, type Prisma } from '@jobportal/db';
 import { requireUser } from '../../lib/auth/require-user';
 import { PageHeader } from '../../components/dashboard/PageHeader';
 import { ContentCard } from '../../components/dashboard/ContentCard';
 import { Pagination } from '../../components/dashboard/Pagination';
-import { SavedJobRow, SavedJobsEmpty } from '../../components/saved-jobs';
+import { SavedJobRow, SavedJobsEmpty, SavedJobsToolbar } from '../../components/saved-jobs';
+import { readSort, type SortValue } from '../../lib/saved-jobs/sort';
 
-const PAGE_SIZE = 20;
+// 10, matching the applications list. Also makes pagination discoverable — it
+// hides itself at a single page, so a 20 page size meant most accounts never
+// saw the control at all.
+const PAGE_SIZE = 10;
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+function readQuery(sp: Record<string, string | string[] | undefined>): string {
+  const raw = Array.isArray(sp['q']) ? sp['q'][0] : sp['q'];
+  // Trimmed and capped — this feeds a Prisma `contains` and an unbounded string
+  // is pointless load.
+  return (raw ?? '').trim().slice(0, 100);
 }
 
 function readPage(sp: Record<string, string | string[] | undefined>): number {
@@ -20,11 +31,39 @@ function readPage(sp: Record<string, string | string[] | undefined>): number {
 // SRS §4.4 — paginated saved-jobs dashboard. Lookup happens server-side via
 // Prisma so the page is one round-trip; the API list endpoint exists for
 // programmatic / future-mobile clients.
-async function loadSavedJobsPage(userId: number, page: number) {
+async function loadSavedJobsPage(userId: number, page: number, q: string, sort: SortValue) {
+  // Search matches the job title OR the company name, case-insensitive —
+  // exactly what the applications list searches, so the two behave alike.
+  const jobFilter: Prisma.JobWhereInput | null = q
+    ? {
+        OR: [
+          { title: { contains: q, mode: 'insensitive' } },
+          { company: { name: { contains: q, mode: 'insensitive' } } },
+        ],
+      }
+    : null;
+
+  // Spreads rather than conditional assignment: under exactOptionalPropertyTypes
+  // an explicitly-undefined optional property is not the same as an absent one,
+  // and Prisma's input types reject it.
+  const where: Prisma.SavedJobWhereInput = {
+    userId,
+    ...(jobFilter ? { job: jobFilter } : {}),
+  };
+
+  const orderBy: Prisma.SavedJobOrderByWithRelationInput =
+    sort === 'oldest'
+      ? { savedAt: 'asc' }
+      : sort === 'company'
+        ? { job: { company: { name: 'asc' } } }
+        : sort === 'title'
+          ? { job: { title: 'asc' } }
+          : { savedAt: 'desc' };
+
   const [savedRows, total] = await Promise.all([
     prisma.savedJob.findMany({
-      where: { userId },
-      orderBy: { savedAt: 'desc' },
+      where,
+      orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       select: {
@@ -48,7 +87,7 @@ async function loadSavedJobsPage(userId: number, page: number) {
         },
       },
     }),
-    prisma.savedJob.count({ where: { userId } }),
+    prisma.savedJob.count({ where }),
   ]);
 
   const jobIds = savedRows.map((r) => r.jobId);
@@ -97,7 +136,10 @@ export default async function SavedJobsPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const page = readPage(sp);
 
-  const { rows, total } = await loadSavedJobsPage(session.sub, page);
+  const q = readQuery(sp);
+  const sort = readSort(Array.isArray(sp['sort']) ? sp['sort'][0] : sp['sort']);
+
+  const { rows, total } = await loadSavedJobsPage(session.sub, page, q, sort);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -105,9 +147,19 @@ export default async function SavedJobsPage({ searchParams }: PageProps) {
       <PageHeader
         title="Saved jobs"
         description={
-          total === 0 ? 'Nothing saved yet.' : `${total} ${total === 1 ? 'role' : 'roles'} bookmarked.`
+          total === 0
+            ? q
+              ? `No saved jobs match “${q}”.`
+              : 'Nothing saved yet.'
+            : q
+              ? `${total} ${total === 1 ? 'role' : 'roles'} matching “${q}”.`
+              : `${total} ${total === 1 ? 'role' : 'roles'} bookmarked.`
         }
       />
+
+      {/* Rendered even when a search returns nothing, so the box the user just
+          typed into does not disappear along with the results. */}
+      <SavedJobsToolbar resultCount={total} />
 
       {rows.length === 0 ? (
         <SavedJobsEmpty />
@@ -128,7 +180,17 @@ export default async function SavedJobsPage({ searchParams }: PageProps) {
         </ContentCard>
       )}
 
-      <Pagination page={page} totalPages={totalPages} baseHref="/saved-jobs" />
+      {/* Both params threaded through, or "Older" would silently drop the search
+          and the sort and show page 2 of a different list. */}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        baseHref="/saved-jobs"
+        params={{
+          ...(q ? { q } : {}),
+          ...(sort !== 'recent' ? { sort } : {}),
+        }}
+      />
     </div>
   );
 }
