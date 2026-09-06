@@ -23,8 +23,8 @@ import {
   REPORT_REASON_ORDER,
   reportErrorMessage,
 } from '../../lib/job/report';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export interface ReportJobButtonProps {
   jobId: number;
@@ -75,7 +75,7 @@ export function ReportJobButton({ jobId }: ReportJobButtonProps) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/v1/reports`, {
+      const res = await apiFetch(`/v1/reports`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // The endpoint accepts anonymous reports, but a signed-in reporter

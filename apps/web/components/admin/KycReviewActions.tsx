@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Textarea } from '@jobportal/ui';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 // Approve / reject controls for a PENDING submission. Rendered only when the
 // submission is pending review; the trusted enforcement is the AdminGuard'd
@@ -23,7 +23,7 @@ export function KycReviewActions({ companyId }: { companyId: number }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/admin/kyc/${companyId}`, {
+      const res = await apiFetch(`/admin/kyc/${companyId}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

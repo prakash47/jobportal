@@ -3,8 +3,8 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@jobportal/ui';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export function PauseToggle({ id, isActive }: { id: number; isActive: boolean }) {
   const router = useRouter();
@@ -14,7 +14,7 @@ export function PauseToggle({ id, isActive }: { id: number; isActive: boolean })
   async function onClick() {
     setBusy(true);
     try {
-      const res = await fetch(`${API_URL}/me/alerts/${id}`, {
+      const res = await apiFetch(`/me/alerts/${id}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

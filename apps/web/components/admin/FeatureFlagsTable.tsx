@@ -11,8 +11,8 @@ import {
 import { FlagToggleRow } from './FlagToggleRow';
 import { CriticalFlagConfirm } from './CriticalFlagConfirm';
 import { FlagEditSidePanel, type PatchPayload } from './FlagEditSidePanel';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 type StateFilter = 'all' | 'enabled' | 'disabled';
 
@@ -68,7 +68,7 @@ export function FeatureFlagsTable({ initial }: { initial: AdminFeatureFlag[] }) 
     setPendingKey(key);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/admin/feature-flags/${encodeURIComponent(key)}`, {
+      const res = await apiFetch(`/admin/feature-flags/${encodeURIComponent(key)}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

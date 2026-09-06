@@ -4,8 +4,8 @@ import { useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Avatar, Button } from '@jobportal/ui';
 import { apiErrorMessage } from '../../lib/auth/api-error';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 // Mirrors the server allowlist in apps/api/src/profile/photo-validators.ts.
 // Duplicated deliberately and kept narrow: this only decides what the file
@@ -62,7 +62,7 @@ export function ProfilePhotoCard({ name, initialImageUrl }: ProfilePhotoCardProp
     try {
       const body = new FormData();
       body.append('file', file);
-      const res = await fetch(`${API_URL}/me/profile/photo`, {
+      const res = await apiFetch(`/me/profile/photo`, {
         method: 'POST',
         credentials: 'include',
         // No Content-Type header: the browser must set the multipart boundary
@@ -86,7 +86,7 @@ export function ProfilePhotoCard({ name, initialImageUrl }: ProfilePhotoCardProp
     setError(null);
     setBusy('remove');
     try {
-      const res = await fetch(`${API_URL}/me/profile/photo`, {
+      const res = await apiFetch(`/me/profile/photo`, {
         method: 'DELETE',
         credentials: 'include',
       });

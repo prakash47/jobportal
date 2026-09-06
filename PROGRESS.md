@@ -916,6 +916,28 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/session-refresh-on-401` - RPT: "No access token" when applying - the session lasted 15 minutes - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). Reported against the saved-jobs Apply button. **It was never a saved-jobs bug, and never an Apply bug.**
+
+**A signed-in seeker had roughly fifteen minutes before every action failed.** The access cookie has a 15-minute `Max-Age` (`packages/auth/.../cookies.ts`, `ACCESS_TTL_MS`); after that the browser stops sending it and every API call returns `401 "No access token"` - the exact string reported. A 30-day refresh cookie is issued alongside it, `POST /auth/refresh` has always existed and always worked, and **nothing in `apps/web` had ever called it**. The API comment admitted as much: *"the refresh cookie (path=/auth) stays reachable **if refresh is ever wired up**"*.
+
+The symptom looked page-specific only because of timing: load any authed page, leave it fifteen minutes, click anything. Apply happened to be what was clicked.
+
+**Reproduced against the running API before writing a line of fix**: drop only the access cookie -> `401 {"message":"No access token"}`; `POST /auth/refresh` with just the refresh cookie -> **200** and a new access cookie; retry the original call -> **200**. The endpoint was fine; nobody was calling it.
+
+**Fix**: `lib/api/fetch.ts` - an `apiFetch` that sends cookies and, on a 401, refreshes once and retries. Migrated **14** client call sites.
+
+**The auth flows deliberately keep plain `fetch`.** `/auth/login` answers a wrong password with 401, and retrying that would turn one failed sign-in into two; sign-out must not resurrect a session. `LoginForm`, `RegisterForm`, `ResetLedger`, the sign-out path and `HeaderAuthActions` are excluded by name.
+
+⚠️ **The single-flight refresh is the subtle part, and it is not optional.** Refresh tokens **rotate on every use** (CLAUDE.md §9). A page that fires several authed calls will 401 on all of them at once; if each refreshed independently, the second would present a token the first had just rotated away, and the mechanism meant to keep the user signed in would be what signs them out. All callers therefore await one shared promise, cleared in `finally` so a later expiry can still refresh.
+
+**Nine tests**, and the single-flight one was **mutation-checked**: removing the sharing makes it fail with *"expected 4 to be 1"* - four concurrent 401s, four rotations. That is a race, so no amount of clicking would have found it.
+
+Also covered: 2xx passes through untouched; 400/403/404/**429**/500 are NOT treated as an expired session (refreshing would hide a real error, and 429 is the apply-quota response); the **original** 401 is returned when refresh fails, so the caller sees the real reason; at most one retry, so a still-401 cannot loop; a network failure during refresh is not a crash.
+
+**Verified live**: clicked "Apply now" on the saved-jobs page - the row flipped to an **Applied** pill with no error.
+
 ### `feature/saved-jobs-bulk-undo` - Saved jobs RPT #3, #5: undo on remove, and bulk selection - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). Final two of the seven saved-jobs reports, taken together because both are about removing.
@@ -1205,7 +1227,7 @@ Two things made the bare ratio worse than it looks. `0/10` at the start of a day
 
 **The tester's second counter was real, not hypothetical.** `/alerts` renders `{n}/10 used` in its page description — a second `N/10` with the SAME denominator, on a page that also carries this pill. Before this change the screen showed two indistinguishable bare fractions. Left alone deliberately: its noun comes from the `PageHeader` title "Job alerts" directly above it, and naming the pill is what separates the pair.
 
-**Also fixed, same defect one step later**: the at-limit button said "Daily limit reached" — a limit of what? The WARNING state one component away already says "You've used N of M applications today", so the one moment a user actually hits the wall was the one place the noun was missing. Now "Daily application limit reached", matching the API's 429 text verbatim so server and client cannot drift.
+**Also fixed, same defect one step later**: the at-limit button said "Daily limit reached" — a limit of what? The ⚠️ state one component away already says "You've used N of M applications today", so the one moment a user actually hits the wall was the one place the noun was missing. Now "Daily application limit reached", matching the API's 429 text verbatim so server and client cannot drift.
 
 ⚠️ **A contrast regression I introduced and then caught.** The ring's warning stroke was a hardcoded `oklch(0.65 0.15 80)` sitting between two tokens, which looks exactly like someone ignoring CLAUDE.md §2 — so I swapped in `var(--color-warning)`. **That was wrong**: canvas-sampled against the pill background, the token measures **1.95:1** where the literal measured **3.15:1**, so the "cleanup" pushed the ring under the 3:1 WCAG 1.4.11 floor. The literal had been contrast-tuned, not left behind. Replaced with `color-mix(in oklch, var(--color-warning), var(--color-fg) 30%)` — token-derived so it tracks brand changes, and self-correcting per theme because `--color-fg` inverts. Verified by forcing `data-theme`, not assumed: **3.72:1 light / 12.2:1 dark**.
 

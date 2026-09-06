@@ -4,8 +4,8 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@jobportal/ui';
 import { EVENTS, track } from '../../lib/analytics/posthog';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export function WithdrawButton({
   applicationId,
@@ -24,7 +24,7 @@ export function WithdrawButton({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/me/applications/${applicationId}/withdraw`, {
+      const res = await apiFetch(`/me/applications/${applicationId}/withdraw`, {
         method: 'POST',
         credentials: 'include',
       });

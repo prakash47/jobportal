@@ -1,6 +1,6 @@
 import { apiErrorMessage } from '../../lib/auth/api-error';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -22,7 +22,7 @@ export async function apiSend<T = unknown>(
 
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, init);
+    res = await apiFetch(`${path}`, init);
   } catch {
     return { ok: false, error: 'Network error. Check your connection and try again.' };
   }
@@ -42,7 +42,7 @@ export async function apiUpload<T = unknown>(
 ): Promise<ApiResult<T>> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    res = await apiFetch(`${path}`, {
       method: 'POST',
       credentials: 'include',
       body: formData,

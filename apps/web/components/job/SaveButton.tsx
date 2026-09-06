@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@jobportal/ui';
 import { Bookmark, BookmarkCheck } from '@jobportal/ui/icons';
 import { EVENTS, track } from '../../lib/analytics/posthog';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export interface SaveButtonProps {
   jobId: number;
@@ -31,7 +31,7 @@ export function SaveButton({ jobId, jobSlug, isAuthed, initialSaved }: SaveButto
     setBusy(true);
     setSaved(target); // optimistic
     try {
-      const res = await fetch(`${API_URL}/me/saved-jobs/${jobId}`, {
+      const res = await apiFetch(`/me/saved-jobs/${jobId}`, {
         method: target ? 'POST' : 'DELETE',
         credentials: 'include',
       });
