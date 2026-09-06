@@ -916,6 +916,24 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/signout-confirmation` - sign-out asks before it acts - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.** Owner request: the sidebar sign-out button "should always display a popup panel for confirmation".
+
+**The case for it is stronger than convenience.** The sign-out icon sits directly beside the account card, is one click from every dashboard page, and had no undo — a mis-click ended the session silently. Nothing warned, and the only recovery was to sign in again.
+
+**Uses the house `Dialog`** from `@jobportal/ui`, following `CriticalFlagConfirm` as the existing confirmation precedent in `apps/web` rather than inventing a pattern.
+
+**Two decisions worth recording:**
+
+1. **The dialog is rendered ONCE in `DashboardChrome`, not inside `SidebarContent`.** `SidebarContent` is mounted twice — the desktop rail and the mobile drawer — so putting the dialog there would have mounted two Radix roots competing for the same focus and the same Escape key. Verified: `document.querySelectorAll('[role="dialog"]').length === 1` from both entry points.
+
+2. **`onSignOut` now REQUESTS rather than acts**, and the request closes the mobile drawer first. The drawer runs its own focus trap, its own Escape handler, and marks the background `inert`; layering a Radix dialog over it means two modal layers fighting, with one Escape press reaching both. Closing the drawer first sidesteps that entirely — and on desktop the call is a no-op.
+
+The confirm button is `primary`, **not** `danger`: signing out destroys nothing and is undone by signing back in. Colouring it destructive would overstate it and devalue `danger` where it is actually warranted. The dialog also refuses to close while the request is in flight, because the confirm handler ends in `window.location.assign` — letting it be dismissed in that window would show a working-looking page that is already navigating away.
+
+**Verified live, both breakpoints**: dialog appears on click with exactly one instance and focus trapped inside; Cancel and Escape both dismiss with the session untouched and still on `/profile`; on mobile the drawer closes as the dialog opens, `body.style.overflow` is released (no stuck scroll lock) and the drawer leaves the DOM; and confirming genuinely ends the session — redirected to `/`, chrome gone, and **`GET /auth/me` returns 401**, so the server-side session was destroyed rather than the client merely navigating.
+
 ### `bugfix/sidebar-email-truncation` - RPT: clipped user email in the sidebar footer - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.**
