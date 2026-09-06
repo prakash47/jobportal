@@ -4,16 +4,29 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button, cn } from '@jobportal/ui';
-import { LogOut, Loader2, Menu, Search, X } from '@jobportal/ui/icons';
+import { ChevronLeft, LogOut, Loader2, Menu, Search, X } from '@jobportal/ui/icons';
 import { Logo } from '../brand/Logo';
 import { NAV_GROUPS, isNavItemActive } from './nav-items';
+import { writeSidebarPreference } from './sidebar-preference';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+// The collapse button's aria-controls target. A literal rather than useId()
+// because the drawer and the rail both render a SidebarContent, and a
+// generated id would differ between them for no benefit — only the rail
+// renders the toggle, so exactly one element ever points at this.
+const NAV_ID = 'dashboard-sidebar-nav';
 
 export interface DashboardChromeProps {
   user: { name: string; email: string; imageUrl?: string | null };
   /** Server-rendered slot (the daily-apply quota pill) placed in the top bar. */
   quotaSlot?: ReactNode;
+  /**
+   * Resolved from the cookie on the SERVER (see sidebar-preference.ts), so the
+   * rail renders at its final width immediately and the client's initial state
+   * matches byte for byte — no hydration mismatch, no width snap.
+   */
+  defaultCollapsed?: boolean;
   children: ReactNode;
 }
 
@@ -33,12 +46,22 @@ function SidebarContent({
   onNavigate,
   onSignOut,
   signingOut,
+  collapsed = false,
+  onToggleCollapse,
 }: {
   user: { name: string; email: string; imageUrl?: string | null };
   pathname: string;
   onNavigate?: () => void;
   onSignOut: () => void;
   signingOut: boolean;
+  /**
+   * Icon-only rail. Desktop only — the MOBILE DRAWER never passes this. A
+   * drawer the user deliberately opened, then has to squint at, would be a
+   * worse experience than the one it replaced, and there is no width to
+   * reclaim on a phone anyway.
+   */
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -46,19 +69,34 @@ function SidebarContent({
         href="/profile"
         {...(onNavigate ? { onClick: onNavigate } : {})}
         aria-label="Career Queue — dashboard"
-        className="flex items-center gap-2.5 px-4 py-4"
+        className={cn(
+          'flex items-center gap-2.5 py-4',
+          collapsed ? 'justify-center px-2' : 'px-4',
+        )}
       >
         <Logo variant="mark" onDark priority className="h-7 w-auto" />
-        <span className="text-[15px] font-semibold text-white">Career Queue</span>
+        {/* Removed from the DOM rather than hidden: the accessible name comes
+            from the link's aria-label above, so dropping the text costs nothing
+            and avoids a 16rem-wide string being laid out inside a 4rem rail. */}
+        {!collapsed && (
+          <span className="text-[15px] font-semibold text-white">Career Queue</span>
+        )}
       </Link>
 
-      <nav className="flex-1 overflow-y-auto px-2 pb-4" aria-label="Dashboard">
+      <nav id={NAV_ID} className="flex-1 overflow-y-auto px-2 pb-4" aria-label="Dashboard">
         {NAV_GROUPS.map((group, gi) => (
           <div key={group.label ?? `g${gi}`}>
             {group.label ? (
-              <div className="px-3 pb-1 pt-5 text-[11px] font-medium tracking-wide text-white/60">
-                {group.label}
-              </div>
+              collapsed ? (
+                // The grouping is real information, so it survives the collapse
+                // as a rule rather than being dropped. aria-hidden because the
+                // heading text below still carries it for assistive tech.
+                <hr className="mx-2 my-2 border-white/10" aria-hidden="true" />
+              ) : (
+                <div className="px-3 pb-1 pt-5 text-[11px] font-medium tracking-wide text-white/60">
+                  {group.label}
+                </div>
+              )
             ) : null}
             {group.items.map((item) => {
               const active = isNavItemActive(pathname, item.href);
@@ -69,8 +107,10 @@ function SidebarContent({
                   href={item.href}
                   {...(onNavigate ? { onClick: onNavigate } : {})}
                   aria-current={active ? 'page' : undefined}
+                  {...(collapsed ? { title: item.label } : {})}
                   className={cn(
-                    'relative mt-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                    'relative mt-0.5 flex items-center rounded-lg py-2 text-sm transition-colors',
+                    collapsed ? 'justify-center px-0' : 'gap-3 px-3',
                     active
                       ? // The cyan bar is the ACTIVE INDICATOR; the fill behind it is
                         // decoration. That split is measured, not stylistic: composited
@@ -100,7 +140,13 @@ function SidebarContent({
                       active ? 'text-[var(--color-accent-500)]' : 'text-white/70',
                     )}
                   />
-                  {item.label}
+                  {/* The label stays in the DOM when collapsed, just visually
+                      hidden. An aria-label would have worked too, but keeping
+                      the real text means the accessible name cannot drift from
+                      the visible one, and it is what a screen reader would have
+                      read anyway. `title` above is the sighted equivalent — the
+                      rail is md+ only, so hover genuinely exists here. */}
+                  <span className={cn(collapsed && 'sr-only')}>{item.label}</span>
                 </Link>
               );
             })}
@@ -108,22 +154,35 @@ function SidebarContent({
         ))}
       </nav>
 
-      <div className="mt-auto flex items-center gap-3 border-t border-white/10 px-3 py-3">
+      <div
+        className={cn(
+          'mt-auto flex border-t border-white/10 px-3 py-3',
+          collapsed ? 'flex-col items-center gap-2' : 'items-center gap-3',
+        )}
+      >
         <span
           className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent-500)] text-[13px] font-medium text-[var(--color-primary-950)]"
-          aria-hidden="true"
+          {...(collapsed ? { title: user.name } : { 'aria-hidden': true })}
         >
           {initials(user.name)}
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-medium text-white">{user.name}</div>
-          <div className="truncate text-[11px] text-white/50">{user.email}</div>
-        </div>
+        {/* Collapsed, the initials disc is the only thing identifying the
+            account, so it stops being decorative and takes a title. Expanded,
+            the name is right beside it and the disc is redundant to a screen
+            reader — hence the aria-hidden swap above rather than one or the
+            other in both states. */}
+        {!collapsed && (
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[13px] font-medium text-white">{user.name}</div>
+            <div className="truncate text-[11px] text-white/50">{user.email}</div>
+          </div>
+        )}
         <button
           type="button"
           onClick={onSignOut}
           disabled={signingOut}
           aria-label="Sign out"
+          {...(collapsed ? { title: 'Sign out' } : {})}
           className="shrink-0 rounded-md p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
         >
           {signingOut ? (
@@ -133,17 +192,68 @@ function SidebarContent({
           )}
         </button>
       </div>
+
+      {/* Only the desktop rail passes a handler. The mobile drawer has no width
+          to reclaim and closes with its own X, so it gets no toggle at all. */}
+      {onToggleCollapse && (
+        <div className="border-t border-white/10 px-2 py-2">
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-expanded={!collapsed}
+            aria-controls={NAV_ID}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70',
+              'transition-colors hover:bg-white/5 hover:text-white',
+              collapsed && 'justify-center px-0',
+            )}
+          >
+            <ChevronLeft
+              className={cn(
+                'size-[18px] shrink-0 transition-transform duration-200 ease-out',
+                collapsed && 'rotate-180',
+              )}
+              aria-hidden="true"
+            />
+            {/* Same treatment as the nav rows: the text stays for assistive
+                tech, and aria-label above is what actually names the control in
+                both states. */}
+            <span className={cn(collapsed && 'sr-only')}>Collapse</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-export function DashboardChrome({ user, quotaSlot, children }: DashboardChromeProps) {
+export function DashboardChrome({
+  user,
+  quotaSlot,
+  defaultCollapsed = false,
+  children,
+}: DashboardChromeProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  // Seeded from the server-read cookie, so this matches what was painted.
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [signingOut, setSigningOut] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      // Written here rather than in an effect: an effect keyed on
+      // `collapsed` would also fire on mount and rewrite the cookie the
+      // server just read, which is noise at best and would clobber a value
+      // set in another tab at worst.
+      writeSidebarPreference(next);
+      return next;
+    });
+  };
 
   // Close the drawer whenever the route changes (a nav link was followed).
   useEffect(() => {
@@ -216,12 +326,24 @@ export function DashboardChrome({ user, quotaSlot, children }: DashboardChromePr
       {/* Background is inert while the mobile drawer is open so focus + the
           screen-reader cursor stay inside the dialog (honors aria-modal). */}
       <div className="md:flex" {...(open ? { inert: true } : {})}>
-        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col bg-[var(--color-primary-600)] md:flex">
+        <aside
+          className={cn(
+            'sticky top-0 hidden h-screen shrink-0 flex-col bg-[var(--color-primary-600)] md:flex',
+            // 200ms ease-out, per CLAUDE.md §2's 150-250ms band. Only `width`
+            // is transitioned, not `all`: the rail contains a sticky element
+            // and a dozen colour transitions already, and animating everything
+            // makes the collapse feel mushy rather than crisp.
+            'transition-[width] duration-200 ease-out',
+            collapsed ? 'w-16' : 'w-64',
+          )}
+        >
           <SidebarContent
             user={user}
             pathname={pathname}
             onSignOut={signOut}
             signingOut={signingOut}
+            collapsed={collapsed}
+            onToggleCollapse={toggleCollapsed}
           />
         </aside>
 
