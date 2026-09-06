@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { Button } from '@jobportal/ui';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 // Layer 3 of the killswitch enforcement (CLAUDE.md §4 + SRS §4.5.5). The
 // parent server component does NOT render this button when the killswitch is
@@ -17,7 +17,7 @@ export function SendTestButton({ id }: { id: number }) {
     setBusy(true);
     setMsg(null);
     try {
-      const res = await fetch(`${API_URL}/me/alerts/${id}/test`, {
+      const res = await apiFetch(`/me/alerts/${id}/test`, {
         method: 'POST',
         credentials: 'include',
       });

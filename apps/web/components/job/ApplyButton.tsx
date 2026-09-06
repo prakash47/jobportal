@@ -6,8 +6,8 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@jobportal/ui';
 import { Check } from '@jobportal/ui/icons';
 import { EVENTS, track } from '../../lib/analytics/posthog';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export interface ApplyQuotaState {
   count: number;
@@ -114,7 +114,7 @@ export function ApplyButton({
     setError(null);
     setNeedsResume(false);
     try {
-      const res = await fetch(`${API_URL}/me/applications`, {
+      const res = await apiFetch(`/me/applications`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

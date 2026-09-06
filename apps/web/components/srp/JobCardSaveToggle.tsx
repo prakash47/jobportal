@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { IconButton } from '@jobportal/ui';
 import { Bookmark, BookmarkCheck } from '@jobportal/ui/icons';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 // Compact save toggle for JobCard. Anonymous click bounces to /login?next=
 // pointing back to the current page so the user comes back to the same SRP
@@ -48,7 +48,7 @@ export function JobCardSaveToggle({
     setBusy(true);
     setSaved(target); // optimistic
     try {
-      const res = await fetch(`${API_URL}/me/saved-jobs/${jobId}`, {
+      const res = await apiFetch(`/me/saved-jobs/${jobId}`, {
         method: target ? 'POST' : 'DELETE',
         credentials: 'include',
       });

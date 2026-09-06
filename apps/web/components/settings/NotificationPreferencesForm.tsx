@@ -3,8 +3,8 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@jobportal/ui';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export interface NotificationPreferences {
   jobAlertsEnabled: boolean;
@@ -68,7 +68,7 @@ export function NotificationPreferencesForm({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/me/notifications`, {
+      const res = await apiFetch(`/me/notifications`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

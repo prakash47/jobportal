@@ -4,8 +4,8 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Checkbox, cn, toast } from '@jobportal/ui';
 import { SavedJobRow, type SavedJobRowData } from './SavedJobRow';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 // Owns the two things the server rows cannot: which rows are selected, and the
 // undo affordance after a removal.
@@ -47,7 +47,7 @@ export function SavedJobsList({ rows }: SavedJobsListProps) {
   async function removeJobs(jobIds: number[]): Promise<number[]> {
     const removed: number[] = [];
     for (const jobId of jobIds) {
-      const res = await fetch(`${API_URL}/me/saved-jobs/${jobId}`, {
+      const res = await apiFetch(`/me/saved-jobs/${jobId}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -60,7 +60,7 @@ export function SavedJobsList({ rows }: SavedJobsListProps) {
 
   async function restoreJobs(jobIds: number[]): Promise<void> {
     for (const jobId of jobIds) {
-      await fetch(`${API_URL}/me/saved-jobs/${jobId}`, {
+      await apiFetch(`/me/saved-jobs/${jobId}`, {
         method: 'POST',
         credentials: 'include',
       });
