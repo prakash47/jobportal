@@ -6,6 +6,21 @@ import { normalizeQuery, stripTrailingSlash } from '../url/normalize';
 //
 // Trailing slash is removed even though next.config has trailingSlash:false —
 // belt + braces in case a caller hand-builds an off-canon URL.
+
+/**
+ * Params that are UI state, not content — excluded from the canonical URL.
+ *
+ * Distinct from TRACKING_PARAMS in url/normalize.ts, and the difference matters:
+ * a tracking param is 301'd out of the address bar entirely by the middleware,
+ * so the page never sees it. These must SURVIVE the redirect (the page reads
+ * them) while still being absent from the canonical, or one job posting would
+ * advertise a different canonical URL per entry point and split its own ranking
+ * signals.
+ *
+ * `from` marks where the visitor came from, so /job/x and /job/x?from=applications
+ * are the same document and must say so.
+ */
+const NON_CANONICAL_PARAMS = new Set(['from']);
 export function buildCanonical(
   pathname: string,
   search?: string | URLSearchParams,
@@ -27,6 +42,7 @@ export function buildCanonical(
   let queryString = '';
   if (params) {
     const { searchParams } = normalizeQuery(params);
+    for (const key of NON_CANONICAL_PARAMS) searchParams.delete(key);
     const s = searchParams.toString();
     if (s) queryString = `?${s}`;
   }

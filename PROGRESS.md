@@ -916,6 +916,24 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/applications-back-navigation` - RPT #6: no way back from job / company detail - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). Last of the seven Applications-page reports.
+
+**The constraint that shaped the whole fix**: `/job/[slug]` and `/company/[handle]` are **public pages**. Most of their traffic arrives from Google, the search results page or a shared link, and those visitors have no applications list to go back to. An unconditional "Back to applications" would be a dead end for the majority in order to serve a minority, so the link is **conditional**: the applications list marks its outgoing links with `?from=applications`, and the destination renders the link only when it sees that.
+
+**Two traps found by reading the code rather than by testing after the fact:**
+
+1. **`?ref=` would have vanished silently.** `ref` is in `TRACKING_PARAMS` (`lib/url/normalize.ts:13`), and the middleware **301s tracking params out of the URL** before the page ever runs. The obvious param name would have produced a link that worked locally in a component test and never once worked in the browser. `from` is not in that set, so it survives.
+
+2. **The marker would have split the page's SEO.** The root layout builds a self-referencing `<link rel="canonical">` from the live query string, so `?from=applications` would have given one job posting two canonical URLs and divided its own ranking signals. Fixed by introducing `NON_CANONICAL_PARAMS` in `lib/seo/canonical.ts` — a set **distinct from** `TRACKING_PARAMS`, and the distinction is the point: a tracking param is redirected away so the page never sees it, whereas these must survive the redirect (the page reads them) while still being absent from the canonical. Covered by two new tests in `canonical.test.ts`.
+
+The component takes a whitelist rather than a boolean, so an unrecognised `?from=` value renders nothing rather than a mislabelled link, and adding a second origin later is one entry.
+
+**Verified live, all four cases**: job page **with** the marker renders the link, **without** it does not; company page with the marker renders it; and both pages emit the **identical canonical** — `.../job/kirana-stack-lead-engineer-merchant-app-100026`, with no `?from=` — whether the marker is present or not.
+
+⚠️ **An unrelated dev-server wedge cost time here and is worth recording.** The web dev server began returning 500s with `Jest worker encountered 2 child process exceptions` and a flood of `write EPIPE`, on a page whose code compiled cleanly. It was not the change: killing the process holding port 3000, clearing `apps/web/.next` and restarting fixed it completely. Same class as the Turbopack panic recorded earlier in this project — **when a dev-server error mentions worker exceptions or EPIPE, clear `.next` before debugging the code.**
+
 ### `feature/applications-expanded-details` - RPT #4, #5: what was submitted, and what the job was - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). **No schema change** — every field needed already existed and was simply never selected.

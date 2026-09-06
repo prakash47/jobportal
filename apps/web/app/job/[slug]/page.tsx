@@ -19,6 +19,7 @@ import {
 } from '../../../components/job';
 // RelatedRoles is server-only (ES + Prisma) — deep import, not via the barrel.
 import { RelatedRoles } from '../../../components/job/RelatedRoles';
+import { BackToApplications } from '../../../components/job/BackToApplications';
 import { readApplied, readSaved, readUserFromCookie } from '../../../lib/job';
 import { canViewJob } from '@jobportal/domain/job-visibility';
 import { readApplyQuota } from '../../../lib/applications/quota-state';
@@ -35,6 +36,7 @@ export const revalidate = 60;
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }
 
 async function loadJob(id: number) {
@@ -76,8 +78,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default async function JobDetailPage({ params }: PageProps) {
+export default async function JobDetailPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
+  // Where the visitor came from, so the page can offer a way back. Absent for
+  // the vast majority of this page's traffic, which arrives from search.
+  const sp = searchParams ? await searchParams : {};
+  const cameFrom = Array.isArray(sp['from']) ? sp['from'][0] : sp['from'];
   const parsed = parseJobSlug(slug);
   if (!parsed) notFound();
 
@@ -231,6 +237,8 @@ export default async function JobDetailPage({ params }: PageProps) {
         />
 
         <div className="space-y-6">
+        <BackToApplications from={cameFrom} />
+
         <Breadcrumbs
           items={[{ label: 'Home', href: '/' }, { label: 'Jobs', href: '/jobs' }, { label: job.title }]}
         />
