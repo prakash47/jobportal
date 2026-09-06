@@ -1,15 +1,23 @@
 import { prisma, type Prisma } from '@jobportal/db';
 import { requireUser } from '../../lib/auth/require-user';
 import { PageHeader } from '../../components/dashboard/PageHeader';
-import { ContentCard } from '../../components/dashboard/ContentCard';
 import { Pagination } from '../../components/dashboard/Pagination';
-import { SavedJobRow, SavedJobsEmpty, SavedJobsToolbar } from '../../components/saved-jobs';
+import { SavedJobsEmpty, SavedJobsList, SavedJobsToolbar } from '../../components/saved-jobs';
 import { readSort, type SortValue } from '../../lib/saved-jobs/sort';
 
 // 10, matching the applications list. Also makes pagination discoverable — it
 // hides itself at a single page, so a 20 page size meant most accounts never
 // saw the control at all.
 const PAGE_SIZE = 10;
+
+// Fixed IST zone so the server render and any client re-render agree on the day.
+const fmtSavedAt = (d: Date) =>
+  d.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  });
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -164,20 +172,20 @@ export default async function SavedJobsPage({ searchParams }: PageProps) {
       {rows.length === 0 ? (
         <SavedJobsEmpty />
       ) : (
-        <ContentCard className="divide-y divide-[var(--color-border)] overflow-hidden">
-          {rows.map((r) => (
-            <SavedJobRow
-              key={r.jobId}
-              jobId={r.jobId}
-              savedAt={r.savedAt}
-              job={r.job}
-              cityNames={r.cityNames}
-              applied={r.applied}
-              appliedStatus={r.appliedStatus}
-              applicationId={r.applicationId}
-            />
-          ))}
-        </ContentCard>
+        <SavedJobsList
+          rows={rows.map((r) => ({
+            jobId: r.jobId,
+            // Formatted on the SERVER: the row is a client component now, and
+            // formatting a date on both sides of the boundary is how an
+            // ICU/timezone difference becomes a hydration mismatch.
+            savedAtLabel: fmtSavedAt(r.savedAt),
+            job: r.job,
+            cityNames: r.cityNames,
+            applied: r.applied,
+            appliedStatus: r.appliedStatus,
+            applicationId: r.applicationId,
+          }))}
+        />
       )}
 
       {/* Both params threaded through, or "Older" would silently drop the search

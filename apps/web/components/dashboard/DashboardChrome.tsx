@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Button,
+  Toaster,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -523,6 +524,16 @@ export function DashboardChrome({
         letting the user close the dialog in that window would show them a
         working-looking page that is already navigating away.
       */}
+      {/*
+        Mounted here, not in the root layout. The Toast primitive has existed in
+        packages/ui since it was written and was used by NOTHING — its own
+        comment says "mount <Toaster /> once at AppShell", which never happened.
+        The dashboard shell is the right scope: it covers every authed page that
+        needs a toast, while keeping sonner out of the bundle for the public
+        marketing and SEO pages, which have no use for it.
+      */}
+      <Toaster />
+
       <Dialog
         open={confirmSignOut}
         onOpenChange={(next) => {
