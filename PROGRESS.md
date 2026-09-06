@@ -916,6 +916,24 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/signout-dialog-polish` - the sign-out dialog looked unfinished - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). Owner review of `feature/signout-confirmation`: the panel "is looking too odd and simple".
+
+**The diagnosis was proportion and content, not decoration.** The dialog inherited the primitive's `max-w-lg` — **512px** — to hold a four-word title and two lines of copy. A box sized to the widest option available rather than to its content is exactly what reads as unfinished. Narrowed to `sm:max-w-md`; measured **448 x 294px**, which is a normal confirmation proportion rather than a mostly-empty rectangle.
+
+**The substantive change is that it now says WHICH account.** A bordered row carries the initials disc, the display name and the email. That is what Google, GitHub and Stripe all show at this moment, and it matters most to the people most likely to mis-click the button in the first place: anyone signed into more than one account. It turns a generic prompt into a specific one.
+
+**A `LogOut` glyph in a neutral disc** anchors the header. Deliberately neutral (`--color-bg-muted` / `--color-fg-muted`) rather than a red or amber alert badge — the same reasoning that made the confirm button `primary`: signing out destroys nothing, and a warning colour here would overstate it. CLAUDE.md §2 throughout: bordered not shadowed, one accent used sparingly, no gradients, no illustration.
+
+The email in the account row carries the same `truncate` + `title` treatment as the sidebar footer. It does not clip at 448px for this address, but addresses have no useful upper bound and the row is narrower than it looks once the 36px disc is subtracted.
+
+**The shared `Dialog` primitive was NOT modified** — everything is done through `className` and better-structured children, so no other consumer of it changed.
+
+**Verified live**: 448x294 desktop; dark mode measured rather than eyeballed (name **14.46:1**, email **10.21:1**, icon **10.21:1**, all clear of AA) with the account row lifting correctly off the dialog surface; mobile full-width at 375px with no horizontal overflow and 325px stacked buttons.
+
+⚠️ The paused-compositor artefact appeared again — the dialog measured **50px** wide mid-`zoom-in-95`. Disabling the animation before measuring gives the true 448px. Fourth occurrence today; the note is already in `feature/sidebar-collapse`.
+
 ### `feature/signout-confirmation` - sign-out asks before it acts - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.** Owner request: the sidebar sign-out button "should always display a popup panel for confirmation".

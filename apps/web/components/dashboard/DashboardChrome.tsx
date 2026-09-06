@@ -496,14 +496,60 @@ export function DashboardChrome({
           setConfirmSignOut(next);
         }}
       >
-        <DialogContent>
+        {/* max-w-md, down from the primitive's max-w-lg (512px). Two lines of
+            copy centred in a 512px box is what made this read as unfinished —
+            a short confirmation needs a box sized to its content, not the
+            widest one available. */}
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
+            {/* Neutral, not coloured. A red or amber badge here would say
+                "danger", and signing out is not destructive — the same reason
+                the confirm button is `primary`. CLAUDE.md §2: calm, restrained,
+                one accent used sparingly. */}
+            <span
+              aria-hidden="true"
+              className="mb-1 flex size-10 items-center justify-center rounded-full bg-[var(--color-bg-muted)] text-[var(--color-fg-muted)]"
+            >
+              <LogOut className="size-5" />
+            </span>
             <DialogTitle>Sign out?</DialogTitle>
             <DialogDescription>
               You&rsquo;ll need to sign in again to see your applications, saved jobs and
               alerts. Nothing is deleted.
             </DialogDescription>
           </DialogHeader>
+
+          {/* WHICH account. This is the part that turns a generic prompt into a
+              specific one, and it is what Google, GitHub and Stripe all show
+              here — it matters most to the people most likely to mis-click:
+              anyone signed into more than one account. Bordered rather than
+              shadowed, per §2. */}
+          <div className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-muted)] px-3 py-2.5">
+            <span
+              aria-hidden="true"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-accent-500)] text-[13px] font-medium text-[var(--color-primary-950)]"
+            >
+              {initials(user.name)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div
+                title={user.name}
+                className="truncate text-sm font-medium text-[var(--color-fg)]"
+              >
+                {user.name}
+              </div>
+              {/* Same truncate + title treatment as the sidebar footer: the
+                  dialog is narrower than it looks once the disc is subtracted,
+                  and addresses have no useful upper bound. */}
+              <div
+                title={user.email}
+                className="truncate text-xs text-[var(--color-fg-muted)]"
+              >
+                {user.email}
+              </div>
+            </div>
+          </div>
+
           <DialogFooter>
             <Button
               variant="secondary"
