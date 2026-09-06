@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { cn } from '@jobportal/ui';
 import { ChevronDown, Building2, Clock, FileText, MapPin } from '@jobportal/ui/icons';
@@ -21,6 +21,11 @@ export interface ApplicationRowProps {
   /** Pre-formatted on the server so SSR and hydration can't disagree (ICU/TZ). */
   appliedAtLabel: string;
   history: HistoryEntry[];
+  /**
+   * Arrived here via a deep link to THIS application (?app=<id>), so open the
+   * panel and scroll to it. Set by the page, never by the user.
+   */
+  deepLinked?: boolean;
   job: {
     title: string;
     canonicalSlug: string;
@@ -71,14 +76,39 @@ export function ApplicationRow({
   job,
   coverLetter,
   resume,
+  deepLinked = false,
 }: ApplicationRowProps) {
-  const [open, setOpen] = useState(false);
+  // Starts open when deep-linked, so the panel is expanded in the first paint
+  // rather than snapping open after hydration.
+  const [open, setOpen] = useState(deepLinked);
   const panelId = useId();
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  // Bring the linked row into view. Deliberately NOT an anchor/hash: the row is
+  // often on page 2 or lower, and the browser can only jump to an anchor that is
+  // already in the document — the page has to resolve which page holds it first
+  // (see readAppId in app/applications/page.tsx), and by then a scroll is all
+  // that is left to do.
+  useEffect(() => {
+    if (!deepLinked) return;
+    rowRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [deepLinked]);
   const canWithdraw = !TERMINAL.has(status);
   const steps = buildSteps(appliedAtIso, history, status);
 
   return (
-    <div className="px-4 py-4 transition-colors hover:bg-[var(--color-bg)] sm:px-5">
+    <div
+      ref={rowRef}
+      className={cn(
+        'px-4 py-4 transition-colors sm:px-5',
+        // A ring rather than a background tint: the panel below already changes
+        // the row's shape, and tinting it too would read as a selected state
+        // that never clears.
+        deepLinked
+          ? 'ring-2 ring-inset ring-[var(--color-ring)]'
+          : 'hover:bg-[var(--color-bg)]',
+      )}
+    >
       {/* `relative` scopes the title's ::after overlay to THIS top row only, so
           clicking the row opens the job but the expandable timeline panel below
           (a sibling) stays free. The company link + actions get z-10 to sit

@@ -916,6 +916,30 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/application-deep-link` - Saved jobs RPT #7, done properly this time - 2026-09-07
+
+CLI merge to `develop` (`--no-ff`). The owner rejected the first attempt, correctly, on two counts: clicking the pill did not open the specific application, and the pill did not look clickable.
+
+**What the first attempt actually did**: linked to `/applications?status=<STATUS>`, which merely *filtered the list*. The user still had to find their row — and if it sat past page one, the link did not even show it. That satisfied the letter of "navigate to Applications" and none of the intent.
+
+**Now `?app=<id>`, which resolves to the row and opens it.**
+
+The hard part is pagination: the target is very often not on page 1, and a hash anchor cannot help because the browser can only jump to something already in the document. So the page **computes which page holds the row** — `positionFilter()` counts the rows that sort *before* the target under the current `orderBy`, and the page number falls out of that count.
+
+`positionFilter` has a branch per sort mode, each mirroring its `orderBy` exactly; getting one backwards lands the link a page off, which only shows up once a list outgrows one page. Each branch carries an **`id` tiebreak** because `appliedAt` has second resolution — two applications sent in the same second would otherwise have an ambiguous position, and the count could disagree with the page the row actually renders on.
+
+An explicit `?page=` always wins, so paging around after arriving is not fought.
+
+**The row opens in the first paint** (`useState(deepLinked)`, not an effect), scrolls itself to centre, and takes a ring rather than a background tint — the expanded panel already changes the row's shape, and tinting would read as a selected state that never clears.
+
+**The pill now looks like a control**: border, hover lift, pointer cursor, and a chevron that nudges right on hover. As a bare `StatusPill` inside a `Link` it had *no* affordance — visually identical to the non-interactive pills on the applications list, which is exactly why it read as disabled.
+
+**Verified live, including the cases that matter:**
+- Clicked "Applied ›" on *Senior Backend Engineer (Go)* -> landed on `?app=1858` with **the same job** expanded and highlighted.
+- `?app=1903` (the 13th row) -> **Page 2 of 2**, one row expanded, one highlighted, scrolled into view, Progress timeline visible.
+- Every `positionFilter` branch exercised by hand-crafted URLs (`recent` -> page 2, `oldest` -> page 1, `company` -> page 1); the target renders on whatever page it resolves to in all three.
+- A bogus id and **another user's application id** both resolve to nothing and render page 1 normally - the lookup is scoped by `userId`, so an id belonging to someone else cannot even confirm it exists.
+
 ### `bugfix/session-refresh-recruiter-sadmin` - the same 15-minute session death in the other two apps - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). Owner instruction to apply `bugfix/session-refresh-on-401` to `apps/recruiter` and `apps/sadmin`, **explicitly overriding the usual "notice, never edit another surface" rule** for this fix.
