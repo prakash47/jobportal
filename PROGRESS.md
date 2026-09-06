@@ -916,6 +916,30 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `chore/applications-rejected-filter-investigation` - RPT: "add a Rejected filter pill" - already there - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). **No code change.** Recorded because a verified "this already works" is worth as much as a fix, and re-investigating it in three months would cost the same hour again.
+
+**The report**: *"Include a 'Rejected' or 'Archived' filter pill so candidates can view past unselected applications."*
+
+**The pill already exists.** `StatusFilter.tsx` declares all eight statuses including `REJECTED` and `WITHDRAWN`, and `applications/page.tsx` already accepts every one of them via `?status=`. What the tester hit is this line:
+
+```ts
+if (count === 0 && !active && f.value !== 'ALL') return null;
+```
+
+Zero-count pills are hidden, and **the test account had no rejected applications** — its 19 split 11/5/2/1 across Applied, In review, Shortlisted and Interviewed.
+
+**Proven rather than assumed.** Flipping one of that account's applications to `REJECTED` in the local DB made the **"Rejected 1"** pill appear immediately, the row rendered with a red Rejected badge, and the Withdraw action was correctly suppressed (`REJECTED` is terminal in `state-machine.ts`). The row was restored to `APPLIED` afterwards and the account is back to its original 11/5/2/1.
+
+`REJECTED` is not a dead status either — unlike the `Candidate.profileViews` case found earlier the same day. It is a terminal state in the application state machine, accepted by `applications/dto.ts`, and **3 applications across the database already hold it**.
+
+**The zero-count hiding rule was examined and judged correct**, not merely tolerated: showing a candidate "Rejected 0" would be noise at best and discouraging at worst, and the pill appears the moment it means something. The one case the pill cannot reach — a hand-typed `?status=WITHDRAWN` with no matches — was checked too and is handled: the active zero-count pill *is* rendered (the `!active` exception), with a "Nothing matches this filter" empty state and a "Browse all jobs" escape.
+
+**Nothing shipped, deliberately.** The only change that would satisfy the report literally is to stop hiding zero-count pills, which would make every candidate's filter row eight chips long to solve a problem that solves itself.
+
+⚠️ **"Archived" is a different feature and does not exist.** The report offered it as an alternative, and no archive concept exists anywhere in the schema or UI. If the owner wants applications the candidate can hide from their own list, that is a real feature — a new column and UI, not a filter pill — and should be requested as one.
+
 ### `feature/signout-warning-treatment` - sign-out reads as a warning - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). Owner instruction, **reversing the neutral treatment two branches earlier**: make the sidebar button and the dialog read as a warning "so the seeker gets confirmed first".
