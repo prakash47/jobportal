@@ -12,6 +12,7 @@ import {
 } from '../../lib/broadcasts/format';
 import type { BroadcastDetail, PreviewCountResult } from '../../lib/broadcasts/types';
 import { API_URL, FIELD_CLASS, describeApiError } from './shared';
+import { apiFetch } from '../../lib/api/fetch';
 
 /** Mirrors the API's DTO ceilings so the fields cannot overrun them. */
 const SUBJECT_MAX = 150;
@@ -85,7 +86,7 @@ export function BroadcastComposer({ initial }: { initial?: BroadcastDetail }) {
     setPreview(null);
     void (async () => {
       try {
-        const res = await fetch(`${API_URL}/admin/broadcasts/preview-count`, {
+        const res = await apiFetch(`/admin/broadcasts/preview-count`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },

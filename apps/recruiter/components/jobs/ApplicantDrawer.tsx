@@ -5,8 +5,8 @@ import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Label, Textarea } from '@jobportal/ui';
 import { X } from '@jobportal/ui/icons';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 type ApplicationStatus =
   | 'APPLIED'
@@ -106,8 +106,7 @@ export function ApplicantDrawer({ open, onOpenChange, applicant }: ApplicantDraw
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(
-        `${API_URL}/recruiter/applications/${applicant.id}/transition`,
+      const res = await apiFetch(`/recruiter/applications/${applicant.id}/transition`,
         {
           method: 'POST',
           credentials: 'include',
@@ -132,7 +131,7 @@ export function ApplicantDrawer({ open, onOpenChange, applicant }: ApplicantDraw
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/recruiter/applications/${applicant.id}/notes`, {
+      const res = await apiFetch(`/recruiter/applications/${applicant.id}/notes`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -151,8 +150,7 @@ export function ApplicantDrawer({ open, onOpenChange, applicant }: ApplicantDraw
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(
-        `${API_URL}/recruiter/applications/${applicant.id}/resume`,
+      const res = await apiFetch(`/recruiter/applications/${applicant.id}/resume`,
         { credentials: 'include' },
       );
       if (!res.ok) {

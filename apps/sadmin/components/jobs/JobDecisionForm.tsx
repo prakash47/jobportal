@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Textarea } from '@jobportal/ui';
+import { apiFetch } from '../../lib/api/fetch';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -30,7 +31,7 @@ export function JobDecisionForm({ jobId }: { jobId: number }) {
     setBusy(decision);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/admin/jobs/${jobId}`, {
+      const res = await apiFetch(`/admin/jobs/${jobId}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

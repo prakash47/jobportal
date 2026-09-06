@@ -1,8 +1,12 @@
 // Tiny fetch wrapper that points at the BFF and forwards cookies. Mirror of
 // apps/web/lib/profile/api-client.ts — keeps the API URL + credentials handling
 // in one place so client components don't repeat the boilerplate.
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+//
+// Routes through apiFetch, so an expired 15-minute access cookie refreshes and
+// retries instead of surfacing "No access token". Nearly every recruiter API
+// call already goes through this file, which is why the fix lands here rather
+// than in eleven components.
+import { apiFetch } from './api/fetch';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -20,9 +24,8 @@ const NETWORK_ERROR = {
 export async function api<T>(path: string, init: RequestInit = {}): Promise<ApiResult<T>> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    res = await apiFetch(`${path}`, {
       ...init,
-      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...(init.headers ?? {}),
@@ -51,10 +54,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<ApiR
 export async function apiMultipart<T>(path: string, formData: FormData): Promise<ApiResult<T>> {
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, {
+    res = await apiFetch(`${path}`, {
       method: 'POST',
       body: formData,
-      credentials: 'include',
     });
   } catch {
     return NETWORK_ERROR;

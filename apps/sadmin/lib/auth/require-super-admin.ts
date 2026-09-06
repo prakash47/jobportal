@@ -57,10 +57,17 @@ export type AdminStaffSession = {
  * resolved permission map down to the nav without a second query.
  *
  * The staff row is read here rather than trusted from the token for the same
- * reason AdminGuard reads it: this portal never calls /auth/refresh, so a
- * privilege baked into the 15-minute access token could not be revoked at all
- * before it expired. One indexed read on a unique key makes revocation take
- * effect on the staffer's next navigation.
+ * reason AdminGuard reads it: a privilege baked into the access token cannot be
+ * revoked before that token expires. One indexed read on a unique key makes
+ * revocation take effect on the staffer's next navigation.
+ *
+ * This mattered even more than the original note assumed. That note said "this
+ * portal never calls /auth/refresh", treating the 15-minute token lifetime as
+ * the outer bound on a stale privilege. As of
+ * bugfix/session-refresh-recruiter-sadmin the portal DOES refresh, so the
+ * session now renews for as long as the 30-day refresh token lives — and this
+ * per-navigation read is the only thing that revokes a privilege at all.
+ * Do not replace it with a token claim.
  */
 export async function requireAdminStaff(): Promise<AdminStaffSession> {
   const user = await readUserFromCookie();

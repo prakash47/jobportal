@@ -1,15 +1,19 @@
 // Tiny fetch wrapper that points at the BFF and forwards cookies. Keeps the
 // API URL handling in one place so routes don't repeat the same boilerplate.
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+//
+// Routes through apiFetch, so a 15-minute-expired access cookie refreshes and
+// retries rather than surfacing "No access token". This file was MISSED by the
+// first pass of bugfix/session-refresh-on-401 — that sweep grepped
+// apps/web/components and apps/web/app but not apps/web/lib, so every caller of
+// this helper kept the original bug for one commit.
+import { apiFetch } from '../api/fetch';
 
 export async function api<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<{ ok: true; data: T } | { ok: false; status: number; message: string }> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await apiFetch(`${path}`, {
     ...init,
-    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(init.headers ?? {}),
@@ -36,10 +40,9 @@ export async function apiMultipart<T>(
   path: string,
   formData: FormData,
 ): Promise<{ ok: true; data: T } | { ok: false; status: number; message: string }> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await apiFetch(`${path}`, {
     method: 'POST',
     body: formData,
-    credentials: 'include',
   });
   let body: unknown;
   try {

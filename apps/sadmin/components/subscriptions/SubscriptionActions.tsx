@@ -16,6 +16,7 @@ import {
 import { formatInrFromPaise } from '../../lib/subscriptions/format';
 import { FIELD_CLASS, describeApiError } from './shared';
 import type { PlanOption } from './CompPlanDialog';
+import { apiFetch } from '../../lib/api/fetch';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -117,7 +118,7 @@ export function SubscriptionActions({
     setLoading(true);
     let res: Response;
     try {
-      res = await fetch(`${API_URL}/admin/billing/subscriptions/${subscriptionId}`, {
+      res = await apiFetch(`/admin/billing/subscriptions/${subscriptionId}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

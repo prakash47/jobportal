@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 // Soft cap used only to scale the visual bar — not a real ceiling on reach.
 const BAR_CAP = 25;
@@ -32,7 +32,7 @@ export function ReachMeter({ skillIds, cityId, experienceMonths }: ReachMeterPro
       if (skillKey) params.set('skillIds', skillKey);
       if (cityId !== '') params.set('cityId', String(cityId));
       if (experienceMonths !== null) params.set('experienceMonths', String(experienceMonths));
-      fetch(`${API_URL}/recruiter/jobs/reach?${params.toString()}`, {
+      apiFetch(`/recruiter/jobs/reach?${params.toString()}`, {
         credentials: 'include',
         signal: ctrl.signal,
       })

@@ -8,8 +8,8 @@ import type { JobType } from '../../lib/job-types';
 import { NEUTRAL_ON_ANY_SURFACE } from '../badge-surface';
 import { SalaryTrendsPanel } from './SalaryTrendsPanel';
 import { ReachMeter } from './ReachMeter';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 interface CatalogueEntry {
   id: number;
@@ -317,7 +317,7 @@ export function PostJobWizard({
     if (salaryMax !== null) body['salaryMaxPaise'] = salaryMax;
 
     try {
-      const res = await fetch(`${API_URL}/recruiter/jobs`, {
+      const res = await apiFetch(`/recruiter/jobs`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -395,7 +395,7 @@ export function PostJobWizard({
     }
 
     try {
-      const res = await fetch(`${API_URL}/recruiter/jobs/${jobId}`, {
+      const res = await apiFetch(`/recruiter/jobs/${jobId}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

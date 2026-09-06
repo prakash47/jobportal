@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import type { SupportTicketStatus } from '@jobportal/db';
 import { Button, Textarea } from '@jobportal/ui';
 import { SUPPORT_STATUS_LABEL, canReply } from '../../lib/support/format';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 /** The maximum the API's StaffReplyDto accepts. Mirrored so the box cannot overrun it. */
 const REPLY_MAX = 5000;
@@ -105,7 +105,7 @@ export function SupportTicketActions({
     setLoading(kind);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}${path}`, {
+      const res = await apiFetch(`${path}`, {
         method: kind === 'status' ? 'PATCH' : 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

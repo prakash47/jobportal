@@ -15,6 +15,7 @@ import {
   Textarea,
 } from '@jobportal/ui';
 import { Loader2 } from '@jobportal/ui/icons';
+import { apiFetch } from '../../lib/api/fetch';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -130,7 +131,7 @@ export function ReportDecisionForm({
     setLoading(true);
     let res: Response;
     try {
-      res = await fetch(`${API_URL}/admin/reports/${reportId}`, {
+      res = await apiFetch(`/admin/reports/${reportId}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

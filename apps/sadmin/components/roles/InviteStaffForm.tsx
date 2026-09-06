@@ -8,7 +8,8 @@ import {
   ASSIGNABLE_ADMIN_STAFF_ROLES,
   type AssignableAdminStaffRole,
 } from '@jobportal/domain/admin-permissions';
-import { API_URL, FIELD_CLASS, describeApiError } from './shared';
+import { FIELD_CLASS, describeApiError } from './shared';
+import { apiFetch } from '../../lib/api/fetch';
 
 /**
  * Invite someone to become platform staff.
@@ -51,7 +52,7 @@ export function InviteStaffForm() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/admin/staff/invite`, {
+      const res = await apiFetch(`/admin/staff/invite`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

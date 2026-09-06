@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Download, Loader2 } from '@jobportal/ui/icons';
+import { apiFetch } from '../../lib/api/fetch';
 
 // In-app invoice download. A plain <a href> to the cross-origin BFF would
 // top-level-navigate the tab to raw JSON on any error (a 15-min access token
@@ -10,7 +11,6 @@ import { Download, Loader2 } from '@jobportal/ui/icons';
 // a client-side download, and surface errors in place (matching how the rest of
 // the recruiter app degrades on an expired session).
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export function InvoiceDownloadButton({
   invoiceId,
@@ -26,7 +26,7 @@ export function InvoiceDownloadButton({
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/recruiter/billing/invoices/${invoiceId}/download`, {
+      const res = await apiFetch(`/recruiter/billing/invoices/${invoiceId}/download`, {
         credentials: 'include',
       });
       if (!res.ok) {
