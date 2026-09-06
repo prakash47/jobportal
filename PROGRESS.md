@@ -916,6 +916,20 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/signout-warning-treatment` - sign-out reads as a warning - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). Owner instruction, **reversing the neutral treatment two branches earlier**: make the sidebar button and the dialog read as a warning "so the seeker gets confirmed first".
+
+The argument against colouring a reversible action as destructive is recorded in `bugfix/signout-dialog-polish` and is not re-run here. The owner's counter is the one that decides it: losing a session mid-application is a real cost to a job seeker even though the account survives, and a colour that makes people stop is worth spending for that.
+
+**The sidebar icon is red, but the colour is MIXED toward white rather than bare `--color-danger`.** Measured against the navy rail (rgb 25/34/73), the bare token is only **3.48:1** — it scrapes the 3:1 floor and reads muddy on dark navy. At 40% white it is **6.79:1**, comparable to the white/70 nav icons above it, so it signals weight without looking broken or dimmer than its neighbours. Verified rendered: rgb(250,142,134), unmistakably red.
+
+**Hover could not be carried by a background tint**, and that was measured before trying: a translucent red over navy is **1.07-1.20:1** at every usable alpha — invisible, the same lesson `bugfix/sidebar-active-state` learned about `bg-white/10`. So hover brightens the icon and the tint is only a supporting cue.
+
+**The dialog** gets a danger-tinted disc (a wash, not a solid fill — the glyph has to read ON it, and a saturated fill would make this the loudest thing on a screen whose job is to ask a calm question) and a `danger` confirm button. The disc self-corrects across themes because it mixes with `--color-bg-elevated`: glyph measures **3.79:1** light and **3.64:1** dark, both clear of the 3:1 floor.
+
+⚠️ **A pre-existing accessibility gap surfaced, and it is NOT in this change.** The shared `Button` `danger` variant is `bg-[var(--color-danger)] text-white`, which measures **4.41:1** at 14px / weight 500 — under the **4.5:1** AA floor for normal text (it does not qualify as large text). It fails by 0.09 and it fails identically in both themes. This affects **every** danger button in the product, including `CriticalFlagConfirm` in the admin console, and it lives in `packages/ui` — a shared surface used by all three apps. **Not fixed here**: the fix is either darkening `--color-danger` or changing the variant, both of which change recruiter and sadmin too and are the owner's call. Raised as a WORKLOG notice.
+
 ### `bugfix/signout-dialog-polish` - the sign-out dialog looked unfinished - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). Owner review of `feature/signout-confirmation`: the panel "is looking too odd and simple".
