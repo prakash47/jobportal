@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 interface Trends {
   count: number;
@@ -30,7 +30,7 @@ export function SalaryTrendsPanel({ title, cityId }: { title: string; cityId: nu
       setState('loading');
       const params = new URLSearchParams({ title: t });
       if (cityId !== '') params.set('cityId', String(cityId));
-      fetch(`${API_URL}/recruiter/jobs/salary-trends?${params.toString()}`, {
+      apiFetch(`/recruiter/jobs/salary-trends?${params.toString()}`, {
         credentials: 'include',
         signal: ctrl.signal,
       })

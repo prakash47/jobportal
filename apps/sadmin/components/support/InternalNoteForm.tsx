@@ -7,8 +7,8 @@ import { Button, Textarea } from '@jobportal/ui';
 // cannot SEE this", not "this is encrypted". The icons barrel exports no Lock
 // anyway, and adding one to say something less precise is the wrong trade.
 import { EyeOff } from '@jobportal/ui/icons';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 /** The maximum the API's AddNoteDto accepts. Mirrored so the box cannot overrun it. */
 const NOTE_MAX = 5000;
@@ -61,7 +61,7 @@ export function InternalNoteForm({ ticketId }: { ticketId: number }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/admin/support/tickets/${ticketId}/notes`, {
+      const res = await apiFetch(`/admin/support/tickets/${ticketId}/notes`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

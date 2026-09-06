@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { TransactionTab } from '@jobportal/domain/txn-log-params';
+import { apiFetch } from '../../lib/api/fetch';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -53,7 +54,7 @@ export function ExportCsvButton({
     setError(null);
     let objectUrl: string | null = null;
     try {
-      const res = await fetch(`${API_URL}/admin/transactions/export`, {
+      const res = await apiFetch(`/admin/transactions/export`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

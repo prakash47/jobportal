@@ -916,6 +916,26 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/session-refresh-recruiter-sadmin` - the same 15-minute session death in the other two apps - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). Owner instruction to apply `bugfix/session-refresh-on-401` to `apps/recruiter` and `apps/sadmin`, **explicitly overriding the usual "notice, never edit another surface" rule** for this fix.
+
+Both apps had the identical bug: same cookies, same 15-minute access TTL, same 30-day refresh cookie, and **not one call to `/auth/refresh`** in either. A recruiter posting a job or a staffer reviewing KYC had the same fifteen minutes before everything started failing.
+
+**A gap in the previous fix was found and closed first.** `apps/web/lib/profile/api-client.ts` was **missed** by the original sweep, which grepped `apps/web/components` and `apps/web/app` but not `apps/web/lib` — so every caller of that helper kept the original bug for one commit. Fixed here.
+
+**`apps/recruiter` needed almost no surgery**, because it already had a central `lib/api-client.ts` that nearly every call goes through. Routing that one file through `apiFetch` covered most of the app; six components with direct fetches were migrated as well.
+
+**`apps/sadmin` had no such centre** — 19 scattered call sites, 14 of which were migrated.
+
+**Auth flows are excluded by name in all three apps** and were verified to contain zero `apiFetch` references: both `LoginForm`s, both `SignOutButton`s, `recruiter/lib/auth/otp-client.ts`, and `sadmin/.../AcceptInviteForm.tsx` (an unauthenticated token flow — there is no session to refresh). Retrying a 401 from `/auth/login` would turn one failed sign-in into two.
+
+⚠️ **A documented security assumption in sadmin became false and was corrected.** `require-super-admin.ts` explained that it reads the staff row from the database rather than trusting the token because *"this portal never calls /auth/refresh"*, treating the 15-minute token lifetime as the outer bound on a stale privilege. That bound is now gone — the session renews for as long as the 30-day refresh token lives, so **that per-navigation read is now the only thing that revokes an admin privilege at all**. The comment now says so, and says not to replace it with a token claim. This is the kind of change where fixing one thing quietly invalidates the reasoning behind another.
+
+**Three copies of the helper, deliberately.** There is no shared browser-only package to hold it: `packages/auth` has no subpath exports, so a `'use client'` module there would be pulled into the NestJS server bundle through its barrel. Each app therefore ships the same helper **and the same nine-test file** — so if the three drift, a test fails rather than a session silently breaking. Consolidating into a package is a follow-up.
+
+**36 call sites** now route through `apiFetch` across the three apps (web 15, recruiter 7, sadmin 14). Both new test suites pass 9/9; full gate green.
+
 ### `bugfix/session-refresh-on-401` - RPT: "No access token" when applying - the session lasted 15 minutes - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). Reported against the saved-jobs Apply button. **It was never a saved-jobs bug, and never an Apply bug.**

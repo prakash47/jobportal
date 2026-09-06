@@ -7,8 +7,8 @@ import { jobToWizardInitialValues, type JobFormSource } from '../../lib/jobs/wiz
 import { PostJobWizard, type PostJobWizardProps, type WizardInitialValues } from './PostJobWizard';
 import { JobTypeSelector } from './JobTypeSelector';
 import { TemplatePicker, type PastJobSummary } from './TemplatePicker';
+import { apiFetch } from '../../lib/api/fetch';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 type Stage = 'start' | 'template' | 'type' | 'form';
 
@@ -63,7 +63,7 @@ export function PostJobFlow({
     setLoadingId(jobId);
     setTemplateError(null);
     try {
-      const res = await fetch(`${API_URL}/recruiter/jobs/${jobId}`, {
+      const res = await apiFetch(`/recruiter/jobs/${jobId}`, {
         credentials: 'include',
         cache: 'no-store',
       });

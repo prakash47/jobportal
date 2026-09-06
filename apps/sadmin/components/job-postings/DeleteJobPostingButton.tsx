@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@jobportal/ui';
+import { apiFetch } from '../../lib/api/fetch';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 /**
@@ -84,7 +85,7 @@ export function DeleteJobPostingButton({
     setLoading(true);
     let res: Response;
     try {
-      res = await fetch(`${API_URL}/admin/jobs/${jobId}`, {
+      res = await apiFetch(`/admin/jobs/${jobId}`, {
         method: 'DELETE',
         credentials: 'include',
       });

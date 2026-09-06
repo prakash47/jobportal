@@ -15,7 +15,8 @@ import {
   type AdminPermissionMap,
 } from '@jobportal/domain/admin-permissions';
 import { OVERRIDABLE_ADMIN_MODULES } from '../../lib/roles/format';
-import { API_URL, FIELD_CLASS, describeApiError } from './shared';
+import { FIELD_CLASS, describeApiError } from './shared';
+import { apiFetch } from '../../lib/api/fetch';
 
 /**
  * Role, per-module overrides, and the deactivate/reactivate lever for one
@@ -85,7 +86,7 @@ export function StaffAccessForm({
       };
       if (role !== staffRole) body.staffRole = role;
 
-      const res = await fetch(`${API_URL}/admin/staff/${staffId}`, {
+      const res = await apiFetch(`/admin/staff/${staffId}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -112,7 +113,7 @@ export function StaffAccessForm({
     setError(null);
     const action = deactivated ? 'reactivate' : 'deactivate';
     try {
-      const res = await fetch(`${API_URL}/admin/staff/${staffId}/${action}`, {
+      const res = await apiFetch(`/admin/staff/${staffId}/${action}`, {
         method: 'POST',
         credentials: 'include',
       });

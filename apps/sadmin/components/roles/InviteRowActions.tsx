@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@jobportal/ui';
-import { API_URL, describeApiError } from './shared';
+import { describeApiError } from './shared';
+import { apiFetch } from '../../lib/api/fetch';
 
 /**
  * Resend and revoke for one pending invitation.
@@ -46,7 +47,7 @@ export function InviteRowActions({
     setLoading(action);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/admin/staff/invites/${inviteId}/${action}`, {
+      const res = await apiFetch(`/admin/staff/invites/${inviteId}/${action}`, {
         method: 'POST',
         credentials: 'include',
       });

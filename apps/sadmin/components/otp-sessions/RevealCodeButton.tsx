@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@jobportal/ui';
 import { formatTimeIst } from '../../lib/otp-sessions/format';
+import { apiFetch } from '../../lib/api/fetch';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -91,7 +92,7 @@ export function RevealCodeButton({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/admin/otp-sessions/${challengeId}/reveal`, {
+      const res = await apiFetch(`/admin/otp-sessions/${challengeId}/reveal`, {
         method: 'POST',
         credentials: 'include',
       });

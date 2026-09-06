@@ -19,7 +19,8 @@ import {
   formatCount,
 } from '../../lib/broadcasts/format';
 import type { BroadcastDetail, PreviewCountResult } from '../../lib/broadcasts/types';
-import { API_URL, describeApiError } from './shared';
+import { describeApiError } from './shared';
+import { apiFetch } from '../../lib/api/fetch';
 
 /**
  * Test-send, dispatch and cancel for one broadcast.
@@ -103,7 +104,7 @@ export function BroadcastActions({
     setPreviewState('loading');
     void (async () => {
       try {
-        const res = await fetch(`${API_URL}/admin/broadcasts/preview-count`, {
+        const res = await apiFetch(`/admin/broadcasts/preview-count`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -152,7 +153,7 @@ export function BroadcastActions({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/admin/broadcasts/${broadcast.id}/${path}`, {
+      const res = await apiFetch(`/admin/broadcasts/${broadcast.id}/${path}`, {
         method: 'POST',
         credentials: 'include',
       });
