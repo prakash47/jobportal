@@ -916,6 +916,23 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/applications-show-zero-chips` - every status chip renders, including at zero - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). **Owner instruction, reversing a judgement recorded earlier the same day.**
+
+`StatusFilter` hid any chip whose count was zero, to keep the row short. `chore/applications-rejected-filter-investigation` examined that rule and **explicitly judged it correct**, arguing that "Rejected 0" would be noise at best and discouraging at worst. That reasoning was wrong, and it took two reports from the same person to see it:
+
+1. *"Include a Rejected filter pill"* — for a filter that already existed and was merely invisible, because the reporter had no rejections.
+2. *"I cannot see any rejected applications"* — the same person, still unable to find it.
+
+**A filter that vanishes when its count is zero is indistinguishable from a filter that was never built.** The cost of that confusion is far higher than the cost of a slightly longer row, and the earlier analysis weighed tidiness against a hypothetical discouragement while missing the real failure mode sitting in front of it.
+
+**Applied to every status, not just `REJECTED`.** Singling out the one that was reported would leave exactly the same trap waiting under `Offered`, `Hired` and `Withdrawn`. All nine chips now render always.
+
+**Layout cost measured rather than assumed**: the row is `overflow-x-auto` with `w-max`, built from the start to scroll rather than wrap. Desktop — chip row scrolls internally at 1208px inside 953px while the **page does not overflow** (`scrollWidth === clientWidth`, and no element exceeds the viewport). Mobile at 375px — same result: nine chips, internal scroll, no page overflow.
+
+⚠️ **Worth remembering as a pattern, not just a fix.** Both of these reports were originally answered with "it already works", and both times that was technically true and practically useless. When a reporter cannot find a feature twice, the discoverability *is* the bug.
+
 ### `feature/applications-back-navigation` - RPT #6: no way back from job / company detail - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). Last of the seven Applications-page reports.
