@@ -212,7 +212,22 @@ function SidebarContent({
           disabled={signingOut}
           aria-label="Sign out"
           {...(collapsed ? { title: 'Sign out' } : {})}
-          className="shrink-0 rounded-md p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
+          className={cn(
+            'shrink-0 rounded-md p-1.5 transition-colors disabled:opacity-50',
+            // Warning treatment, owner's call. The colour is MIXED toward white
+            // rather than bare --color-danger: measured against the navy rail
+            // (rgb 25/34/73), the bare token is only 3.48:1 — it scrapes the
+            // 3:1 floor and reads muddy on dark navy. At 40% white it is
+            // 6.79:1, still unmistakably red and as legible as the white/70
+            // icons above it, so it signals weight without looking broken.
+            'text-[color-mix(in_oklch,var(--color-danger),white_40%)]',
+            // Hover cannot be carried by a background tint here: a translucent
+            // red over navy measures 1.07-1.20:1 at every usable alpha, i.e.
+            // invisible. So hover brightens the icon and the tint is only a
+            // supporting cue.
+            'hover:bg-[color-mix(in_oklch,var(--color-danger),transparent_82%)]',
+            'hover:text-[color-mix(in_oklch,var(--color-danger),white_15%)]',
+          )}
         >
           {signingOut ? (
             <Loader2 className="size-[18px] animate-spin" aria-hidden="true" />
@@ -506,9 +521,14 @@ export function DashboardChrome({
                 "danger", and signing out is not destructive — the same reason
                 the confirm button is `primary`. CLAUDE.md §2: calm, restrained,
                 one accent used sparingly. */}
+            {/* Warning treatment, owner's call — reversing the neutral disc
+                this shipped with. A danger-tinted wash rather than a solid red
+                fill: the glyph needs to read ON the disc, and a saturated fill
+                would make this the loudest thing on a screen whose job is to
+                ask a calm question. */}
             <span
               aria-hidden="true"
-              className="mb-1 flex size-10 items-center justify-center rounded-full bg-[var(--color-bg-muted)] text-[var(--color-fg-muted)]"
+              className="mb-1 flex size-10 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--color-danger),var(--color-bg-elevated)_88%)] text-[var(--color-danger)]"
             >
               <LogOut className="size-5" />
             </span>
@@ -558,10 +578,15 @@ export function DashboardChrome({
             >
               Cancel
             </Button>
-            {/* `primary`, not `danger`. Signing out destroys nothing and is
-                reversible by signing back in — colouring it as destructive
-                would overstate it and devalue danger where it is warranted. */}
-            <Button variant="primary" loading={signingOut} onClick={() => void signOut()}>
+            {/* `danger` on the owner's instruction, reversing the earlier
+                `primary`. The argument against it is recorded in PROGRESS.md
+                rather than re-run here: signing out is reversible, so this
+                spends some of the weight `danger` carries elsewhere. The
+                owner's counter-argument is the one that decides it — an
+                irreversible-feeling action deserves a colour that makes people
+                stop, and losing a session mid-application is a real cost to a
+                job seeker even if the account survives. */}
+            <Button variant="danger" loading={signingOut} onClick={() => void signOut()}>
               Sign out
             </Button>
           </DialogFooter>
