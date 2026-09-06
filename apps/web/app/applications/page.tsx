@@ -6,11 +6,18 @@ import { Pagination } from '../../components/dashboard/Pagination';
 import {
   ApplicationRow,
   ApplicationsEmpty,
+  ApplicationsToolbar,
   StatusFilter,
 } from '../../components/applications';
+import { readSort } from '../../lib/applications/sort';
 import type { HistoryEntry } from '../../components/applications/StatusTimeline';
 
-const PAGE_SIZE = 20;
+// 10, down from 20, on the reporter's request. It also makes the pagination
+// control DISCOVERABLE: it hides itself at a single page, so an account with
+// nineteen applications never saw it at 20-per-page and the feature looked
+// missing. Ten is the conventional dashboard-list size and halves the scroll on
+// a phone.
+const PAGE_SIZE = 10;
 
 const VALID_STATUSES: ReadonlySet<string> = new Set([
   'APPLIED',
@@ -31,6 +38,14 @@ function readPage(sp: Record<string, string | string[] | undefined>): number {
   const raw = Array.isArray(sp['page']) ? sp['page'][0] : sp['page'];
   const n = Number(raw);
   return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+}
+
+function readQuery(sp: Record<string, string | string[] | undefined>): string {
+  const raw = Array.isArray(sp['q']) ? sp['q'][0] : sp['q'];
+  // Trimmed and capped: this goes straight into a Prisma `contains`, and an
+  // unbounded string is a pointless load. 100 chars is far beyond any real job
+  // title or company name.
+  return (raw ?? '').trim().slice(0, 100);
 }
 
 function readStatus(sp: Record<string, string | string[] | undefined>): ApplicationStatus | null {
@@ -78,13 +93,43 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
   const page = readPage(sp);
   const status = readStatus(sp);
 
-  const where: Prisma.ApplicationWhereInput = { userId: session.sub };
-  if (status) where.status = status;
+  const q = readQuery(sp);
+  const sort = readSort(Array.isArray(sp['sort']) ? sp['sort'][0] : sp['sort']);
+
+  // Title OR company, case-insensitive. `contains` is a LIKE — fine against a
+  // single candidate's application count, and deliberately NOT Elasticsearch:
+  // this searches a private list of at most a few hundred rows, not the public
+  // job corpus. Built once and shared by the list query and the chip counts so
+  // the two can never disagree.
+  const jobFilter: Prisma.JobWhereInput | null = q
+    ? {
+        OR: [
+          { title: { contains: q, mode: 'insensitive' } },
+          { company: { name: { contains: q, mode: 'insensitive' } } },
+        ],
+      }
+    : null;
+
+  // Assembled with spreads rather than conditional assignment: under
+  // `exactOptionalPropertyTypes` an explicitly-undefined optional property is
+  // not the same as an absent one, and Prisma's input types reject it.
+  const where: Prisma.ApplicationWhereInput = {
+    userId: session.sub,
+    ...(status ? { status } : {}),
+    ...(jobFilter ? { job: jobFilter } : {}),
+  };
+
+  const orderBy: Prisma.ApplicationOrderByWithRelationInput =
+    sort === 'oldest'
+      ? { appliedAt: 'asc' }
+      : sort === 'company'
+        ? { job: { company: { name: 'asc' } } }
+        : { appliedAt: 'desc' };
 
   const [rows, total, grouped] = await Promise.all([
     prisma.application.findMany({
       where,
-      orderBy: { appliedAt: 'desc' },
+      orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       select: {
@@ -102,10 +147,12 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
       },
     }),
     prisma.application.count({ where }),
-    // Per-status chip counts are always the unfiltered totals.
+    // Per-status chip counts ignore the STATUS filter (so every chip shows its
+    // own total) but must respect the SEARCH — otherwise searching "Nimbus"
+    // would leave a chip reading "Shortlisted 2" above a list containing one.
     prisma.application.groupBy({
       by: ['status'],
-      where: { userId: session.sub },
+      where: { userId: session.sub, ...(jobFilter ? { job: jobFilter } : {}) },
       _count: { _all: true },
     }),
   ]);
@@ -119,7 +166,7 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
   counts['ALL'] = all;
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const filtered = status !== null;
+  const filtered = status !== null || q !== '';
 
   return (
     <div className="space-y-6">
@@ -130,11 +177,15 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
             ? filtered
               ? 'Nothing matches this filter.'
               : 'You have not applied to anything yet.'
-            : `${total} ${total === 1 ? 'application' : 'applications'}.`
+            : q
+              ? `${total} ${total === 1 ? 'application' : 'applications'} matching “${q}”.`
+              : `${total} ${total === 1 ? 'application' : 'applications'}.`
         }
       />
 
       <StatusFilter counts={counts} />
+
+      <ApplicationsToolbar resultCount={total} />
 
       {rows.length === 0 ? (
         <ApplicationsEmpty filtered={filtered} />
@@ -154,11 +205,18 @@ export default async function ApplicationsPage({ searchParams }: PageProps) {
         </ContentCard>
       )}
 
+      {/* Every active parameter is threaded through, or clicking "Older" would
+          silently drop the search and the sort and show page 2 of a different
+          list. `sort` is omitted when it is the default so the URL stays clean. */}
       <Pagination
         page={page}
         totalPages={totalPages}
         baseHref="/applications"
-        {...(status ? { params: { status } } : {})}
+        params={{
+          ...(status ? { status } : {}),
+          ...(q ? { q } : {}),
+          ...(sort !== 'recent' ? { sort } : {}),
+        }}
       />
     </div>
   );
