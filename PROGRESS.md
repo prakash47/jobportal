@@ -916,6 +916,26 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/applications-expanded-details` - RPT #4, #5: what was submitted, and what the job was - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). **No schema change** — every field needed already existed and was simply never selected.
+
+**#5 Job details — built.** Location, work mode and job type now sit at the top of the expanded panel, using the same `EMPLOYMENT_LABELS` / `WORK_MODE_LABELS` tables `JobOverviewCard` uses, so the list and the posting can never describe the same job differently. Cities are resolved in **one** query for the whole page (`cityIds` is an `Int[]` on `Job`, so per-row lookups would have been N queries).
+
+⚠️ **"Notice" was asked for and deliberately NOT shown.** `Job` has no notice-period field. The only `noticePeriodDays` in the schema is on **`Candidate`** — the applicant's own notice, not the posting's. Rendering it as a job detail would have put a real number under a label that means something else, which is worse than omitting it. If postings should carry a notice-period expectation, that is a schema addition and a recruiter-form change, not a display fix.
+
+**#4 Submitted materials — built, with one part deliberately left out.**
+
+*Which resume*: the panel now names the file, its size and its upload date, read from `Application.resumeId` — **the snapshot, not `Candidate.activeResume`**. That distinction is the entire reason the column exists: reading the current CV here would have reintroduced the bug it was added to fix, where replacing your CV silently rewrote what you appeared to have sent. For the ~373 rows predating that column it says *"Not recorded for this application"* rather than naming the current file, because which one was actually sent is genuinely unknown and a guess presented as fact is worse than an admission.
+
+*Cover note*: rendered when present, as text with paragraph breaks preserved — never as HTML.
+
+*Progress pipeline*: `StatusTimeline` already existed and already built its steps from `statusHistory`; it is now under a "Progress" heading with the rest, which is most of why the panel previously read as "minimal info".
+
+⚠️ **A link to download the submitted resume was NOT added, and that is a product decision rather than an oversight.** The existing `GET /me/resume/download` is gated behind the `feature.resume_download_pdf` flag, which is OFF on Day 0 — so today, a candidate cannot download even their own current CV. A per-application endpoint is small (the ownership check, scan-status check and signed-URL mint all follow `ResumeService.getDownloadUrl` almost line for line), but whether it should carry that same paid-feature gate is a monetisation question, and answering it unilaterally would either quietly ship a paid feature for free or ship a link that always 403s. **Owner decision needed**; linking to `/profile/resume` instead was rejected outright because that shows the CURRENT resume, which is precisely the wrong document.
+
+**Verified live** on an application that already carried both a snapshot and a cover note: the panel renders `Bangalore · Hybrid · Full-time`, `arjun-iyer-resume.pdf · 180 KB · uploaded 8 Aug 2026`, the cover note text, and the timeline.
+
 ### `feature/applications-search-sort` - RPT #1, #2, #3: search, sort, pagination - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). Three of the seven Applications-page reports, taken together because they share one toolbar row and one query.
