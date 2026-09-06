@@ -70,9 +70,27 @@ function SidebarContent({
                   {...(onNavigate ? { onClick: onNavigate } : {})}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
-                    'mt-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                    'relative mt-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
                     active
-                      ? 'bg-white/10 font-medium text-white'
+                      ? // The cyan bar is the ACTIVE INDICATOR; the fill behind it is
+                        // decoration. That split is measured, not stylistic: composited
+                        // over the navy rail (#192249), `bg-white/10` lands at 1.35:1 —
+                        // less than half of the 3:1 WCAG 1.4.11 needs to distinguish a
+                        // component state. A fill cannot rescue it either; white at 30%
+                        // only reaches 2.64:1 and by then it is a grey slab, and a
+                        // cyan-tinted fill is worse (1.63:1) because it composites toward
+                        // the navy. A SOLID accent bar sidesteps compositing entirely and
+                        // measures 5.21:1, so the indicator is the bar and the fill can
+                        // stay as restrained as CLAUDE.md §2 wants.
+                        //
+                        // `aria-current="page"` above already carries this for assistive
+                        // tech; the bar is the sighted equivalent it never had.
+                        cn(
+                          'bg-white/10 font-medium text-white',
+                          'before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px]',
+                          'before:-translate-y-1/2 before:rounded-full',
+                          'before:bg-[var(--color-accent-500)]',
+                        )
                       : 'text-white/70 hover:bg-white/5 hover:text-white',
                   )}
                 >

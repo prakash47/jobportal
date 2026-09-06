@@ -916,6 +916,22 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/sidebar-active-state` - RPT: the active sidebar item does not stand out - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.**
+
+**Unusually, the reporter's mechanism was right — and measurement made the case much stronger than "it looks weak".** An active state did already exist (`bg-white/10 font-medium text-white`, plus a cyan icon and `aria-current="page"`), and `isNavItemActive` was matching correctly, so nothing was broken in logic. The defect is contrast: composited over the navy rail (`--color-primary-600`, rgb 25/34/73), `bg-white/10` paints rgb 48/56/91, which is **1.35:1** against the rail. WCAG 1.4.11 requires **3:1** to distinguish a component state. That is under half, so this is a measurable accessibility failure rather than a matter of taste.
+
+**A stronger fill cannot fix it, and that was measured before choosing.** White at 30% alpha over the navy still only reaches **2.64:1** — and by 30% it is a grey slab, which is the opposite of what CLAUDE.md §2 asks for. A cyan-tinted fill is *worse* (**1.63:1** at 30%) because it composites toward the navy rather than away from it. Every translucent-overlay route fails for the same reason: alpha blending drags the result back toward the background it sits on.
+
+**A solid bar sidesteps compositing entirely.** `--color-accent-500` (the exact brand cyan #22A0DA) measures **5.21:1** against the rail. So the fix is a 3x20px rounded accent bar on the left edge via `::before`, which is also the second option the reporter suggested and the Linear/Vercel idiom CLAUDE.md §2 points at ("borders over shadows"). The existing `bg-white/10` fill stays exactly as it was: it is now decoration reinforcing the bar rather than load-bearing, so restraint is preserved and the bar carries the requirement.
+
+**Verified live**: bar renders 3px x 20px at 5.21:1; exactly one item carries it and it is always the one with `aria-current="page"`; navigating /profile -> /applications moves it correctly; inactive rows have no `::before` at all. Checked in the **mobile drawer** too (375px) — the desktop rail and the drawer share `SidebarContent`, so both got the fix from one change, confirmed by finding two `nav[aria-label="Dashboard"]` nodes with the bar on each.
+
+Nothing was needed for assistive tech: `aria-current="page"` was already correct. The bar is the sighted equivalent that had been missing.
+
+⚠️ **`apps/recruiter` and `apps/sadmin` have the byte-identical defect** — both declare `ROW_ACTIVE = 'bg-white/10 font-medium text-white'` on the same navy rail (`SidebarNav.tsx:104` and `:140`), so both sit at the same 1.35:1. Those are other developers' surfaces (CLAUDE.md §15, and sadmin's `SidebarNav.tsx` is under a shared-surface lock), so a WORKLOG notice was raised carrying the measurements rather than an edit.
+
 ### `bugfix/apply-quota-pill-label` - RPT: "redundant daily search limit indicator (0/10 today)" - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.**
