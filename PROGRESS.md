@@ -916,6 +916,10 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `chore/turbo-dev-env` - finish the strict-env fix; `dev` had been left behind - 2026-09-06
+
+CLI merge to `develop` (`--no-ff`). One line. `chore/github-actions-ci` declared `env`/`passThroughEnv` on `build`, `test` and `typecheck` but left the `dev` task with the identical Turborepo strict-env trap - so `pnpm dev` still ran its servers with a stripped environment, working only because every machine has `.env` files on disk for Next and dotenv to read. `dev` is never cached (`cache: false`), so nothing it declares can affect a cache key, which makes `passThroughEnv: ["*"]` exactly right for it. Verified with `turbo run dev --dry=json`. A half-fixed config is worse than either extreme - this closes it.
+
 ### `chore/github-actions-ci` - the repo's first CI, and the strict-env bug that would have made it worthless - 2026-09-06
 
 CLI merge to `develop` (`--no-ff`). **No schema change, no migration, no flag key.** Closes the gap `chore/eslint-setup` surfaced: CLAUDE.md §3.1 has always listed `.github/workflows/ci.yml`, and there was no `.github` directory at all. Until now the only thing between a broken commit and `develop` was a person remembering to run four commands - with three developers merging into one branch.
