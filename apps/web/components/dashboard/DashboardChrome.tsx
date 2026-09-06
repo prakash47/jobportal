@@ -47,7 +47,6 @@ function SidebarContent({
   onSignOut,
   signingOut,
   collapsed = false,
-  onToggleCollapse,
 }: {
   user: { name: string; email: string; imageUrl?: string | null };
   pathname: string;
@@ -61,7 +60,6 @@ function SidebarContent({
    * reclaim on a phone anyway.
    */
   collapsed?: boolean;
-  onToggleCollapse?: () => void;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -192,38 +190,6 @@ function SidebarContent({
           )}
         </button>
       </div>
-
-      {/* Only the desktop rail passes a handler. The mobile drawer has no width
-          to reclaim and closes with its own X, so it gets no toggle at all. */}
-      {onToggleCollapse && (
-        <div className="border-t border-white/10 px-2 py-2">
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            aria-expanded={!collapsed}
-            aria-controls={NAV_ID}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className={cn(
-              'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/70',
-              'transition-colors hover:bg-white/5 hover:text-white',
-              collapsed && 'justify-center px-0',
-            )}
-          >
-            <ChevronLeft
-              className={cn(
-                'size-[18px] shrink-0 transition-transform duration-200 ease-out',
-                collapsed && 'rotate-180',
-              )}
-              aria-hidden="true"
-            />
-            {/* Same treatment as the nav rows: the text stays for assistive
-                tech, and aria-label above is what actually names the control in
-                both states. */}
-            <span className={cn(collapsed && 'sr-only')}>Collapse</span>
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -328,7 +294,7 @@ export function DashboardChrome({
       <div className="md:flex" {...(open ? { inert: true } : {})}>
         <aside
           className={cn(
-            'sticky top-0 hidden h-screen shrink-0 flex-col bg-[var(--color-primary-600)] md:flex',
+            'relative sticky top-0 hidden h-screen shrink-0 flex-col bg-[var(--color-primary-600)] md:flex',
             // 200ms ease-out, per CLAUDE.md §2's 150-250ms band. Only `width`
             // is transitioned, not `all`: the rail contains a sticky element
             // and a dozen colour transitions already, and animating everything
@@ -343,8 +309,54 @@ export function DashboardChrome({
             onSignOut={signOut}
             signingOut={signingOut}
             collapsed={collapsed}
-            onToggleCollapse={toggleCollapsed}
           />
+
+          {/*
+            The collapse handle STRADDLES the rail's right edge, vertically
+            centred, rather than sitting inside the rail.
+
+            It lived inside at the bottom first, and that was wrong: a
+            full-width row directly beneath the account card reads as one more
+            nav item, and it visually annexed the account block instead of
+            letting it end the rail. Moving it onto the border makes it
+            unambiguously chrome that acts ON the sidebar rather than an entry
+            IN it — and the vertical centre is reachable wherever the nav has
+            scrolled to, which the bottom was not.
+
+            `translate-x-1/2` puts half the disc over the navy and half over the
+            page, which is what makes it read as a hinge. Nothing clips it: the
+            aside has no overflow rule (only the <nav> inside it scrolls).
+            z-30 clears the sticky header's z-20 — they never overlap, since
+            this is centred, but the header wins any future layout change and
+            an invisible control would be worse than a slightly bold z-index.
+          */}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-controls={NAV_ID}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={cn(
+              'absolute right-0 top-1/2 z-30 hidden size-6 -translate-y-1/2 translate-x-1/2',
+              'items-center justify-center rounded-full md:flex',
+              'border border-[var(--color-border)] bg-[var(--color-bg-elevated)]',
+              'text-[var(--color-fg-muted)] shadow-sm transition-colors',
+              'hover:border-[var(--color-border-strong)] hover:text-[var(--color-fg)]',
+              // --color-ring, NOT --color-focus-ring. The latter is a 22%-transparent
+              // wash (theme.css:100) and makes a barely-visible ring; the solid
+              // --color-ring is what the other 23 focus rings in this app use.
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]',
+            )}
+          >
+            <ChevronLeft
+              className={cn(
+                'size-4 transition-transform duration-200 ease-out',
+                collapsed && 'rotate-180',
+              )}
+              aria-hidden="true"
+            />
+          </button>
         </aside>
 
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
