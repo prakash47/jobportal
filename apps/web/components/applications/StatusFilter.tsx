@@ -8,7 +8,8 @@ import { STATUS_LABELS } from './StatusPill';
 // Status filter chips. URL-driven (?status=...) so shareable links work and
 // back/forward navigation respects the filter. One horizontal scrolling row —
 // never wraps into a chip blob on mobile. Counts come from the page's groupBy
-// so each chip shows how many applications sit in that state.
+// so each chip shows how many applications sit in that state, INCLUDING zero:
+// see the note at the render site for why zero-count chips are no longer hidden.
 
 const FILTERS = [
   { value: 'ALL', label: 'All' },
@@ -50,9 +51,21 @@ export function StatusFilter({ counts }: { counts: Record<string, number> }) {
         {FILTERS.map((f) => {
           const active = current === f.value;
           const count = counts[f.value] ?? 0;
-          // Hide zero-count statuses (except the active one and "All") so the
-          // row stays short for typical candidates.
-          if (count === 0 && !active && f.value !== 'ALL') return null;
+          // EVERY status renders, including at zero. This reverses an earlier
+          // rule that hid zero-count chips to keep the row short.
+          //
+          // That rule was wrong in practice, and it took two bug reports to see
+          // it. The first asked for a "Rejected" filter that already existed —
+          // it was simply invisible, because the reporter had no rejections. The
+          // second was the same person still unable to find it. A filter that
+          // vanishes when its count is zero is indistinguishable from a filter
+          // that was never built, and the cost of that confusion is far higher
+          // than the cost of a slightly longer row.
+          //
+          // Showing "Rejected 0" also answers a question a candidate actually
+          // has — "have I been turned down?" — where hiding it leaves them
+          // guessing. The row is already `overflow-x-auto` with `w-max`, built
+          // to scroll rather than wrap, so the extra chips cost no layout.
           return (
             <Link
               key={f.value}
