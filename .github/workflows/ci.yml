@@ -1,0 +1,231 @@
+# JobPortal CI — the gate that CLAUDE.md §10 describes, finally enforced by a machine.
+#
+# Until this file existed there was no CI at all: the only thing standing between
+# a broken commit and `develop` was a person remembering to run four commands.
+# With three developers merging into one shared branch, that was going to fail
+# eventually, quietly, and on someone else's afternoon.
+#
+# WHAT IT RUNS
+#   pnpm lint && pnpm typecheck && pnpm test && pnpm build
+# — exactly the gate the docs already ask for. No more, no less. If you change
+# the gate, change it in both places.
+#
+# WHY ONE JOB AND NOT FOUR
+# ------------------------
+# Setup — checkout, pnpm install, prisma generate, migrate — is a fixed ~3 minute
+# cost. Four parallel jobs would each pay it in full to save wall-clock on steps
+# that take a minute or two, and there is no Turborepo remote cache here to share
+# work between them. One job pays setup once, and because the steps run in gate
+# order a lint failure still stops the run within a few minutes — the same fast
+# signal a separate lint job would give, for a quarter of the billable minutes.
+#
+# (turbo.json marks typecheck/test/build as `dependsOn: ["^build"]`, which looks
+# like a shared dependency-build worth amortising. It is currently dormant: not
+# one of the eight packages/* defines a `build` script — they ship raw TypeScript
+# via `main: ./src/index.ts` — so nothing upstream is ever built. Noted so nobody
+# re-derives it.)
+#
+# THE TURBOREPO ENV TRAP — read before changing any `env:` below
+# --------------------------------------------------------------
+# Turborepo 2 defaults to `envMode: "strict"`: a task receives ONLY the variables
+# declared in turbo.json, and this repo declared none. Not even NEXT_PUBLIC_* was
+# inferred — `turbo run build --dry=json` reported `environmentVariables: []`.
+#
+# That has never bitten anyone locally because every machine has .env files on
+# disk, which dotenv and Next read directly; turbo can strip an environment but
+# not a file read. CI has no .env, so every variable set in this job would have
+# been discarded before vitest or next build saw it.
+#
+# Measured, both directions, with the root .env moved aside and DATABASE_URL
+# supplied only as an env var:
+#   without turbo.json's env declarations → 10 tests SKIPPED, vitest still exits 0
+#   with them                             → 23 tests passed, 0 skipped
+# The first of those is a CI that reports green having never touched a database.
+# turbo.json now declares what each task needs; if you add a variable here, add
+# it there too or it will be silently dropped.
+#
+# WHY ONLY POSTGRES
+# -----------------
+# This was measured, not assumed. A full `pnpm build` was run locally against a
+# migrated-but-empty Postgres with REDIS_URL and ELASTICSEARCH_URL pointed at
+# dead ports: 5/5 packages built in 3m06s. Nothing reaches Redis or Elasticsearch
+# during lint, typecheck, test or build —
+#   * every Redis path is behind `isFlagEnabled`, which only runs per-request;
+#   * `apps/api/src/auth/per-email-throttle.guard.test.ts` uses `vi.mock('ioredis')`;
+#   * `packages/search` has no tests at all;
+#   * the routes that query Elasticsearch read `searchParams`, so Next renders
+#     them on demand and never at build time.
+# Adding those two containers "just in case" would cost ~90s of Elasticsearch
+# start-up on every run to protect against nothing. If a future change does need
+# them, this comment is the record of why they are absent.
+
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+# A force-push or a quick follow-up commit should not leave the previous run
+# burning minutes on code nobody will merge. Superseded PR runs are cancelled;
+# runs on develop/main are left alone, because their result is the record of
+# whether that commit was green.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        # Matches infra/docker-compose.yml. Keep them in step: a CI that runs a
+        # different major than every developer's machine tests something nobody
+        # is actually running.
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: jobportal
+          POSTGRES_PASSWORD: jobportal
+          POSTGRES_DB: jobportal_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jobportal -d jobportal_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # The host is deliberately `localhost` and NOT the `postgres` service
+      # alias. packages/db/src/advisory-lock.test.ts:44 and sequence.test.ts:138
+      # only run their integration blocks when DATABASE_URL matches
+      # /localhost|127.0.0.1|::1|\.local|\.internal/ — a safety catch so nobody
+      # ever points them at a real database. Written as `postgres:5432` those two
+      # suites would SKIP, silently, and CI would go green having never executed
+      # the one test that catches a bug which would otherwise first surface
+      # *after a customer had been charged*. See the comment at the top of
+      # advisory-lock.test.ts.
+      DATABASE_URL: postgresql://jobportal:jobportal@localhost:5432/jobportal_test
+
+      # Pointed at ports with nothing behind them, on purpose. If a future change
+      # starts reaching for Redis or Elasticsearch during the gate, it fails here
+      # loudly instead of quietly depending on a service CI does not run.
+      REDIS_URL: redis://127.0.0.1:59998
+      ELASTICSEARCH_URL: http://127.0.0.1:59997
+
+      # Dummy values. These are NOT secrets and must never be swapped for real
+      # ones: nothing in the gate verifies a token that anything else issued, and
+      # a real signing key in a workflow file is a real signing key on the
+      # internet. apps/sadmin's assertServerEnv() wants both, though it skips
+      # itself during `next build` (instrumentation.ts checks NEXT_PHASE).
+      JWT_ACCESS_SECRET: ci-not-a-real-secret-do-not-reuse
+      JWT_REFRESH_SECRET: ci-not-a-real-secret-do-not-reuse
+
+      # Inlined into the client bundles at build time. The localhost defaults are
+      # what the code already falls back to; they are spelled out so the built
+      # output is identical whoever runs it.
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_WEB_URL: http://localhost:3000
+
+      # NODE_ENV is deliberately NOT set. Both Postgres integration suites refuse
+      # to run when NODE_ENV=production, so setting it here would turn them off.
+      NEXT_TELEMETRY_DISABLED: "1"
+      TURBO_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reads the pinned version straight from package.json's `packageManager`
+      # field, so this cannot drift from what developers run locally.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        # --frozen-lockfile makes an out-of-date pnpm-lock.yaml a CI failure
+        # rather than something CI silently fixes for you. That is the point: a
+        # lockfile that does not match package.json is a bug in the commit.
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        # packages/db/generated/ is gitignored (.gitignore:95), so a fresh
+        # checkout has no client and NOTHING typechecks or builds without this.
+        # Verified: `prisma generate` needs only the DATABASE_URL *string*, never
+        # a reachable server — but it is run after the service is up anyway, so
+        # ordering never has to be reasoned about again.
+        run: pnpm db:generate
+
+      - name: Apply migrations
+        # Not needed by the tests themselves — sequence.test.ts creates and drops
+        # its own table, and advisory-lock.test.ts only calls
+        # pg_advisory_xact_lock(). This step is here for its own sake: it proves
+        # the full 44-migration chain still applies to an empty database, which
+        # is exactly what a deploy does and what nothing else checks. Verified to
+        # apply cleanly from empty before this workflow was written.
+        run: pnpm --filter @jobportal/db exec prisma migrate deploy
+
+      # --- the gate itself, in the documented order ---------------------------
+
+      - name: Lint
+        # NOTE: no --max-warnings yet. The tree currently carries 33 warnings, 13
+        # of them React Compiler findings in apps/recruiter and apps/sadmin that
+        # belong to other developers (see WORKLOG.md). Pinning a ceiling now
+        # would fail CI on their code. Once those are cleared, add
+        # `-- --max-warnings=0` here so the count can never creep back up.
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        # Piped through tee so the next step can inspect what actually ran.
+        #
+        # No --force, deliberately. This runner restores no Turborepo cache, so
+        # every task is a cache miss and the output is always real. Note for
+        # whoever adds turbo caching later: a restored cache REPLAYS the previous
+        # run's stdout, so the skip-guard below would then be grepping old output
+        # and could pass on a run that executed nothing. Add `--force` to this
+        # line at the same time — and note it belongs to turbo, so it must be
+        # `pnpm exec turbo run test --force`; `pnpm test -- --force` forwards it
+        # to vitest instead, which dies with "Unknown option `--force`".
+        run: pnpm test 2>&1 | tee test-output.log
+
+      - name: Build
+        run: pnpm build
+
+      - name: Fail if the Postgres suites silently skipped
+        # The single most valuable step in this file, and the reason it exists is
+        # concrete rather than theoretical.
+        #
+        # Both integration suites SKIP rather than fail when they cannot reach a
+        # local database. That is right on a laptop with no Docker running, and a
+        # trap in CI: vitest reports "1 passed | 1 skipped" and exits 0, so a
+        # skipped suite is indistinguishable from a passing one. Anything that
+        # quietly removes DATABASE_URL — a typo, a renamed service, someone
+        # trimming turbo.json's env list — turns this whole workflow into a
+        # green light over an untested database.
+        #
+        # advisory-lock.test.ts is the one that matters: it catches a bug whose
+        # first real execution would otherwise have been a live payment capture,
+        # failing AFTER the customer was charged. Read its header comment.
+        #
+        # Greps the real `pnpm test` output, not a separate re-run — a re-run
+        # would bypass turbo and could pass while the actual gate was starved of
+        # its environment, which is exactly the failure being guarded against.
+        if: success()
+        run: |
+          if grep -qiE "SKIPPED . DATABASE_URL is unset or not local|integration tests SKIPPED" test-output.log; then
+            echo "::error::The Postgres integration suites SKIPPED. This run is green without having touched a database — check the postgres service, DATABASE_URL, and turbo.json's test.env declaration."
+            exit 1
+          fi
+          echo "Postgres integration suites executed against the service container."
