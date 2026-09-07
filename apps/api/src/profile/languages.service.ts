@@ -20,6 +20,12 @@ export class LanguagesService {
           candidateId: candidate.id,
           name: input.name,
           proficiency: input.proficiency,
+          // Omitted keys fall through to the column default (true) rather than
+          // being written as false — the onboarding wizard still posts only
+          // name + proficiency, and its rows mean "I know this language".
+          ...(input.canRead !== undefined ? { canRead: input.canRead } : {}),
+          ...(input.canWrite !== undefined ? { canWrite: input.canWrite } : {}),
+          ...(input.canSpeak !== undefined ? { canSpeak: input.canSpeak } : {}),
         },
       });
     } catch (e) {

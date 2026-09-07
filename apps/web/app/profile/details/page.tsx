@@ -4,6 +4,7 @@ import { PageHeader } from '../../../components/dashboard/PageHeader';
 import { ContentCard } from '../../../components/dashboard/ContentCard';
 import { ProfileForm } from '../../../components/profile/ProfileForm';
 import { ProfilePhotoCard } from '../../../components/profile/ProfilePhotoCard';
+import { LanguagesManager } from '../../../components/profile/LanguagesManager';
 import { resolveStoredAssetUrl } from '@jobportal/domain/asset-url';
 
 // Lazily ensures the Candidate row exists, then loads the profile fields the
@@ -23,14 +24,42 @@ async function loadProfile(userId: number) {
     (await prisma.candidate
       .create({ data: { userId } })
       .catch(() => prisma.candidate.findUniqueOrThrow({ where: { userId } })));
-  return { user, candidate };
+
+  const [cities, languages] = await Promise.all([
+    prisma.city.findMany({
+      select: { id: true, name: true, state: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.candidateLanguage.findMany({
+      where: { candidateId: candidate.id },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        proficiency: true,
+        canRead: true,
+        canWrite: true,
+        canSpeak: true,
+      },
+    }),
+  ]);
+
+  return { user, candidate, cities, languages };
 }
 
 export default async function ProfileDetailsPage() {
   // Guarded here, not only by the layout: layout and page render
   // concurrently, so the layout's redirect cannot gate this body.
   const session = await requireUser();
-  const { user, candidate } = await loadProfile(session.sub);
+  const { user, candidate, cities, languages } = await loadProfile(session.sub);
+
+  // City ids reach the client as strings because the combobox is keyed on
+  // strings; they are converted back on submit.
+  const cityOptions = cities.map((c) => ({
+    value: String(c.id),
+    label: c.name,
+    hint: c.state,
+  }));
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -58,6 +87,7 @@ export default async function ProfileDetailsPage() {
         <ProfileForm
           initial={{
             name: user.name,
+            email: user.email,
             phone: user.phone,
             headline: candidate.headline,
             summary: candidate.summary,
@@ -68,8 +98,24 @@ export default async function ProfileDetailsPage() {
             expectedSalaryMinPaise: candidate.expectedSalaryMinPaise,
             expectedSalaryMaxPaise: candidate.expectedSalaryMaxPaise,
             noticePeriodDays: candidate.noticePeriodDays,
+            dateOfBirth: candidate.dateOfBirth?.toISOString() ?? null,
+            gender: candidate.gender,
+            nationality: candidate.nationality,
+            currentCityId: candidate.currentCityId,
+            preferredCityIds: candidate.preferredCityIds,
           }}
+          cityCatalogue={cityOptions}
         />
+      </ContentCard>
+
+      <ContentCard className="space-y-4 p-5 sm:p-6">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--color-fg)]">Languages</h2>
+          <p className="mt-1 text-sm text-[var(--color-fg-muted)]">
+            The languages you work in, how well, and what you can do in each.
+          </p>
+        </div>
+        <LanguagesManager initial={languages} />
       </ContentCard>
     </div>
   );
