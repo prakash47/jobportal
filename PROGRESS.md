@@ -916,6 +916,32 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `chore/seed-demo-job-alerts` - the Job alerts page had no demo data - 2026-09-07
+
+CLI merge to `develop` (`--no-ff`). Reported as *"there are no data in the job alerts page"*. There was no alerts seed at all - `db:seed:demo:full` created companies, jobs, candidates and applications, but never a single `JobAlert` - so every demo account landed on the empty state and **none of the row states were reachable** without creating alerts by hand: no Paused badge, no Resume button, no "Last sent never", and only whichever cadence you happened to pick.
+
+New `packages/db/prisma/seed/demo-alerts.ts` + entry point, wired in as `db:seed:demo:alerts` and added to `db:seed:demo:full`. **88 alerts across the 20 demo candidates**, 2-5 each.
+
+**Alerts are derived from each candidate's own profile** - their existing `skillIds` and `preferredCityIds` - rather than hardcoded per person. So Arjun (Staff Engineer, Go / distributed systems, Bangalore + Hyderabad) gets *"Staff Engineer in Bangalore"*, and adding a candidate upstream does not mean editing a parallel list down here.
+
+**Every row state is now reachable**, because a seed where all 88 rows are active daily alerts would exercise none of the page:
+- all three cadences (instant / daily / weekly),
+- one **paused** alert per candidate with a second preferred city, so the Paused badge and Resume both render,
+- some with `lastSentAt` set and some `null`, so "Last sent never" is visible.
+
+**Display names come from `Skill.name` / `City.name`, not from the slug.** The first pass derived them with a title-caser and it guessed wrong on exactly the entries an engineer notices - `go` became **"GO"**, `typescript` became **"Typescript"**, `dbt` became **"DBT"** - while `aws` and `sql` genuinely are uppercase. The catalogue already stores all four correctly ("Go", "TypeScript", "dbt", "AWS"), so the caser was deleted rather than given an exceptions list.
+
+**Three things it deliberately will not do:**
+- It **never touches an alert the user created**. Rows are matched on `(userId, name)` and only names this module generates are written, so a re-seed cannot throw away someone's own saved search. Verified: the hand-made alert from earlier testing survived a delete-and-reseed cycle and two idempotency runs.
+- It **respects `MAX_ALERTS`** (10) and stops at **7**, leaving headroom. Seeding to the cap would leave the demo account permanently unable to create an alert, since the "New alert" button renders disabled there - a worse demo than a short list.
+- It **does not invent a salary** for a candidate who has not stated one. The salary-floor alert is skipped rather than filled with a plausible-looking number.
+
+The "Senior …" alert carries a five-year experience floor and is **only given to candidates who actually have five years**. The first pass gated it on an alternating index alone, which handed a 2025 graduate a saved search demanding five years of experience - the kind of incoherent demo data that makes a reviewer stop trusting the rest of the seed. Caught by spot-checking a fresher rather than only the account being demoed; the count went 88 → 85.
+
+`lastSentJobIds` is populated with real ACTIVE job ids for any alert that has a `lastSentAt`. An alert claiming *"I emailed you on the 4th"* alongside an empty dedupe set is internally contradictory, and the worker would re-send the entire matching set on its next run.
+
+**Verified live:** Arjun's page renders 6 alerts reading "6/10 used", with Weekly / Instant / Daily rows, a *Paused* badge with a **Resume** button, and both "Last sent never" and dated rows. Opening one loads the edit form with its query intact - keywords "staff engineer", chips **Go / Distributed Systems / Kubernetes / Bangalore**, Daily selected. Re-running the seed reported `0 created, 88 updated`.
+
 ### `feature/personal-details-fields` - nine missing fields on Personal details - 2026-09-07
 
 CLI merge to `develop` (`--no-ff`). Nine reported gaps on the seeker **Personal details** page (SRS §4.3). These were **add-ons, not repairs** - the fields did not exist - so the bar was that each one actually persists, not merely that it renders.
