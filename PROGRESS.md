@@ -936,6 +936,8 @@ New `packages/db/prisma/seed/demo-alerts.ts` + entry point, wired in as `db:seed
 - It **respects `MAX_ALERTS`** (10) and stops at **7**, leaving headroom. Seeding to the cap would leave the demo account permanently unable to create an alert, since the "New alert" button renders disabled there - a worse demo than a short list.
 - It **does not invent a salary** for a candidate who has not stated one. The salary-floor alert is skipped rather than filled with a plausible-looking number.
 
+The "Senior …" alert carries a five-year experience floor and is **only given to candidates who actually have five years**. The first pass gated it on an alternating index alone, which handed a 2025 graduate a saved search demanding five years of experience - the kind of incoherent demo data that makes a reviewer stop trusting the rest of the seed. Caught by spot-checking a fresher rather than only the account being demoed; the count went 88 → 85.
+
 `lastSentJobIds` is populated with real ACTIVE job ids for any alert that has a `lastSentAt`. An alert claiming *"I emailed you on the 4th"* alongside an empty dedupe set is internally contradictory, and the worker would re-send the entire matching set on its next run.
 
 **Verified live:** Arjun's page renders 6 alerts reading "6/10 used", with Weekly / Instant / Daily rows, a *Paused* badge with a **Resume** button, and both "Last sent never" and dated rows. Opening one loads the edit form with its query intact - keywords "staff engineer", chips **Go / Distributed Systems / Kubernetes / Bangalore**, Daily selected. Re-running the seed reported `0 created, 88 updated`.

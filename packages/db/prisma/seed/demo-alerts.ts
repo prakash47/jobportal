@@ -29,6 +29,9 @@ const SEED_CEILING = 7;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Experience floor on the "Senior …" alert, and the bar to be given one. */
+const SENIOR_FLOOR_MONTHS = 5 * 12;
+
 interface AlertQuery {
   q?: string;
   skillSlugs?: string[];
@@ -90,9 +93,11 @@ function planFor(input: {
   skills: Entry[];
   cities: Entry[];
   expectedSalaryMinPaise: number | null;
+  experienceMonths: number | null;
   index: number;
 }): AlertPlan[] {
   const { headline, currentTitle, skills, cities, expectedSalaryMinPaise, index } = input;
+  const experienceMonths = input.experienceMonths ?? 0;
   const role = rolePhrase(headline, currentTitle);
   const primaryCity = cities[0];
   const secondaryCity = cities[1];
@@ -156,15 +161,18 @@ function planFor(input: {
     });
   }
 
-  // 5. A remote/senior-leaning watch with an experience floor, weekly.
-  //    Only on every other candidate, so list lengths vary and the page does
-  //    not look generated.
-  if (index % 2 === 0 && topSkills.length > 1) {
+  // 5. A senior-leaning watch with an experience floor, weekly.
+  //
+  //    Gated on the candidate ACTUALLY having that experience, not just on the
+  //    alternating index: a 2025 graduate with a saved search demanding five
+  //    years is the kind of incoherent demo data that makes a reviewer stop
+  //    trusting the rest of the seed. The alternation only varies list length.
+  if (index % 2 === 0 && topSkills.length > 1 && experienceMonths >= SENIOR_FLOOR_MONTHS) {
     plans.push({
       name: `Senior ${topSkills[1]!.name} openings`,
       query: {
         skillSlugs: [topSlugs[1]!],
-        minExperienceMonths: 5 * 12,
+        minExperienceMonths: SENIOR_FLOOR_MONTHS,
       },
       frequency: 'weekly',
       isActive: true,
@@ -182,6 +190,7 @@ export async function seedDemoAlerts(prisma: PrismaClient): Promise<void> {
       userId: true,
       headline: true,
       currentTitle: true,
+      experienceMonths: true,
       skillIds: true,
       preferredCityIds: true,
       expectedSalaryMinPaise: true,
@@ -236,6 +245,7 @@ export async function seedDemoAlerts(prisma: PrismaClient): Promise<void> {
         .map((id) => cityById.get(id))
         .filter((c): c is Entry => c !== undefined),
       expectedSalaryMinPaise: candidate.expectedSalaryMinPaise,
+      experienceMonths: candidate.experienceMonths,
       index,
     });
 
