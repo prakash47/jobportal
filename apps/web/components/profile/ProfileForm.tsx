@@ -2,10 +2,35 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, Input, Label, Textarea, cn } from '@jobportal/ui';
+import {
+  Button,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+  cn,
+} from '@jobportal/ui';
 import { api } from '../../lib/profile/api-client';
 import { CountryCodeSelect } from '../ui/CountryCodeSelect';
+import { MultiCombobox, SingleCombobox } from '../ui/Combobox';
+import type { ComboboxOption } from '../../lib/ui/combobox-filter';
 import { joinPhone, splitPhone } from '../../lib/phone/format';
+import { GENDER_OPTIONS, NATIONALITY_OPTIONS } from '../../lib/profile/catalogues';
+import {
+  counterState,
+  HEADLINE_MAX,
+  maxBirthDate,
+  minBirthDate,
+  phoneDigitLimit,
+  phoneStatus,
+  sanitizePhoneInput,
+  SUMMARY_MAX,
+  toDateInputValue,
+} from '../../lib/profile/validation';
 
 type WorkStatus = 'FRESHER' | 'EXPERIENCED';
 
@@ -25,6 +50,8 @@ function paiseToLpa(paise: number | null): number | '' {
 export interface ProfileFormProps {
   initial: {
     name: string;
+    /** The account's login address. Read-only here — see the field comment. */
+    email: string;
     phone: string | null;
     headline: string | null;
     summary: string | null;
@@ -35,20 +62,37 @@ export interface ProfileFormProps {
     expectedSalaryMinPaise: number | null;
     expectedSalaryMaxPaise: number | null;
     noticePeriodDays: number | null;
+    dateOfBirth: string | null;
+    gender: string | null;
+    nationality: string | null;
+    currentCityId: number | null;
+    preferredCityIds: number[];
   };
+  cityCatalogue: ComboboxOption[];
 }
 
-export function ProfileForm({ initial }: ProfileFormProps) {
+export function ProfileForm({ initial, cityCatalogue }: ProfileFormProps) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
   // Split the single stored `phone` column into a country and a national
   // number. Rows written before this control existed have no dial code and
   // fall back to the default rather than becoming uneditable.
   const initialPhone = splitPhone(initial.phone);
-  const [phone, setPhone] = useState(initialPhone.national);
   const [phoneIso, setPhoneIso] = useState(initialPhone.iso);
+  // Sanitised up front too: a row saved before this rule existed may hold
+  // letters or more digits than the country allows.
+  const [phone, setPhone] = useState(sanitizePhoneInput(initialPhone.national, initialPhone.iso));
   const [headline, setHeadline] = useState(initial.headline ?? '');
   const [summary, setSummary] = useState(initial.summary ?? '');
+  const [dateOfBirth, setDateOfBirth] = useState(toDateInputValue(initial.dateOfBirth));
+  const [gender, setGender] = useState(initial.gender ?? '');
+  const [nationality, setNationality] = useState<string | null>(initial.nationality);
+  const [currentCityId, setCurrentCityId] = useState<string | null>(
+    initial.currentCityId === null ? null : String(initial.currentCityId),
+  );
+  const [preferredCityIds, setPreferredCityIds] = useState<string[]>(
+    initial.preferredCityIds.map(String),
+  );
   // "Working or fresher?" gate. New profiles default to Working so the work
   // fields are visible; a fresher flips it to hide them.
   const [workStatus, setWorkStatus] = useState<WorkStatus>(initial.workStatus ?? 'EXPERIENCED');
@@ -57,16 +101,32 @@ export function ProfileForm({ initial }: ProfileFormProps) {
     initial.experienceMonths !== null ? Math.round((initial.experienceMonths / 12) * 10) / 10 : '',
   );
   const [currentTitle, setCurrentTitle] = useState(initial.currentTitle ?? '');
-  const [currentSalary, setCurrentSalary] = useState<number | ''>(paiseToLpa(initial.currentSalaryPaise));
-  const [expectedMin, setExpectedMin] = useState<number | ''>(paiseToLpa(initial.expectedSalaryMinPaise));
-  const [expectedMax, setExpectedMax] = useState<number | ''>(paiseToLpa(initial.expectedSalaryMaxPaise));
+  const [currentSalary, setCurrentSalary] = useState<number | ''>(
+    paiseToLpa(initial.currentSalaryPaise),
+  );
+  // ONE expected-salary figure. The column pair stays (recruiter and admin
+  // surfaces read both), but this form writes the minimum and clears the
+  // maximum, so the range renders as "₹15+ LPA" rather than a bogus "₹15–15".
+  // Falls back to the stored max for a row that only ever had one.
+  const [expected, setExpected] = useState<number | ''>(
+    paiseToLpa(initial.expectedSalaryMinPaise ?? initial.expectedSalaryMaxPaise),
+  );
   const [notice, setNotice] = useState<number | ''>(initial.noticePeriodDays ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const phoneLimit = phoneDigitLimit(phoneIso);
+  const phoneState = phoneStatus(phone, phoneIso);
+  const headlineCount = counterState(headline, HEADLINE_MAX);
+  const summaryCount = counterState(summary, SUMMARY_MAX);
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (phoneState === 'incomplete') {
+      setError(`Enter all ${phoneLimit} digits of your phone number, or clear the field.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     setSaved(false);
@@ -78,18 +138,29 @@ export function ProfileForm({ initial }: ProfileFormProps) {
     if (joinedPhone) patch['phone'] = joinedPhone;
     if (headline) patch['headline'] = headline;
     if (summary) patch['summary'] = summary;
+    if (dateOfBirth) patch['dateOfBirth'] = dateOfBirth;
+    if (gender) patch['gender'] = gender;
+    if (nationality) patch['nationality'] = nationality;
+    if (currentCityId !== null) patch['currentCityId'] = Number(currentCityId);
+    // Always sent: this is the only control for the list, so an empty array is
+    // a real instruction ("I cleared my preferences"), not an absent one.
+    patch['preferredCityIds'] = preferredCityIds.map(Number);
+
     // Work-history fields only apply to experienced candidates. When "Fresher"
     // is selected we omit them — the PATCH DTO can't clear to null, so any
     // previously-saved values simply stay hidden behind the FRESHER status.
     if (working) {
-      if (experienceYears !== '') patch['experienceMonths'] = Math.round(Number(experienceYears) * 12);
+      if (experienceYears !== '')
+        patch['experienceMonths'] = Math.round(Number(experienceYears) * 12);
       if (currentTitle) patch['currentTitle'] = currentTitle;
       const cs = lpaToPaise(currentSalary);
       if (cs !== null) patch['currentSalaryPaise'] = cs;
-      const ex0 = lpaToPaise(expectedMin);
-      if (ex0 !== null) patch['expectedSalaryMinPaise'] = ex0;
-      const ex1 = lpaToPaise(expectedMax);
-      if (ex1 !== null) patch['expectedSalaryMaxPaise'] = ex1;
+      const ex = lpaToPaise(expected);
+      if (ex !== null) {
+        patch['expectedSalaryMinPaise'] = ex;
+        // Explicit null clears a max left by the old two-box form.
+        patch['expectedSalaryMaxPaise'] = null;
+      }
       if (notice !== '') patch['noticePeriodDays'] = Number(notice);
     }
 
@@ -106,27 +177,165 @@ export function ProfileForm({ initial }: ProfileFormProps) {
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       <Field id="name" label="Name">
-        <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
+        <Input
+          id="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          maxLength={120}
+        />
       </Field>
-      <Field id="phone" label="Phone" hint="Optional. Recruiters won't see this until you apply.">
+
+      {/*
+        The login address, shown so the form is not missing the one identifier
+        every recruiter sees, and read-only because changing it is a change of
+        account identity: it is the login, it is what the verification token was
+        issued against, and swapping it in a profile PATCH would let someone
+        take over an address they have never proved they control. Changing it
+        belongs behind a re-verification flow, which does not exist yet.
+      */}
+      <Field
+        id="email"
+        label="Email"
+        hint="Your login address. To change it you'll need to verify the new one — contact support for now."
+      >
+        <Input
+          id="email"
+          type="email"
+          value={initial.email}
+          readOnly
+          aria-readonly="true"
+          autoComplete="email"
+          className="cursor-not-allowed bg-[var(--color-bg-muted)] text-[var(--color-fg-muted)]"
+        />
+      </Field>
+
+      <Field
+        id="phone"
+        label="Phone"
+        hint={`Optional. Digits only${phoneLimit === 10 ? ', 10 for an Indian number' : ''}. Recruiters won't see this until you apply.`}
+      >
         <div className="flex gap-2">
-          <CountryCodeSelect value={phoneIso} onChange={setPhoneIso} />
+          <CountryCodeSelect
+            value={phoneIso}
+            onChange={(iso) => {
+              setPhoneIso(iso);
+              // Re-clamp: switching from a 14-digit country to India must not
+              // leave an over-long number sitting in the field.
+              setPhone((current) => sanitizePhoneInput(current, iso));
+            }}
+          />
           <Input
             id="phone"
             type="tel"
-            inputMode="tel"
+            inputMode="numeric"
             autoComplete="tel-national"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            maxLength={15}
+            onChange={(e) => setPhone(sanitizePhoneInput(e.target.value, phoneIso))}
+            maxLength={phoneLimit}
+            aria-invalid={phoneState === 'incomplete'}
+            placeholder={phoneLimit === 10 ? '9876543210' : undefined}
           />
         </div>
+        {phoneState === 'incomplete' && (
+          <p className="text-xs text-[var(--color-danger)]">
+            {phone.length} of {phoneLimit} digits.
+          </p>
+        )}
       </Field>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field id="dateOfBirth" label="Date of birth" hint="Only you and our team can see this.">
+          {/*
+            The native date input, deliberately: it opens the platform's own
+            calendar picker, is keyboard- and screen-reader-accessible for free,
+            and localises its display format to the user. A hand-rolled calendar
+            would be a large component that does all of that worse.
+          */}
+          <Input
+            id="dateOfBirth"
+            type="date"
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+            min={minBirthDate()}
+            max={maxBirthDate()}
+          />
+        </Field>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="gender">Gender</Label>
+          <Select value={gender} onValueChange={setGender}>
+            <SelectTrigger id="gender" aria-label="Gender">
+              <SelectValue placeholder="Select…" />
+            </SelectTrigger>
+            <SelectContent>
+              {GENDER_OPTIONS.map((g) => (
+                <SelectItem key={g.value} value={g.value}>
+                  {g.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-[var(--color-fg-subtle)]">
+            Optional. Used for diversity reporting only, never shown on your profile.
+          </p>
+        </div>
+      </div>
+
+      <SingleCombobox
+        id="nationality"
+        label="Nationality"
+        hint="Helps recruiters know whether a role needs work authorisation."
+        placeholder="Search nationalities…"
+        options={NATIONALITY_OPTIONS}
+        value={nationality}
+        onChange={setNationality}
+      />
+
+      <SingleCombobox
+        id="currentCity"
+        label="Current location"
+        hint="Where you are based today."
+        placeholder="Search cities…"
+        options={cityCatalogue}
+        value={currentCityId}
+        onChange={setCurrentCityId}
+        emptyLabel="No city matches that name"
+      />
+
+      <MultiCombobox
+        id="preferredCities"
+        label="Preferred locations"
+        hint="Where you'd move for the right role. Pick up to 10 — these drive your job recommendations."
+        placeholder="Search cities…"
+        options={cityCatalogue}
+        selected={preferredCityIds}
+        onChange={setPreferredCityIds}
+        max={10}
+        emptyLabel="No city matches that name"
+      />
+
       <Field id="headline" label="Headline" hint="One line, e.g. 'Staff Engineer building dev tools'.">
-        <Input id="headline" value={headline} onChange={(e) => setHeadline(e.target.value)} maxLength={200} />
+        <Input
+          id="headline"
+          value={headline}
+          onChange={(e) => setHeadline(e.target.value)}
+          maxLength={HEADLINE_MAX}
+          aria-describedby="headline-counter"
+        />
+        <Counter id="headline-counter" state={headlineCount} />
       </Field>
+
       <Field id="summary" label="Summary" hint="A few sentences about what you do.">
-        <Textarea id="summary" value={summary} onChange={(e) => setSummary(e.target.value)} rows={5} maxLength={5000} />
+        <Textarea
+          id="summary"
+          value={summary}
+          onChange={(e) => setSummary(e.target.value)}
+          rows={5}
+          maxLength={SUMMARY_MAX}
+          aria-describedby="summary-counter"
+        />
+        <Counter id="summary-counter" state={summaryCount} />
       </Field>
 
       <fieldset className="space-y-2">
@@ -189,7 +398,9 @@ export function ProfileForm({ initial }: ProfileFormProps) {
               max={60}
               step={0.5}
               value={experienceYears}
-              onChange={(e) => setExperienceYears(e.target.value === '' ? '' : Number(e.target.value))}
+              onChange={(e) =>
+                setExperienceYears(e.target.value === '' ? '' : Number(e.target.value))
+              }
             />
           </Field>
           <Field id="currentSalary" label="Current salary (LPA)">
@@ -212,24 +423,18 @@ export function ProfileForm({ initial }: ProfileFormProps) {
               onChange={(e) => setNotice(e.target.value === '' ? '' : Number(e.target.value))}
             />
           </Field>
-          <Field id="expectedMin" label="Expected minimum (LPA)">
+          <Field
+            id="expected"
+            label="Expected salary (LPA)"
+            hint="A single figure — recruiters see it as your minimum."
+          >
             <Input
-              id="expectedMin"
+              id="expected"
               type="number"
               min={0}
               step={0.5}
-              value={expectedMin}
-              onChange={(e) => setExpectedMin(e.target.value === '' ? '' : Number(e.target.value))}
-            />
-          </Field>
-          <Field id="expectedMax" label="Expected maximum (LPA)">
-            <Input
-              id="expectedMax"
-              type="number"
-              min={0}
-              step={0.5}
-              value={expectedMax}
-              onChange={(e) => setExpectedMax(e.target.value === '' ? '' : Number(e.target.value))}
+              value={expected}
+              onChange={(e) => setExpected(e.target.value === '' ? '' : Number(e.target.value))}
             />
           </Field>
         </div>
@@ -247,6 +452,32 @@ export function ProfileForm({ initial }: ProfileFormProps) {
         )}
       </div>
     </form>
+  );
+}
+
+function Counter({
+  id,
+  state,
+}: {
+  id: string;
+  state: ReturnType<typeof counterState>;
+}) {
+  return (
+    <p
+      id={id}
+      // Not aria-live: it would announce on every keystroke. The number is
+      // reachable on demand through aria-describedby on the field itself.
+      className={cn(
+        'text-right text-xs tabular-nums',
+        state.tone === 'over'
+          ? 'font-medium text-[var(--color-danger)]'
+          : state.tone === 'warning'
+            ? 'text-[color-mix(in_oklch,var(--color-warning),var(--color-fg)_30%)]'
+            : 'text-[var(--color-fg-subtle)]',
+      )}
+    >
+      {state.used} / {state.max} characters
+    </p>
   );
 }
 

@@ -11,6 +11,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
   Input,
   Label,
   cn,
@@ -138,9 +139,15 @@ export function QuickAlertDialog({
         if (!next) reset();
       }}
     >
-      <Button onClick={() => setOpen(true)} leadingIcon={<Plus className="size-4" aria-hidden="true" />}>
-        New alert
-      </Button>
+      {/*
+        DialogTrigger rather than a bare onClick: Radix returns focus to the
+        trigger when the dialog closes, and with no trigger registered focus
+        would land on <body> instead, dropping a keyboard user at the top of
+        the page every time they cancel.
+      */}
+      <DialogTrigger asChild>
+        <Button leadingIcon={<Plus className="size-4" aria-hidden="true" />}>New alert</Button>
+      </DialogTrigger>
 
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={onSubmit}>

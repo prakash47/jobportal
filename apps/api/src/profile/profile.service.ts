@@ -48,15 +48,30 @@ export class ProfileService {
       });
       if (!industry) throw new NotFoundException('Industry not found');
     }
+    // Same guard for the city FK, for the same reason.
+    if (input.currentCityId !== undefined) {
+      const city = await prisma.city.findUnique({
+        where: { id: input.currentCityId },
+        select: { id: true },
+      });
+      if (!city) throw new NotFoundException('City not found');
+    }
 
     const before = await this.getProfile(userId);
 
     // Split the input: name + phone live on User, the rest on Candidate.
-    const { name, phone, ...candidateFields } = input;
+    const { name, phone, dateOfBirth, ...candidateFields } = input;
 
     const userPatch = stripUndefined({ name, phone }) as unknown as Prisma.UserUpdateInput;
     const candidatePatch = stripUndefined({
       ...candidateFields,
+      // Pin the date-only value to UTC midnight. Handing Prisma the bare
+      // "YYYY-MM-DD" would be interpreted in the server's local timezone, so a
+      // birthday saved from a machine running west of UTC would come back a
+      // day early.
+      ...(dateOfBirth !== undefined
+        ? { dateOfBirth: new Date(`${dateOfBirth}T00:00:00.000Z`) }
+        : {}),
     }) as unknown as Prisma.CandidateUpdateInput;
 
     await prisma.$transaction(async (tx) => {

@@ -916,6 +916,37 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/personal-details-fields` - nine missing fields on Personal details - 2026-09-07
+
+CLI merge to `develop` (`--no-ff`). Nine reported gaps on the seeker **Personal details** page (SRS §4.3). These were **add-ons, not repairs** - the fields did not exist - so the bar was that each one actually persists, not merely that it renders.
+
+**Migration `20260907161300_add_personal_details_fields`** (schema lock held and released): `Candidate.dateOfBirth`, `.nationality`, `.currentCityId` (→ `City`, `onDelete: SetNull`, indexed); `CandidateLanguage.canRead` / `.canWrite` / `.canSpeak`.
+
+The three language booleans **default to `true`, not `false`**. Every row written before the column existed came from a form that meant *"I know this language"*; defaulting to false would have silently restated those as *"I know it but cannot read, write or speak it"* - a claim none of those users made.
+
+`dateOfBirth` is **date-only on the wire** (`YYYY-MM-DD`) and pinned to **UTC midnight** in the service. A birthday is a calendar fact; accepting an instant would let one DOB land on two different days for two users in different timezones, and handing Prisma a bare date string would have it read in the server local zone.
+
+**The nine:**
+
+1. **Email** - the page never showed the account own address. Now prefilled and **read-only**: it is the login, it is what the verification token was issued against, and letting a profile PATCH change it would let someone claim an address they have never proved they control. Changing it belongs behind re-verification, which does not exist yet; the hint says so.
+2. **One Expected LPA box** - was two (minimum / maximum). Now one figure, written to `expectedSalaryMinPaise` with **`expectedSalaryMaxPaise` explicitly cleared to `null`**. This needed the DTO field to become `.nullable()` - the only nullable field there - because otherwise the seeker would see one number while recruiters kept seeing a stale range. Renders as "₹24+ LPA" on the recruiter and admin surfaces, which `formatSalaryLpa` already handles; writing both columns equal would have produced "₹24–24 LPA".
+3. **Current location + Preferred locations** - both catalogue dropdowns now. `preferredCityIds` already existed and was simply unreachable from the UI; `currentCityId` is new and sits alongside the onboarding wizard free-text `currentCityName`, which is kept because old rows have only the name. Preferred locations is **always sent**, including as an empty array - it is the only control for that list, so clearing it is a real instruction.
+4. **Birth date** - native `<input type="date">`, deliberately: it opens the platform own calendar, is keyboard- and screen-reader-accessible for free, and localises its own display format. Bounded to ages 14-100 (14 is the floor under the Child Labour (Prohibition and Regulation) Act), enforced again server-side with a round-trip guard so `2025-02-30` cannot slip through by rolling into March.
+5. **Languages** - a new `LanguagesManager`: catalogue dropdown (the 22 Eighth-Schedule languages + English + the common foreign ones), Beginner / Proficient / Expert, and Read / Write / Speak checkboxes. Already-added languages drop out of the picker, because `(candidateId, name)` is unique and offering one would be offering a 409.
+6. **Gender** - dropdown, with a line saying it is for diversity reporting and never shown on the profile.
+7. **Phone** - digits only, 10 for India. Letters are stripped rather than rejected, so pasting `+91 (98765) 43210` just works. The limit is **per-country** (E.164 allows 14 national digits elsewhere) - a flat 10 would truncate valid foreign numbers. A partly-typed number blocks submit and says "5 of 10 digits"; an empty one does not, because the field is optional.
+8. **Character counters** under Headline (250) and Summary (5000), with a warning tone in the last 10%. Not `aria-live` - that would announce on every keystroke - the value is reachable via `aria-describedby` instead.
+9. **Nationality** - searchable dropdown, stored as free text so the list can grow without a migration.
+
+⚠️ **`LanguageProficiency` was deliberately NOT renamed.** The owner asked for *Beginner / Proficient / Expert*; the enum is `BEGINNER` / `INTERMEDIATE` / `ADVANCED` and is read by the admin console, which belongs to another developer. Renaming values would break their build for a label change, so the mapping lives at the edge in `PROFICIENCY_LEVELS`. Notice raised in `WORKLOG.md` - the same row now reads "Expert" to a seeker and "Advanced" to a staffer.
+
+**Verified live, end to end, against Postgres** - not just that the controls render:
+- Phone: letters alone → empty; `98a76b54c3d210` → `9876543210`; 14 digits → capped at 10; `98765` → `aria-invalid=true` + "5 of 10 digits"; complete → error clears.
+- Saved and read back the row: `phone +91 9876543210`, `dateOfBirth 1998-05-12 00:00:00` (no day shift), `gender PREFER_NOT_TO_SAY`, `nationality Indian`, `currentCityId 6` → **Pune**, `preferredCityIds {1,4}` preserved, `expectedSalaryMinPaise 240000000` (24 LPA) and **`expectedSalaryMaxPaise` NULL** - the clear actually works.
+- Language row: `Marathi | ADVANCED | canRead t | canWrite f | canSpeak t`, matching Expert + Read/Speak with Write unticked.
+
+**19 new tests** on the field rules (`lib/profile/validation.test.ts`).
+
 ### `feature/alerts-form-ux` - four Job-alerts form bugs - 2026-09-07
 
 CLI merge to `develop` (`--no-ff`). Four reported bugs on the seeker **Job alerts** page (SRS §4.5).

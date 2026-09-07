@@ -999,6 +999,17 @@ model Candidate {
   industryId             Int?
   industry               Industry?        @relation(fields: [industryId], references: [id], onDelete: SetNull)
   gender                 Gender?
+  // Personal-details page (SRS §4.3). dateOfBirth is a date-only value stored
+  // as DateTime at UTC midnight — Postgres has no date-only Prisma type and a
+  // birthday must not shift across timezones. nationality is free text backed
+  // by a UI catalogue rather than an enum, so an unlisted nationality stays
+  // enterable without a migration. currentCityId is the catalogue-backed
+  // replacement for the free-text currentCityName the onboarding wizard wrote:
+  // both are kept because old rows have only the name.
+  dateOfBirth            DateTime?
+  nationality            String?
+  currentCityId          Int?
+  currentCity            City?            @relation(fields: [currentCityId], references: [id], onDelete: SetNull)
   // Active resume points to the latest CLEAN row in Resume; older rows stay
   // for audit but are never returned by GET /me/resume.
   activeResumeId         Int?             @unique
@@ -1018,6 +1029,7 @@ model Candidate {
 
   @@index([currentCompanyId])
   @@index([industryId])
+  @@index([currentCityId])
 }
 
 model Education {
@@ -1076,6 +1088,16 @@ model CandidateLanguage {
   candidate   Candidate           @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   name        String
   proficiency LanguageProficiency
+  // Which of the three skills the candidate claims for this language. Separate
+  // booleans rather than an enum array because the UI is three independent
+  // checkboxes and a recruiter filter will want to ask about one at a time.
+  // Default true: every row written before this column existed was added from
+  // a form that meant "I know this language", and defaulting to false would
+  // have silently downgraded those to "I know it but cannot read, write or
+  // speak it" — which is not a claim any of those users made.
+  canRead     Boolean             @default(true)
+  canWrite    Boolean             @default(true)
+  canSpeak    Boolean             @default(true)
   createdAt   DateTime            @default(now())
 
   @@unique([candidateId, name])
@@ -1936,6 +1958,7 @@ model City {
   jobs        Job[]
   companies   Company[]
   localities  Locality[]
+  candidates  Candidate[]
 }
 
 // Post a Job Phase 3 — sub-city area/locality, scoped to a City (the second

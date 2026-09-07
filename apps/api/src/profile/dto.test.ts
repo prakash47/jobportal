@@ -212,3 +212,73 @@ describe('LanguageCreateDto', () => {
     expect(LanguageCreateDto.safeParse({ name: '', proficiency: 'BEGINNER' }).success).toBe(false);
   });
 });
+
+describe('ProfilePatchDto — personal-details fields', () => {
+  const dob = (v: string) => ProfilePatchDto.safeParse({ dateOfBirth: v });
+
+  it('accepts a plausible date-only birthday', () => {
+    expect(dob('1998-05-12').success).toBe(true);
+  });
+
+  it('rejects a timestamp — a birthday is a calendar date, not an instant', () => {
+    expect(dob('1998-05-12T00:00:00.000Z').success).toBe(false);
+  });
+
+  it('rejects an impossible calendar date', () => {
+    // new Date('2025-02-30') silently rolls into March, so without the
+    // round-trip guard this would validate.
+    expect(dob('2025-02-30').success).toBe(false);
+    expect(dob('2025-13-01').success).toBe(false);
+  });
+
+  it('rejects someone too young to work and a mistyped century', () => {
+    const nextYear = String(new Date().getUTCFullYear() + 1);
+    expect(dob(`${nextYear}-01-01`).success).toBe(false);
+    expect(dob('2020-01-01').success).toBe(false);
+    expect(dob('1850-01-01').success).toBe(false);
+  });
+
+  it('takes a nationality and a current city id', () => {
+    expect(ProfilePatchDto.safeParse({ nationality: 'Indian' }).success).toBe(true);
+    expect(ProfilePatchDto.safeParse({ currentCityId: 6 }).success).toBe(true);
+    expect(ProfilePatchDto.safeParse({ currentCityId: 0 }).success).toBe(false);
+    expect(ProfilePatchDto.safeParse({ nationality: '' }).success).toBe(false);
+  });
+
+  it('lets expectedSalaryMaxPaise be cleared to null but not the minimum', () => {
+    // The single Expected-LPA box needs to clear a max left by the old
+    // two-box form; every other field here stays non-nullable.
+    expect(
+      ProfilePatchDto.safeParse({ expectedSalaryMinPaise: 2_400_000_00, expectedSalaryMaxPaise: null })
+        .success,
+    ).toBe(true);
+    expect(ProfilePatchDto.safeParse({ expectedSalaryMinPaise: null }).success).toBe(false);
+  });
+
+  it('still enforces min <= max when both are present', () => {
+    expect(
+      ProfilePatchDto.safeParse({ expectedSalaryMinPaise: 500, expectedSalaryMaxPaise: 100 }).success,
+    ).toBe(false);
+  });
+});
+
+describe('LanguageCreateDto — read/write/speak', () => {
+  const base = { name: 'Marathi', proficiency: 'ADVANCED' as const };
+
+  it('still accepts the onboarding wizard payload with no skill flags', () => {
+    expect(LanguageCreateDto.safeParse(base).success).toBe(true);
+  });
+
+  it('accepts a partial skill set', () => {
+    expect(
+      LanguageCreateDto.safeParse({ ...base, canRead: true, canWrite: false, canSpeak: true }).success,
+    ).toBe(true);
+  });
+
+  it('rejects all three unchecked — that claims nothing', () => {
+    expect(
+      LanguageCreateDto.safeParse({ ...base, canRead: false, canWrite: false, canSpeak: false })
+        .success,
+    ).toBe(false);
+  });
+});
