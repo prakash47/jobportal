@@ -916,6 +916,34 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/alerts-form-ux` - four Job-alerts form bugs - 2026-09-07
+
+CLI merge to `develop` (`--no-ff`). Four reported bugs on the seeker **Job alerts** page (SRS §4.5).
+
+**1. Dropdown for Skills and Cities.** Both were a search box sitting above a *wall of chips* - up to 60 skills and 30 cities painted at all times, with nothing to say the box filtered them. Both are now real comboboxes (new `apps/web/components/ui/Combobox.tsx`, `MultiCombobox` + `SingleCombobox`): type to filter, arrows to move, Enter to toggle, selections lift out as removable chips.
+
+The list follows the **ARIA 1.2 combobox pattern** - focus never leaves the input and `aria-activedescendant` moves a virtual cursor - which is why option rows are `<li>` with `onMouseDown` and not buttons. A button would take focus and close the popup *before its own click handler could run*.
+
+Ranking: prefix matches come before substring matches, so typing "n" offers New Delhi and Noida before Bengaluru; alphabetical catalogue order alone would not. Cities also match on their **state**, so "Karnataka" finds Bangalore. Rendered rows capped at 50.
+
+**2. "Search keywords" vs "Skills" was undefined.** Both now carry helper text saying exactly what each does - keywords are free text matched against title and description, skills are catalogue entries where a job must list at least one. **Alert name** also gained a line saying it is private, which was never stated either.
+
+**3. No way to leave without saving.** Discarding meant scrolling back up to the header link. There is now a **Cancel** button beside Create alert. It `push`es to `/alerts` rather than `router.back()`: arriving from an email or a fresh tab, back would send the user out of the product.
+
+**4. Quick-create dialog on the alerts page.** **New alert** now opens a modal with the four filters asked for - Job title, Location, Salary range, Frequency - and links to the full form for skills and experience. The alert **name is derived** from what was filled in ("frontend engineer in Bangalore"), because the API requires one and asking for it would defeat the point of a quick form.
+
+⚠️ **Salary range is a floor, not a bracket, and the labels say so** ("₹10 LPA and above"). `AlertQueryDto` carries `salaryMin` only, and `SearchJobsParams` has **no salary maximum at all** - a bracket would have been a promise the matcher cannot keep. Adding one means changing the search package's query builder, which is out of scope for a form bug.
+
+**Also fixed in passing**: `AlertForm` was still calling `fetch` directly, so it kept the **15-minute session-death bug** that `bugfix/session-refresh-on-401` fixed everywhere else. It now goes through `apiFetch`. That sweep grepped for `fetch(` under `components/` and `app/`, but this file builds its URL from a local `API_URL` constant - which is how it slipped through a second time.
+
+**Verified live** against the running API and DB, signed in as a seeded seeker:
+- Quick dialog → created *"frontend engineer in Bangalore"*, Instant. Row in Postgres reads `{"q": "frontend engineer", "citySlugs": ["bangalore"], "salaryMin": 100000000}` - 10 LPA in paise, exactly right.
+- Combobox keyboard path proven with a real `KeyboardEvent`: Enter toggles the option off, a second Enter toggles it back on (the automation tool's synthetic key was the thing that did not work, not the component).
+- Hint search confirmed: "beng" returns Howrah and Kolkata - both **West Bengal** - and *not* Bangalore, which this catalogue spells the other way.
+- Cancel from a dirty form landed on `/alerts` and wrote **0 rows**.
+
+**9 tests** on the filter, in `lib/ui/` because the web suite only collects `lib/**`.
+
 ### `feature/application-deep-link` - Saved jobs RPT #7, done properly this time - 2026-09-07
 
 CLI merge to `develop` (`--no-ff`). The owner rejected the first attempt, correctly, on two counts: clicking the pill did not open the specific application, and the pill did not look clickable.

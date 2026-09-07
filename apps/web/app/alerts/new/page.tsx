@@ -13,7 +13,7 @@ export default async function NewAlertPage() {
       take: 500,
     }),
     prisma.city.findMany({
-      select: { slug: true, name: true },
+      select: { slug: true, name: true, state: true },
       orderBy: { name: 'asc' },
     }),
   ]);
