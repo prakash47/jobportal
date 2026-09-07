@@ -109,7 +109,7 @@ export function AlertForm({ initial, skillCatalogue, cityCatalogue }: AlertFormP
           onChange={(e) => setName(e.target.value)}
           required
           maxLength={120}
-          placeholder="e.g. Frontend roles in Bengaluru"
+          placeholder="e.g. Frontend roles in Bangalore"
         />
       </div>
 
