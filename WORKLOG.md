@@ -58,7 +58,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Shared surface | File / path | Held by | Branch | Since | Notes |
 |---|---|---|---|---|---|
-| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | — free — | | | Released 2026-08-22 after `feature/sadmin-roles-console` (PR B) merged (`20260822064243_add_admin_staff_invites` — `AdminStaffInvite` + 8 `ADMIN_STAFF_*` audit actions). |
+| **DB schema + migrations** | `packages/db/prisma/schema.prisma` (+ `prisma/migrations/`) | Claude/Prakash | `feature/personal-details-fields` | 2026-09-07 | Released 2026-08-22 after `feature/sadmin-roles-console` (PR B) merged (`20260822064243_add_admin_staff_invites` — `AdminStaffInvite` + 8 `ADMIN_STAFF_*` audit actions). |
 | **UI theme tokens** | `packages/ui/src/styles/theme.css` | — free — | | | Released 2026-07-30 after `feature/brand-nav-loader` merged. |
 | **Shared types** | `packages/types/src/*` | — free — | | | Zod schemas + shared types. |
 | **Web home barrel** | `apps/web/components/home/index.ts` | — free — | | | Append-only; coordinate big rewrites. |
@@ -76,6 +76,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/personal-details-fields` | Nine personal-details fields for the seeker: read-only email, one Expected-LPA box, current + preferred location dropdowns, birthdate, languages (proficiency + read/write/speak), gender, phone validation, summary counter, nationality. **Migration `20260907161300_add_personal_details_fields`**: `Candidate.dateOfBirth` / `.nationality` / `.currentCityId`, and `CandidateLanguage.canRead/canWrite/canSpeak`. | `packages/db/prisma/schema.prisma` (**lock held**), `apps/api/src/profile/dto.ts` |
 
 ---
 
