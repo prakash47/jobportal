@@ -28,7 +28,7 @@ export default async function EditAlertPage({ params }: PageProps) {
       take: 500,
     }),
     prisma.city.findMany({
-      select: { slug: true, name: true },
+      select: { slug: true, name: true, state: true },
       orderBy: { name: 'asc' },
     }),
     isFlagEnabled('killswitch.job_alerts'),

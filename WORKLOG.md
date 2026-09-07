@@ -76,6 +76,7 @@ These files are edited by everyone, so two simultaneous edits = guaranteed merge
 
 | Developer | Branch | Building | Shared surfaces |
 |---|---|---|---|
+| Claude/Prakash | `feature/alerts-form-ux` | Job-alerts form UX: searchable dropdowns for Skills/Cities (new `components/ui/Combobox.tsx` + `lib/ui/combobox-filter.ts`), helper text separating Search keywords from Skills, a Cancel button, and a quick-create dialog on `/alerts` (`QuickAlertDialog`). Also routes `AlertForm` through `apiFetch`. | `apps/web/components/alerts/index.ts` (append-only) |
 
 ---
 

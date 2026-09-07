@@ -4,3 +4,4 @@ export { AlertsEmpty } from './AlertsEmpty';
 export { DeleteAlertButton } from './DeleteAlertButton';
 export { PauseToggle } from './PauseToggle';
 export { SendTestButton } from './SendTestButton';
+export { QuickAlertDialog } from './QuickAlertDialog';

@@ -2,16 +2,23 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Badge, Button, Input, Label, RadioGroup, RadioItem } from '@jobportal/ui';
+import { Button, Input, Label, RadioGroup, RadioItem } from '@jobportal/ui';
 import { EVENTS, track } from '../../lib/analytics/posthog';
+import { MultiCombobox, type ComboboxOption } from '../ui/Combobox';
+import {
+  buildQuery,
+  monthsToYears,
+  paiseToLpa,
+  saveAlert,
+  type Frequency,
+} from '../../lib/alerts/query';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-
-export type Frequency = 'instant' | 'daily' | 'weekly';
+export type { Frequency };
 
 interface CatalogueEntry {
   slug: string;
   name: string;
+  state?: string;
 }
 
 export interface AlertFormProps {
@@ -34,143 +41,112 @@ export interface AlertFormProps {
   cityCatalogue: CatalogueEntry[];
 }
 
+function toOptions(entries: CatalogueEntry[]): ComboboxOption[] {
+  return entries.map((e) => ({
+    value: e.slug,
+    label: e.name,
+    ...(e.state ? { hint: e.state } : {}),
+  }));
+}
+
 export function AlertForm({ initial, skillCatalogue, cityCatalogue }: AlertFormProps) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
   const [q, setQ] = useState(initial.query.q ?? '');
-  const [skillSlugs, setSkillSlugs] = useState<Set<string>>(
-    new Set(initial.query.skillSlugs ?? []),
-  );
-  const [citySlugs, setCitySlugs] = useState<Set<string>>(new Set(initial.query.citySlugs ?? []));
-  const [skillQuery, setSkillQuery] = useState('');
-  const [cityQuery, setCityQuery] = useState('');
+  const [skillSlugs, setSkillSlugs] = useState<string[]>(initial.query.skillSlugs ?? []);
+  const [citySlugs, setCitySlugs] = useState<string[]>(initial.query.citySlugs ?? []);
   const [minExpYears, setMinExpYears] = useState<number | ''>(
-    initial.query.minExperienceMonths !== undefined
-      ? Math.round(initial.query.minExperienceMonths / 12)
-      : '',
+    monthsToYears(initial.query.minExperienceMonths),
   );
   const [maxExpYears, setMaxExpYears] = useState<number | ''>(
-    initial.query.maxExperienceMonths !== undefined
-      ? Math.round(initial.query.maxExperienceMonths / 12)
-      : '',
+    monthsToYears(initial.query.maxExperienceMonths),
   );
-  const [salaryMinLpa, setSalaryMinLpa] = useState<number | ''>(
-    initial.query.salaryMin !== undefined
-      ? Math.round((initial.query.salaryMin / 100 / 100_000) * 10) / 10
-      : '',
-  );
+  const [salaryMinLpa, setSalaryMinLpa] = useState<number | ''>(paiseToLpa(initial.query.salaryMin));
   const [frequency, setFrequency] = useState<Frequency>(initial.frequency);
   const [isActive, setIsActive] = useState(initial.isActive);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const skillFiltered = useMemo(() => {
-    const q = skillQuery.trim().toLowerCase();
-    if (!q) return skillCatalogue.slice(0, 60);
-    return skillCatalogue.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 60);
-  }, [skillQuery, skillCatalogue]);
-
-  const cityFiltered = useMemo(() => {
-    const q = cityQuery.trim().toLowerCase();
-    if (!q) return cityCatalogue.slice(0, 30);
-    return cityCatalogue.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 30);
-  }, [cityQuery, cityCatalogue]);
-
-  function toggleSkill(slug: string) {
-    const next = new Set(skillSlugs);
-    if (next.has(slug)) next.delete(slug);
-    else next.add(slug);
-    setSkillSlugs(next);
-  }
-
-  function toggleCity(slug: string) {
-    const next = new Set(citySlugs);
-    if (next.has(slug)) next.delete(slug);
-    else next.add(slug);
-    setCitySlugs(next);
-  }
+  const skillOptions = useMemo(() => toOptions(skillCatalogue), [skillCatalogue]);
+  const cityOptions = useMemo(() => toOptions(cityCatalogue), [cityCatalogue]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError(null);
 
-    const query: Record<string, unknown> = {};
-    if (q) query['q'] = q;
-    if (skillSlugs.size > 0) query['skillSlugs'] = [...skillSlugs];
-    if (citySlugs.size > 0) query['citySlugs'] = [...citySlugs];
-    if (minExpYears !== '') query['minExperienceMonths'] = Math.round(Number(minExpYears) * 12);
-    if (maxExpYears !== '') query['maxExperienceMonths'] = Math.round(Number(maxExpYears) * 12);
-    if (salaryMinLpa !== '') query['salaryMin'] = Math.round(Number(salaryMinLpa) * 100_000 * 100);
+    const result = await saveAlert(initial.id, {
+      name,
+      query: buildQuery({ q, skillSlugs, citySlugs, minExpYears, maxExpYears, salaryMinLpa }),
+      frequency,
+      isActive,
+    });
+    setBusy(false);
 
-    const payload = { name, query, frequency, isActive };
-    const url = initial.id ? `${API_URL}/me/alerts/${initial.id}` : `${API_URL}/me/alerts`;
-    const method = initial.id ? 'PATCH' : 'POST';
-
-    try {
-      const res = await fetch(url, {
-        method,
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(body.message ?? `Save failed (${res.status})`);
-      }
-      // Phase 1 item 18 — only fire on CREATE, not edit. The event is
-      // about conversion (a new alert is a strong signal), not edits.
-      if (!initial.id) {
-        track(EVENTS.JOB_ALERT_CREATED, { frequency });
-      }
-      router.push('/alerts');
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed');
-    } finally {
-      setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
     }
+    // Phase 1 item 18 — only fire on CREATE, not edit. The event is
+    // about conversion (a new alert is a strong signal), not edits.
+    if (initial.id === null) {
+      track(EVENTS.JOB_ALERT_CREATED, { frequency });
+    }
+    router.push('/alerts');
+    router.refresh();
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       <div className="space-y-1.5">
         <Label htmlFor="name">Alert name</Label>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          Only you see this — it labels the alert in your list and the email subject.
+        </p>
         <Input
           id="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
           maxLength={120}
+          placeholder="e.g. Frontend roles in Bengaluru"
         />
       </div>
 
       <div className="space-y-1.5">
         <Label htmlFor="q">Search keywords</Label>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          Job titles or roles — matched as free text against the title and description.
+        </p>
         <Input
           id="q"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           maxLength={200}
-          placeholder="e.g. react frontend"
+          placeholder="e.g. frontend engineer"
         />
       </div>
 
-      <ChipPicker
+      <MultiCombobox
+        id="alert-skills"
         label="Skills"
-        catalogue={skillFiltered}
+        hint="Specific technical capabilities, picked from our catalogue. A job must list at least one of them."
+        placeholder="Search skills…"
+        options={skillOptions}
         selected={skillSlugs}
-        onToggle={toggleSkill}
-        onQueryChange={setSkillQuery}
-        query={skillQuery}
+        onChange={setSkillSlugs}
+        emptyLabel="No skill matches that name"
       />
-      <ChipPicker
+
+      <MultiCombobox
+        id="alert-cities"
         label="Cities"
-        catalogue={cityFiltered}
+        hint="Leave empty to match anywhere in India."
+        placeholder="Search cities…"
+        options={cityOptions}
         selected={citySlugs}
-        onToggle={toggleCity}
-        onQueryChange={setCityQuery}
-        query={cityQuery}
+        onChange={setCitySlugs}
+        emptyLabel="No city matches that name"
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -231,9 +207,17 @@ export function AlertForm({ initial, skillCatalogue, cityCatalogue }: AlertFormP
         </Label>
       </div>
 
-      <div className="flex items-center gap-3 border-t border-[var(--color-border)] pt-6">
+      <div className="flex flex-wrap items-center gap-3 border-t border-[var(--color-border)] pt-6">
         <Button type="submit" loading={busy}>
-          {initial.id ? 'Save changes' : 'Create alert'}
+          {initial.id === null ? 'Create alert' : 'Save changes'}
+        </Button>
+        {/*
+          Discarding used to mean scrolling back up to the header's back link.
+          `router.back()` is deliberately NOT used: arriving here from an email
+          or a fresh tab would send the user out of the product entirely.
+        */}
+        <Button type="button" variant="ghost" onClick={() => router.push('/alerts')} disabled={busy}>
+          Cancel
         </Button>
         {error && (
           <p role="alert" className="text-sm text-[var(--color-danger)]">
@@ -242,46 +226,6 @@ export function AlertForm({ initial, skillCatalogue, cityCatalogue }: AlertFormP
         )}
       </div>
     </form>
-  );
-}
-
-function ChipPicker({
-  label,
-  catalogue,
-  selected,
-  query,
-  onQueryChange,
-  onToggle,
-}: {
-  label: string;
-  catalogue: CatalogueEntry[];
-  selected: Set<string>;
-  query: string;
-  onQueryChange: (v: string) => void;
-  onToggle: (slug: string) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Input
-        value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-        placeholder={`Search ${label.toLowerCase()}…`}
-      />
-      <div className="flex flex-wrap gap-1.5">
-        {catalogue.map((entry) => (
-          <button
-            key={entry.slug}
-            type="button"
-            onClick={() => onToggle(entry.slug)}
-            className="rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)]"
-            aria-pressed={selected.has(entry.slug)}
-          >
-            <Badge variant={selected.has(entry.slug) ? 'primary' : 'neutral'}>{entry.name}</Badge>
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }
 
