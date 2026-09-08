@@ -8,6 +8,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   Settings,
+  UserCog,
   Sparkles,
   User,
 } from '@jobportal/ui/icons';
@@ -50,7 +51,10 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'Account',
-    items: [{ label: 'Notifications', href: '/settings/notifications', icon: Settings }],
+    items: [
+      { label: 'Notifications', href: '/settings/notifications', icon: Settings },
+      { label: 'Account', href: '/settings/account', icon: UserCog },
+    ],
   },
 ];
 

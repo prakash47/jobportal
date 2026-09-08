@@ -916,6 +916,32 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `bugfix/seeker-education-personal-brand` - ten items, three of them data-integrity bugs - 2026-09-08
+
+CLI merge to `develop` (`--no-ff`). Education, Work experience, Personal details, and the brand chrome. **Every data bug here was reproduced before it was fixed**, and two of them were bugs my own previous batch had left behind or half-fixed.
+
+#### Education
+- ⚠️ **Filled details lost after save.** Reproduced: type a degree name, leave the college blank, press Save — the form said **"Saved"**, wrote **nothing**, and the degree was gone on reload. `isBlank` tested `institute` alone, so a card holding anything else counted as untouched and was skipped in silence. It now tests every field, and `validateEduDraft` requires the institute — a branch that was previously unreachable. **The test that asserted the old behaviour was asserting the bug**, and has been rewritten.
+- **Two qualifications both "currently pursuing".** Class 12 and a degree cannot both be underway. `validateSinglePursuing` checks the degree cards and Class 12 together and names both offenders.
+- ⚠️ **Future-dated years saved.** Reproduced against the running API: `POST /me/education` with `startYear: 2029` returned **201**. The dropdown cap shipped in the previous batch was **cosmetic** — the API is the gate and accepted 1950-2100. `startYear` can no longer exceed the current year; `endYear` can run at most 8 years ahead. The year is read **per request**, not captured at module load, or a process started in December would reject January's valid start years until restarted.
+
+#### Work experience
+- **"Complete" vs "up to date".** Completeness counts whether sections are FILLED, so a history ending in 2017 scored and read as complete — the reported case. A recruiter cannot tell *"has not worked since"* from *"has not updated since"*. The page now flags a history whose most recent role ended 6+ months ago, and confirms up-to-date when a current role exists. An **ongoing career break counts as current**: someone on a declared break has already told us what they are doing now.
+
+#### Personal details
+- ⚠️ **Deleted info comes back.** Reproduced: save a phone, erase it, save, reload — the old number returns. Every optional field was omitted when empty, and an omitted key means *"no change"* on a PATCH, so there was **no way to express "make this empty" for any field on the page**. The DTO now accepts `null` on every clearable field and the form sends all of them on every save — value when filled, explicit `null` when empty. `name` is excluded on purpose.
+- **Total experience** accepted only whole numbers and halves; `step` is now `0.1`, so 8.3 and 6.7 work. Months are the stored unit, and 0.1 year is about one month.
+
+#### Brand and chrome
+- **Dashboard CQ mark did nothing.** It pointed at `/profile`, the page you are usually already on. ⚠️ Pointing it at `/` does **not** fix that — `app/page.tsx` redirects a signed-in CANDIDATE back to `/profile`, so the marketing home is unreachable while signed in and the click still looks dead. **I shipped that wrong fix first and caught it in the browser.** It now goes to `/jobs`, which navigates from every dashboard page.
+- **Forgot-password masthead**: the lockup logo rather than the bare mark (the page sits outside SiteShell, and the masthead is the only thing naming the product on a surface where someone is typing a code), and "Back to sign in" is boxed — as muted text beside the masthead it read as a caption, not the page's only exit.
+- **Loader arrow cut.** The clip edge ran exactly THROUGH the arrow tail's two vertices, so the shape edge lay precisely ON the clip boundary. Mathematically a no-op; to a rasteriser it is two edges anti-aliased against each other, eating a sliver along the seam and biting a notch out of the acute tail. Confirmed by overlaying the unclipped outline in the browser. The seam is offset ~2 units along its normal, leaving the docked arrow strictly inside the region — travel is unaffected (at `translateX(-104)` the arrow's rightmost point is x=123, the seam at that height x=127.9).
+- **Delete account.** The endpoint existed (`DELETE /v1/me/account`; its own comment noted nothing on the web called it) with no UI. New `/settings/account` page and rail entry — its own page rather than a section under Notifications, because an irreversible action below a list of email toggles is one mis-scroll from a mis-click. The typed `DELETE` phrase **is** the confirmation; no second modal, which would only train people to click through both. The card states what is removed and that recruiters keep applications and resumes already delivered.
+
+**Verified live against Postgres**: partly-filled card errors instead of claiming "Saved"; both-pursuing refused by name; API returns 400 for `startYear` 2029 and 201 for a past role; a cleared phone is `NULL`; 6.7 years stores as **80 months**; the 2017 history renders "8 yrs 8 mos ago"; the logo moves `/profile` → `/jobs`; and a **throwaway account was genuinely deleted** — `User` and `Candidate` rows gone, landing signed-out on the public homepage.
+
+**23 new tests.**
+
 ### `feature/profile-education-experience` - 17 reported items across six seeker pages - 2026-09-08
 
 CLI merge to `develop` (`--no-ff`). One branch, four commits, covering the Education, Work experience, Skills, Resume, Notification and Jobs pages (SRS §4.3, §4.5, §4.13).

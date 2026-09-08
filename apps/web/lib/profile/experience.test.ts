@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  experienceFreshness,
   formatExperience,
   sortExperience,
   totalExperienceMonths,
@@ -159,5 +160,96 @@ describe('sortExperience', () => {
     const before = rows.map((r) => r.id);
     sortExperience(rows);
     expect(rows.map((r) => r.id)).toEqual(before);
+  });
+});
+
+describe('experienceFreshness', () => {
+  it('reports none when there is no work history', () => {
+    expect(experienceFreshness([], NOW).state).toBe('none');
+  });
+
+  it('reports current for an ongoing role — nothing is missing', () => {
+    const f = experienceFreshness(
+      [span({ startDate: '2020-01-01T00:00:00.000Z', endDate: null, isCurrent: true })],
+      NOW,
+    );
+    expect(f.state).toBe('current');
+    expect(f.monthsSince).toBe(0);
+  });
+
+  it('reports fresh for a role that ended recently', () => {
+    const f = experienceFreshness(
+      [span({ startDate: '2020-01-01T00:00:00.000Z', endDate: '2026-06-07T00:00:00.000Z' })],
+      NOW,
+    );
+    expect(f.state).toBe('fresh');
+    expect(f.monthsSince).toBe(3);
+  });
+
+  it('reports STALE for the reported case — a history that stops in 2017', () => {
+    // Completeness counts filled sections, not current ones, so this profile
+    // scored as complete while ending nine years ago.
+    const f = experienceFreshness(
+      [span({ startDate: '2014-01-01T00:00:00.000Z', endDate: '2017-12-31T00:00:00.000Z' })],
+      NOW,
+    );
+    expect(f.state).toBe('stale');
+    expect(f.monthsSince).toBeGreaterThan(100);
+    expect(f.lastEndedAt).toBe('2017-12-31T00:00:00.000Z');
+  });
+
+  it('uses the MOST RECENT role, not the first or the longest', () => {
+    const f = experienceFreshness(
+      [
+        span({ startDate: '2010-01-01T00:00:00.000Z', endDate: '2012-01-01T00:00:00.000Z' }),
+        span({ startDate: '2020-01-01T00:00:00.000Z', endDate: '2026-06-07T00:00:00.000Z' }),
+        span({ startDate: '2014-01-01T00:00:00.000Z', endDate: '2016-01-01T00:00:00.000Z' }),
+      ],
+      NOW,
+    );
+    expect(f.state).toBe('fresh');
+  });
+
+  it('treats an ongoing career break as a current account of the present', () => {
+    // Someone on a declared break has told us what they are doing now; nagging
+    // them to update would be wrong.
+    const f = experienceFreshness(
+      [
+        span({ startDate: '2014-01-01T00:00:00.000Z', endDate: '2017-12-31T00:00:00.000Z' }),
+        span({
+          startDate: '2018-01-01T00:00:00.000Z',
+          endDate: null,
+          isCurrent: true,
+          isCareerBreak: true,
+        }),
+      ],
+      NOW,
+    );
+    expect(f.state).toBe('current');
+  });
+
+  it('does not count a career break as the most recent ROLE', () => {
+    const f = experienceFreshness(
+      [
+        span({ startDate: '2014-01-01T00:00:00.000Z', endDate: '2017-12-31T00:00:00.000Z' }),
+        span({
+          startDate: '2018-01-01T00:00:00.000Z',
+          endDate: '2026-06-07T00:00:00.000Z',
+          isCareerBreak: true,
+        }),
+      ],
+      NOW,
+    );
+    expect(f.state).toBe('stale');
+    expect(f.lastEndedAt).toBe('2017-12-31T00:00:00.000Z');
+  });
+
+  it('flips at the boundary', () => {
+    const at6 = experienceFreshness(
+      [span({ startDate: '2020-01-01T00:00:00.000Z', endDate: '2026-03-07T00:00:00.000Z' })],
+      NOW,
+    );
+    expect(at6.monthsSince).toBe(6);
+    expect(at6.state).toBe('stale');
   });
 });

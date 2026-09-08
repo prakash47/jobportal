@@ -32,12 +32,21 @@ export default async function ForgotPasswordPage() {
     <main className="min-h-dvh bg-[var(--color-bg)]">
       <header className="border-b border-[var(--color-border)] bg-[var(--color-bg-elevated)]">
         <div className="mx-auto flex h-14 w-full max-w-[var(--container-max)] items-center justify-between px-4 sm:h-16 sm:px-6">
-          <Link href="/" aria-label="Career Queue — home">
-            <Logo variant="mark" className="h-6 w-auto sm:h-7" />
+          {/* The lockup, not the bare mark: this page is deliberately outside
+              SiteShell, so the masthead is the only thing naming the product on
+              a security surface where a user needs to know whose form they are
+              typing a code into. */}
+          <Link href="/" aria-label="Career Queue — home" className="flex items-center">
+            <Logo variant="lockup" className="h-8 w-auto sm:h-9" />
           </Link>
+          {/* Boxed rather than a bare text link. It is the only escape hatch on
+              a chrome-suppressed page, and as plain muted text it read as a
+              caption next to the masthead instead of the one thing you can
+              click. Bordered, not filled: the primary action on this page is
+              the form, and two filled buttons would compete. */}
           <Link
             href="/login"
-            className="-mx-3 inline-flex items-center gap-1.5 px-3 py-2 text-sm text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)]"
+            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-bg-elevated)] px-3 py-2 text-sm font-medium text-[var(--color-fg)] transition-colors hover:bg-[var(--color-bg-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)]"
           >
             <ArrowLeft aria-hidden="true" className="size-3.5" />
             Back to sign in

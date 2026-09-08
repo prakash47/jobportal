@@ -16,6 +16,7 @@ import {
   startYearOptions,
   toEducationBody,
   validateEduDraft,
+  validateSinglePursuing,
   type EduDraft,
 } from '../../lib/profile/education';
 
@@ -130,11 +131,15 @@ export function EducationManager({
     // Validate everything BEFORE writing anything. Validating as we go would
     // leave the earlier cards saved and the later ones not, with an error
     // message that makes it look as though nothing was written.
+    const labelFor = (i: number) =>
+      rows.length === 1 ? 'Qualification' : `Qualification ${i + 1}`;
+
     for (const [i, row] of rows.entries()) {
       const message = validateEduDraft(row.draft, {
-        label: rows.length === 1 ? 'Qualification' : `Qualification ${i + 1}`,
+        label: labelFor(i),
         requireDegreeName: true,
         class12Sentinel: CLASS12_DEGREE,
+        currentYear,
       });
       if (message) {
         setError(message);
@@ -145,9 +150,20 @@ export function EducationManager({
       label: 'Class 12',
       requireDegreeName: false,
       class12Sentinel: CLASS12_DEGREE,
+      currentYear,
     });
     if (class12Message) {
       setError(class12Message);
+      return;
+    }
+    // At most one qualification in progress, across the degree cards AND
+    // Class 12 — they cannot both be underway.
+    const pursuingMessage = validateSinglePursuing([
+      ...rows.map((row, i) => ({ label: labelFor(i), draft: row.draft })),
+      { label: 'Class 12', draft: class12 },
+    ]);
+    if (pursuingMessage) {
+      setError(pursuingMessage);
       return;
     }
 

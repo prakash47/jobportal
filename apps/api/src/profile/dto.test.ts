@@ -245,14 +245,44 @@ describe('ProfilePatchDto — personal-details fields', () => {
     expect(ProfilePatchDto.safeParse({ nationality: '' }).success).toBe(false);
   });
 
-  it('lets expectedSalaryMaxPaise be cleared to null but not the minimum', () => {
-    // The single Expected-LPA box needs to clear a max left by the old
-    // two-box form; every other field here stays non-nullable.
+  it('lets every optional field be cleared with null', () => {
+    // Originally only the MAX was nullable, so the single Expected-LPA box
+    // could clear a leftover from the old two-box form. That was too narrow:
+    // an omitted key means "no change" on a PATCH, so with the rest
+    // non-nullable there was no way to erase a phone number, a headline or a
+    // salary at all — the reported "deleted info comes back".
     expect(
       ProfilePatchDto.safeParse({ expectedSalaryMinPaise: 2_400_000_00, expectedSalaryMaxPaise: null })
         .success,
     ).toBe(true);
-    expect(ProfilePatchDto.safeParse({ expectedSalaryMinPaise: null }).success).toBe(false);
+    for (const field of [
+      'phone',
+      'headline',
+      'summary',
+      'experienceMonths',
+      'currentTitle',
+      'currentSalaryPaise',
+      'expectedSalaryMinPaise',
+      'noticePeriodDays',
+      'nationality',
+      'currentCityId',
+      'gender',
+      'dateOfBirth',
+    ]) {
+      expect(ProfilePatchDto.safeParse({ [field]: null }).success).toBe(true);
+    }
+  });
+
+  it('still refuses to clear the name — a profile with no name shows a recruiter nothing', () => {
+    expect(ProfilePatchDto.safeParse({ name: null }).success).toBe(false);
+    expect(ProfilePatchDto.safeParse({ name: '' }).success).toBe(false);
+  });
+
+  it('does not let a null minimum defeat the min <= max check', () => {
+    expect(
+      ProfilePatchDto.safeParse({ expectedSalaryMinPaise: null, expectedSalaryMaxPaise: 100 })
+        .success,
+    ).toBe(true);
   });
 
   it('still enforces min <= max when both are present', () => {
@@ -313,5 +343,44 @@ describe('Experience DTOs — career break', () => {
     expect(
       ExperienceCreateDto.safeParse({ ...base, isCurrent: true, isCareerBreak: true }).success,
     ).toBe(false);
+  });
+});
+
+describe('Education DTOs — future years', () => {
+  const year = new Date().getUTCFullYear();
+  const base = { institute: 'IIT Bombay', degree: 'B.Tech' };
+
+  it('rejects a starting year in the future', () => {
+    // Reproduced against the running API before this refine existed:
+    // POST /me/education with startYear 2029 returned 201.
+    const r = EducationCreateDto.safeParse({ ...base, startYear: year + 3, endYear: year + 4 });
+    expect(r.success).toBe(false);
+  });
+
+  it('accepts the current year as a start', () => {
+    expect(EducationCreateDto.safeParse({ ...base, startYear: year }).success).toBe(true);
+  });
+
+  it('allows a modest future ending year, for a degree in progress', () => {
+    expect(
+      EducationCreateDto.safeParse({ ...base, startYear: year - 1, endYear: year + 3 }).success,
+    ).toBe(true);
+  });
+
+  it('rejects an absurd ending year', () => {
+    expect(
+      EducationCreateDto.safeParse({ ...base, startYear: year - 1, endYear: year + 40 }).success,
+    ).toBe(false);
+  });
+
+  it('still accepts null endYear for currently pursuing', () => {
+    expect(
+      EducationCreateDto.safeParse({ ...base, startYear: year - 1, endYear: null }).success,
+    ).toBe(true);
+  });
+
+  it('applies the same bound on update', () => {
+    expect(EducationUpdateDto.safeParse({ startYear: year + 3 }).success).toBe(false);
+    expect(EducationUpdateDto.safeParse({ startYear: year - 5 }).success).toBe(true);
   });
 });

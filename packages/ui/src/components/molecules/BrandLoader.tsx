@@ -39,13 +39,22 @@ const CYAN = 'var(--color-accent-500)';
 const C_ARC_D = 'M 179.7 34.9 A 61.5 61.5 0 1 0 118.1 135.4';
 const ARROW_D = 'M 149 123 L 187 123 L 187 107 L 227 140 L 187 171 L 187 153 L 117 153 Z';
 const QTAIL_D = 'M 315 85 L 360 151 L 339 165 L 295 99 Z';
-// Clip edge: the LINE THROUGH the tail's slant (149,123)–(117,153), extended
-// (dx/dy = −32/30; at y=96 → x=177.8, at y=196 → x=71.1). The arrow is only
-// ever visible to the RIGHT of that seam, so at translateX(-104) it is
-// entirely "inside" the C and emerges through open geometry — and at dock the
-// tail's own slant edge coincides with the clip edge exactly. No mask tricks,
-// no glyph contortion.
-const CLIP_D = 'M 177.8 96 L 71.1 196 L 420 196 L 420 96 Z';
+// Clip edge: PARALLEL to the tail's slant (149,123)–(117,153) — same
+// dx/dy = −32/30 — but pushed ~2 units outward along its normal (x −3 at both
+// ends: 177.8→174.8, 71.1→68.1).
+//
+// It used to run exactly THROUGH those two vertices, so the arrow's tail edge
+// lay precisely ON the clip boundary. That is mathematically a no-op and
+// visually is not: a rasteriser anti-aliases both the shape edge and the clip
+// edge against each other, eating a sliver along the whole seam and biting a
+// visible notch out of the acute tail tip — reported as the arrow inside the C
+// being "cutted", and reproduced by overlaying the unclipped outline.
+//
+// Offsetting the seam leaves the docked arrow strictly INSIDE the clip region,
+// so nothing is coincident and the tail paints whole. The travel state is
+// unaffected: at translateX(-104) the arrow's rightmost point is x=123 and the
+// seam at that height is x=127.9, so it is still entirely hidden inside the C.
+const CLIP_D = 'M 174.8 96 L 68.1 196 L 420 196 L 420 96 Z';
 
 export interface BrandLoaderMarkProps {
   /** Extra classes on the <svg> (size it from the outside; defaults to w-full). */
