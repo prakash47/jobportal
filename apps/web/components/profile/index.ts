@@ -7,7 +7,7 @@
 // the build breaks (see PROGRESS.md, PR #33). Import those two via their direct
 // file paths instead.
 export { CompletenessIndicator } from './CompletenessIndicator';
-export { EducationOnboardingForm } from './EducationOnboardingForm';
+export { EducationManager, type EducationManagerProps } from './EducationManager';
 export { ExperienceManager } from './ExperienceManager';
 export { NextSteps } from './NextSteps';
 export { ProfileForm, type ProfileFormProps } from './ProfileForm';

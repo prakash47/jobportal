@@ -282,3 +282,36 @@ describe('LanguageCreateDto — read/write/speak', () => {
     ).toBe(false);
   });
 });
+
+describe('Experience DTOs — career break', () => {
+  const base = {
+    companyName: 'Career break',
+    title: 'Parental leave',
+    startDate: '2023-01-01T00:00:00.000Z',
+    endDate: '2023-09-01T00:00:00.000Z',
+  };
+
+  it('accepts the career-break flag', () => {
+    expect(ExperienceCreateDto.safeParse({ ...base, isCareerBreak: true }).success).toBe(true);
+  });
+
+  it('still accepts a payload without it, so existing clients keep working', () => {
+    expect(ExperienceCreateDto.safeParse(base).success).toBe(true);
+  });
+
+  it('rejects a non-boolean', () => {
+    expect(ExperienceCreateDto.safeParse({ ...base, isCareerBreak: 'yes' }).success).toBe(false);
+  });
+
+  it('is patchable on its own', () => {
+    expect(ExperienceUpdateDto.safeParse({ isCareerBreak: true }).success).toBe(true);
+  });
+
+  it('still refuses an endDate alongside isCurrent', () => {
+    // The manager omits endDate when the role is ongoing precisely because of
+    // this rule; a regression here would surface as a 400 on every current role.
+    expect(
+      ExperienceCreateDto.safeParse({ ...base, isCurrent: true, isCareerBreak: true }).success,
+    ).toBe(false);
+  });
+});

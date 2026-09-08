@@ -1,44 +1,47 @@
 import { prisma } from '@jobportal/db';
-import { isFlagEnabled } from '@jobportal/feature-flags';
 import { requireUser } from '../../../lib/auth/require-user';
 import { PageHeader } from '../../../components/dashboard/PageHeader';
 import { ContentCard } from '../../../components/dashboard/ContentCard';
-import { ResumeManager } from '../../../components/profile/ResumeManager';
-
-const RESUME_DOWNLOAD_FLAG = 'feature.resume_download_pdf';
+import { ResumeManager, type ResumeVersion } from '../../../components/profile/ResumeManager';
 
 export default async function ResumePage() {
   const session = await requireUser();
   const candidate = await prisma.candidate.findUnique({
     where: { userId: session.sub },
-    include: { activeResume: true },
+    select: { id: true, activeResumeId: true },
   });
 
-  // Three-layer flag enforcement (CLAUDE.md §4): server check before render.
-  // Middleware handles the route-level redirect; the API guard is the third
-  // line of defence inside ResumeService.getDownloadUrl.
-  const downloadEnabled = await isFlagEnabled(RESUME_DOWNLOAD_FLAG, { userId: session.sub });
+  // Every version the candidate still holds, not only the active one — uploading
+  // used to retire the previous file, so version history did not exist.
+  const rows = candidate
+    ? await prisma.resume.findMany({
+        where: { candidateId: candidate.id, deletedAt: null },
+        orderBy: { uploadedAt: 'desc' },
+      })
+    : [];
 
-  const active =
-    candidate?.activeResume && candidate.activeResume.deletedAt === null
-      ? {
-          id: candidate.activeResume.id,
-          originalFilename: candidate.activeResume.originalFilename,
-          sizeBytes: candidate.activeResume.sizeBytes,
-          mimeType: candidate.activeResume.mimeType,
-          scanStatus: candidate.activeResume.scanStatus,
-          uploadedAt: candidate.activeResume.uploadedAt.toISOString(),
-        }
-      : null;
+  const versions: ResumeVersion[] = rows.map((r) => ({
+    id: r.id,
+    originalFilename: r.originalFilename,
+    sizeBytes: r.sizeBytes,
+    mimeType: r.mimeType,
+    scanStatus: r.scanStatus,
+    uploadedAt: r.uploadedAt.toISOString(),
+    isActive: r.id === candidate?.activeResumeId,
+  }));
 
   return (
     <div className="max-w-3xl space-y-6">
-      <PageHeader
-        title="Resume"
-        description="PDF or DOCX, up to 5 MB. Recruiters can view your resume after you apply to their jobs."
-      />
+      {/*
+        The "Recruiters can view your resume after you apply to their jobs."
+        line was removed on the owner's instruction. The upload card states the
+        formats and the size cap, which is what the user needs at the moment of
+        uploading; the recruiter-visibility point is repeated at the moment it
+        actually applies, in the removal confirmation.
+      */}
+      <PageHeader title="Resume" description="The document recruiters receive when you apply." />
       <ContentCard className="p-5 sm:p-6">
-        <ResumeManager active={active} downloadEnabled={downloadEnabled} />
+        <ResumeManager versions={versions} />
       </ContentCard>
     </div>
   );

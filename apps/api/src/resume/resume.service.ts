@@ -6,14 +6,20 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { isFlagEnabled } from '@jobportal/feature-flags';
 import { prisma, Prisma, type Resume } from '@jobportal/db';
 import { ClamAVService } from '../clamav/clamav.service';
 import { recomputeCompleteness } from '../profile/profile.service';
 import { StorageService } from '../storage/storage.service';
 import { buildResumeKey, validateResume } from './validators';
 
-const RESUME_DOWNLOAD_FLAG = 'feature.resume_download_pdf';
+/**
+ * How many resumes a candidate keeps.
+ *
+ * Uploading used to soft-delete the previous one, so "versions" did not exist:
+ * there was the current file and nothing else. Older versions beyond this count
+ * are retired on upload, newest kept.
+ */
+const MAX_RESUME_VERSIONS = 3;
 
 export interface ResumeView {
   id: number;
@@ -22,6 +28,7 @@ export interface ResumeView {
   mimeType: string;
   scanStatus: Resume['scanStatus'];
   uploadedAt: Date;
+  isActive: boolean;
 }
 
 @Injectable()
@@ -39,29 +46,87 @@ export class ResumeService {
       select: { activeResume: true },
     });
     if (!candidate?.activeResume || candidate.activeResume.deletedAt !== null) return null;
-    return this.toView(candidate.activeResume);
+    return this.toView(candidate.activeResume, candidate.activeResume.id);
   }
 
-  // Returns a 15-min presigned URL or throws ForbiddenException when the
-  // download flag is off for this caller — the API is the last line of
-  // defence per CLAUDE.md §4.
-  async getDownloadUrl(userId: number): Promise<{ url: string; expiresInSeconds: number }> {
-    const allowed = await isFlagEnabled(RESUME_DOWNLOAD_FLAG, { userId });
-    if (!allowed) {
-      throw new ForbiddenException('Resume download is not available on your plan');
-    }
+  /**
+   * A 15-minute presigned URL for one of the caller's OWN resumes.
+   *
+   * No longer gated on `feature.resume_download_pdf`. Owner decision: the
+   * candidate uploaded this file, and handing it back to them behind a plan is
+   * hostile — they are the only party who cannot already read it, since every
+   * recruiter they applied to receives a copy. The flag stays in the catalogue
+   * for a GENERATED profile PDF, a different artifact that does not exist yet.
+   *
+   * Ownership is still enforced. The lookup is scoped to this candidate, so an
+   * id belonging to someone else resolves to nothing rather than returning a
+   * 403 that would confirm the row exists.
+   */
+  async getDownloadUrl(
+    userId: number,
+    resumeId?: number,
+  ): Promise<{ url: string; expiresInSeconds: number }> {
     const candidate = await prisma.candidate.findUnique({
       where: { userId },
-      select: { activeResume: true },
+      select: { id: true, activeResumeId: true },
     });
-    if (!candidate?.activeResume || candidate.activeResume.deletedAt !== null) {
+    if (!candidate) throw new NotFoundException('Candidate profile not found');
+
+    const targetId = resumeId ?? candidate.activeResumeId;
+    if (targetId === null || targetId === undefined) {
       throw new NotFoundException('No active resume on file');
     }
-    if (candidate.activeResume.scanStatus !== 'CLEAN') {
+    const resume = await prisma.resume.findFirst({
+      where: { id: targetId, candidateId: candidate.id, deletedAt: null },
+    });
+    if (!resume) throw new NotFoundException('Resume not found');
+    if (resume.scanStatus !== 'CLEAN') {
       throw new ForbiddenException('Resume is still being scanned');
     }
-    const url = await this.storage.getSignedDownloadUrl(candidate.activeResume.r2Key, 15 * 60);
+    const url = await this.storage.getSignedDownloadUrl(resume.r2Key, 15 * 60);
     return { url, expiresInSeconds: 15 * 60 };
+  }
+
+  /** Every resume the candidate still holds, newest first. */
+  async listVersions(userId: number): Promise<ResumeView[]> {
+    const candidate = await prisma.candidate.findUnique({
+      where: { userId },
+      select: { id: true, activeResumeId: true },
+    });
+    if (!candidate) return [];
+    const rows = await prisma.resume.findMany({
+      where: { candidateId: candidate.id, deletedAt: null },
+      orderBy: { uploadedAt: 'desc' },
+    });
+    return rows.map((r) => this.toView(r, candidate.activeResumeId));
+  }
+
+  /** Promote a stored version to be the one recruiters receive. */
+  async setActive(userId: number, resumeId: number): Promise<ResumeView> {
+    const candidate = await prisma.candidate.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!candidate) throw new NotFoundException('Candidate profile not found');
+    const resume = await prisma.resume.findFirst({
+      where: { id: resumeId, candidateId: candidate.id, deletedAt: null },
+    });
+    if (!resume) throw new NotFoundException('Resume not found');
+    if (resume.scanStatus !== 'CLEAN') {
+      throw new ForbiddenException('Resume is still being scanned');
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.candidate.update({ where: { userId }, data: { activeResumeId: resume.id } });
+      await tx.profileAuditLog.create({
+        data: {
+          userId,
+          action: 'RESUME_UPLOAD',
+          diff: { setActiveResumeId: resume.id } as unknown as Prisma.InputJsonValue,
+        },
+      });
+    });
+    await recomputeCompleteness(userId);
+    return this.toView(resume, resume.id);
   }
 
   async upload(
@@ -102,10 +167,18 @@ export class ResumeService {
             scanStatus: 'CLEAN',
           },
         });
-        // Soft-delete the previous active resume.
-        if (candidate.activeResumeId !== null) {
-          await tx.resume.update({
-            where: { id: candidate.activeResumeId },
+        // Previous versions are KEPT rather than soft-deleted — that deletion
+        // is precisely why a candidate could only ever hold one resume. Only
+        // what falls outside MAX_RESUME_VERSIONS is retired, newest first.
+        const surviving = await tx.resume.findMany({
+          where: { candidateId: candidate.id, deletedAt: null, id: { not: resume.id } },
+          orderBy: { uploadedAt: 'desc' },
+          select: { id: true },
+        });
+        const toRetire = surviving.slice(MAX_RESUME_VERSIONS - 1).map((r) => r.id);
+        if (toRetire.length > 0) {
+          await tx.resume.updateMany({
+            where: { id: { in: toRetire } },
             data: { deletedAt: new Date() },
           });
         }
@@ -140,7 +213,7 @@ export class ResumeService {
     }
 
     await recomputeCompleteness(userId);
-    return this.toView(inserted);
+    return this.toView(inserted, inserted.id);
   }
 
   async delete(userId: number): Promise<void> {
@@ -203,7 +276,7 @@ export class ResumeService {
     await recomputeCompleteness(userId);
   }
 
-  private toView(r: Resume): ResumeView {
+  private toView(r: Resume, activeResumeId: number | null): ResumeView {
     return {
       id: r.id,
       originalFilename: r.originalFilename,
@@ -211,6 +284,7 @@ export class ResumeService {
       mimeType: r.mimeType,
       scanStatus: r.scanStatus,
       uploadedAt: r.uploadedAt,
+      isActive: r.id === activeResumeId,
     };
   }
 

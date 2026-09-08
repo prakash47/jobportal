@@ -2,8 +2,34 @@ import { prisma } from '@jobportal/db';
 import { requireUser } from '../../../lib/auth/require-user';
 import { PageHeader } from '../../../components/dashboard/PageHeader';
 import { ContentCard } from '../../../components/dashboard/ContentCard';
-import { EducationOnboardingForm } from '../../../components/profile/EducationOnboardingForm';
+import { EducationManager } from '../../../components/profile/EducationManager';
 import { CLASS12_DEGREE } from '../../../components/onboarding/education-constants';
+import { emptyEduDraft, type EduDraft } from '../../../lib/profile/education';
+
+interface EducationRow {
+  id: number;
+  institute: string;
+  degree: string;
+  fieldOfStudy: string | null;
+  startYear: number;
+  endYear: number | null;
+  grade: string | null;
+}
+
+function toDraft(row: EducationRow, keepDegreeName: boolean): EduDraft {
+  return {
+    id: row.id,
+    institute: row.institute,
+    // The Class 12 row stores a sentinel in `degree`; showing it back would
+    // put "Class XII" into a field the user never typed it into.
+    degree: keepDegreeName ? row.degree : '',
+    fieldOfStudy: row.fieldOfStudy ?? '',
+    startYear: String(row.startYear),
+    endYear: row.endYear !== null ? String(row.endYear) : '',
+    grade: row.grade ?? '',
+    pursuing: row.endYear === null,
+  };
+}
 
 export default async function EducationPage() {
   const session = await requireUser();
@@ -20,42 +46,27 @@ export default async function EducationPage() {
 
   const educations = await prisma.education.findMany({
     where: { candidateId: candidate.id },
-    orderBy: [{ startYear: 'desc' }],
+    orderBy: [{ startYear: 'desc' }, { id: 'desc' }],
   });
 
-  // Same discriminator the onboarding form uses: the Class 12 row is tagged with
-  // the CLASS12_DEGREE sentinel; the first other row is the "first degree".
+  // Same discriminator the onboarding wizard uses: the Class 12 row is tagged
+  // with the CLASS12_DEGREE sentinel. Everything else is a qualification —
+  // previously only the FIRST of them was reachable, which is the reported bug.
   const class12Row = educations.find((e) => e.degree === CLASS12_DEGREE);
-  const degreeRow = educations.find((e) => e.degree !== CLASS12_DEGREE);
-  const currentYear = new Date().getFullYear();
+  const qualificationRows = educations.filter((e) => e.degree !== CLASS12_DEGREE);
 
   return (
     <div className="max-w-3xl space-y-6">
-      <PageHeader title="Education" description="Add your most recent degree and Class 12." />
+      <PageHeader
+        title="Education"
+        description="Add every qualification you hold — degrees, diplomas and Class 12."
+      />
 
       <ContentCard className="p-5 sm:p-6">
-        <EducationOnboardingForm
-          currentYear={currentYear}
-          degree={{
-            id: degreeRow?.id ?? null,
-            institute: degreeRow?.institute ?? '',
-            degree: degreeRow?.degree ?? '',
-            fieldOfStudy: degreeRow?.fieldOfStudy ?? '',
-            startYear: degreeRow?.startYear != null ? String(degreeRow.startYear) : '',
-            endYear: degreeRow?.endYear != null ? String(degreeRow.endYear) : '',
-            grade: degreeRow?.grade ?? '',
-            pursuing: degreeRow?.endYear === null,
-          }}
-          class12={{
-            id: class12Row?.id ?? null,
-            institute: class12Row?.institute ?? '',
-            degree: '',
-            fieldOfStudy: class12Row?.fieldOfStudy ?? '',
-            startYear: class12Row?.startYear != null ? String(class12Row.startYear) : '',
-            endYear: class12Row?.endYear != null ? String(class12Row.endYear) : '',
-            grade: '',
-            pursuing: class12Row?.endYear === null,
-          }}
+        <EducationManager
+          currentYear={new Date().getFullYear()}
+          qualifications={qualificationRows.map((r) => toDraft(r, true))}
+          class12={class12Row ? toDraft(class12Row, false) : emptyEduDraft}
         />
       </ContentCard>
     </div>

@@ -25,14 +25,21 @@ export default async function ExperiencePage() {
     startDate: r.startDate.toISOString(),
     endDate: r.endDate ? r.endDate.toISOString() : null,
     isCurrent: r.isCurrent,
+    isCareerBreak: r.isCareerBreak,
     description: r.description,
   }));
 
   return (
     <div className="max-w-3xl space-y-6">
+      {/*
+        Was "List your roles in reverse-chronological order" — an instruction to
+        do by hand what the query has always done (orderBy isCurrent, startDate
+        desc). Reported as confusing, and it was: it asked for work the user
+        cannot actually do, since there is no manual ordering control.
+      */}
       <PageHeader
         title="Work experience"
-        description="List your roles in reverse-chronological order."
+        description="Add your roles in any order — we arrange them by date automatically."
       />
       <ContentCard className="p-5 sm:p-6">
         <ExperienceManager initial={experiences} />

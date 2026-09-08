@@ -3,6 +3,7 @@
 import { Checkbox, Input, Label } from '@jobportal/ui';
 import { FieldSelect } from './FieldSelect';
 import { SectionHeading } from './SectionHeading';
+import { endYearOptions, startYearOptions } from '../../lib/profile/education';
 
 // One education section's editable state, owned by the wizard. `degree` is the
 // user-entered degree name for the first-degree section; it's unused (fixed to a
@@ -102,10 +103,12 @@ export function EducationStep({
   class12: EduSection;
   onClass12Change: (patch: Partial<EduSection>) => void;
 }) {
-  // Newest first; allow a few future years for expected graduation dates, down
-  // to 1950 to match the API's accepted year range.
-  const years: number[] = [];
-  for (let y = currentYear + 6; y >= 1950; y--) years.push(y);
+  // Two lists, not one. A STARTING year cannot be in the future — offering
+  // 2027-2032 there was a reported bug — while an ENDING year legitimately can,
+  // because someone currently pursuing a degree has a real expected graduation
+  // date. Shared with the dashboard editor so the two cannot drift.
+  const startYears = startYearOptions(currentYear);
+  const endYears = endYearOptions(currentYear);
 
   return (
     <div className="space-y-7">
@@ -151,7 +154,7 @@ export function EducationStep({
               ariaLabel="Degree starting year"
               value={degree.startYear}
               onChange={(v) => onDegreeChange({ startYear: v })}
-              years={years}
+              years={startYears}
             />
           </div>
           <div className="space-y-1.5">
@@ -161,7 +164,7 @@ export function EducationStep({
               ariaLabel="Degree ending year"
               value={degree.pursuing ? '' : degree.endYear}
               onChange={(v) => onDegreeChange({ endYear: v })}
-              years={years}
+              years={endYears}
               disabled={degree.pursuing}
             />
           </div>
@@ -197,15 +200,30 @@ export function EducationStep({
             placeholder="e.g. Delhi Public School"
           />
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="c12-stream">Specialization / Stream</Label>
-          <Input
-            id="c12-stream"
-            value={class12.fieldOfStudy}
-            onChange={(e) => onClass12Change({ fieldOfStudy: e.target.value })}
-            maxLength={120}
-            placeholder="e.g. Science (PCM)"
-          />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="c12-stream">Specialization / Stream</Label>
+            <Input
+              id="c12-stream"
+              value={class12.fieldOfStudy}
+              onChange={(e) => onClass12Change({ fieldOfStudy: e.target.value })}
+              maxLength={120}
+              placeholder="e.g. Science (PCM)"
+            />
+          </div>
+          {/* Reported as missing. The section collected a school and two years
+              but no result, so a Class 12 entry said nothing about how the
+              candidate actually did. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="c12-marks">Marks / Percentage</Label>
+            <Input
+              id="c12-marks"
+              value={class12.grade}
+              onChange={(e) => onClass12Change({ grade: e.target.value })}
+              maxLength={40}
+              placeholder="e.g. 92% or 9.2 CGPA"
+            />
+          </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -215,7 +233,7 @@ export function EducationStep({
               ariaLabel="Class 12 starting year"
               value={class12.startYear}
               onChange={(v) => onClass12Change({ startYear: v })}
-              years={years}
+              years={startYears}
             />
           </div>
           <div className="space-y-1.5">
@@ -225,7 +243,7 @@ export function EducationStep({
               ariaLabel="Class 12 ending year"
               value={class12.pursuing ? '' : class12.endYear}
               onChange={(v) => onClass12Change({ endYear: v })}
-              years={years}
+              years={endYears}
               disabled={class12.pursuing}
             />
           </div>

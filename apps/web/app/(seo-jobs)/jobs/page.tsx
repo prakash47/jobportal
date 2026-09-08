@@ -61,6 +61,7 @@ export default async function JobsPage({ searchParams }: PageProps) {
       resultsBanner={banner}
       isAuthed={userCtx.isAuthed}
       savedJobIds={userCtx.savedJobIds}
+      appliedAtByJobId={userCtx.appliedAtByJobId}
       returnTo="/jobs"
     />
   );

@@ -47,6 +47,8 @@ export interface SrpShellProps {
   /** Per-user state — flips the JobCard save toggle into its right shape. */
   isAuthed?: boolean;
   savedJobIds?: Set<number>;
+  /** jobId -> ISO applied date, for the "Applied" marker on a card. */
+  appliedAtByJobId?: Map<number, string>;
   /** Path the login bounce should return to after sign-in. */
   returnTo?: string;
 }
@@ -79,6 +81,7 @@ export async function SrpShell({
   resultsBanner,
   isAuthed = false,
   savedJobIds,
+  appliedAtByJobId,
   returnTo,
 }: SrpShellProps) {
   const companyIds = [...new Set(results.hits.map((j) => j.companyId))];
@@ -173,6 +176,7 @@ export async function SrpShell({
                       cityName={job.primaryCitySlug ? (cityNameBySlug.get(job.primaryCitySlug) ?? null) : null}
                       isAuthed={isAuthed}
                       initialSaved={savedJobIds?.has(job.id) ?? false}
+                      appliedAt={appliedAtByJobId?.get(job.id) ?? null}
                       {...(returnTo ? { returnTo } : {})}
                     />
                   </li>

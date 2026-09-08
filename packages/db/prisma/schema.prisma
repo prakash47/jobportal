@@ -1057,6 +1057,13 @@ model WorkExperience {
   startDate   DateTime
   endDate     DateTime?
   isCurrent   Boolean   @default(false)
+  // A gap in employment recorded on purpose, so a recruiter reads context
+  // instead of inferring something. When true the row is a break rather than a
+  // role: `title` holds the reason ("Parental leave", "Further study") and
+  // `companyName` holds the constant label, because companyName is non-null and
+  // is read by the recruiter and admin apps — widening it to nullable would
+  // break their builds for a seeker-side feature.
+  isCareerBreak Boolean @default(false)
   description String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
