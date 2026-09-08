@@ -49,37 +49,36 @@ export function ResumeManager({ versions: initial }: { versions: ResumeVersion[]
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [previewOf, setPreviewOf] = useState<ResumeVersion | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ id: number; url: string } | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<ResumeVersion | null>(null);
 
   const active = versions.find((v) => v.isActive) ?? null;
 
-  useEffect(() => {
-    setVersions(initial);
-  }, [initial]);
-
   // The signed URL is fetched only when a preview is opened, and it expires in
-  // 15 minutes. Fetching one per row up front would mint links nobody uses.
+  // 15 minutes; fetching one per row up front would mint links nobody uses.
+  //
+  // The result is keyed by version id rather than stored bare. Closing the
+  // preview then needs no clearing effect — `preview.id` simply stops matching
+  // the open row — and a slow response for a version the user has since closed
+  // cannot paint into a different one.
+  const previewId = previewOf?.id ?? null;
   useEffect(() => {
-    if (previewOf === null) {
-      setPreviewUrl(null);
-      return;
-    }
+    if (previewId === null) return;
     let cancelled = false;
     void (async () => {
-      const res = await api<{ url: string }>(`/me/resume/${previewOf.id}/download`);
+      const res = await api<{ url: string }>(`/me/resume/${previewId}/download`);
       if (cancelled) return;
       if (!res.ok) {
         setError(res.message);
         setPreviewOf(null);
         return;
       }
-      setPreviewUrl(res.data.url);
+      setPreview({ id: previewId, url: res.data.url });
     })();
     return () => {
       cancelled = true;
     };
-  }, [previewOf]);
+  }, [previewId]);
 
   function preCheck(file: File): string | null {
     if (file.size === 0) return 'File is empty.';
@@ -170,7 +169,10 @@ export function ResumeManager({ versions: initial }: { versions: ResumeVersion[]
       setError(res.message);
       return;
     }
-    if (previewOf?.id === v.id) setPreviewOf(null);
+    if (previewOf?.id === v.id) {
+      setPreviewOf(null);
+      setPreview(null);
+    }
     await refresh();
     router.refresh();
   }
@@ -302,9 +304,9 @@ export function ResumeManager({ versions: initial }: { versions: ResumeVersion[]
 
               {previewOf?.id === v.id && (
                 <div className="mt-4 border-t border-[var(--color-border)] pt-4">
-                  {previewUrl === null ? (
+                  {preview?.id !== v.id ? (
                     <p className="text-sm text-[var(--color-fg-muted)]">Loading preview…</p>
-                  ) : !isFetchableUrl(previewUrl) ? (
+                  ) : !isFetchableUrl(preview.url) ? (
                     <p className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-muted)] p-4 text-sm text-[var(--color-fg-muted)]">
                       Object storage isn&rsquo;t configured on this environment, so the file
                       can&rsquo;t be shown. Previews and downloads work wherever R2 is set up.
@@ -314,7 +316,7 @@ export function ResumeManager({ versions: initial }: { versions: ResumeVersion[]
                     // children when the browser has no PDF viewer, which is
                     // where the download link below comes from.
                     <object
-                      data={previewUrl}
+                      data={preview.url}
                       type="application/pdf"
                       className="h-[70vh] w-full rounded-md border border-[var(--color-border)]"
                       aria-label={`Preview of ${v.originalFilename}`}
@@ -322,7 +324,7 @@ export function ResumeManager({ versions: initial }: { versions: ResumeVersion[]
                       <p className="p-4 text-sm text-[var(--color-fg-muted)]">
                         Your browser can&rsquo;t show PDFs inline.{' '}
                         <a
-                          href={previewUrl}
+                          href={preview.url}
                           className="font-medium text-[var(--color-primary-600)] underline underline-offset-2"
                         >
                           Open it in a new tab
@@ -337,7 +339,7 @@ export function ResumeManager({ versions: initial }: { versions: ResumeVersion[]
                     <p className="text-sm text-[var(--color-fg-muted)]">
                       Word documents can&rsquo;t be previewed in the browser.{' '}
                       <a
-                        href={previewUrl}
+                        href={preview.url}
                         className="font-medium text-[var(--color-primary-600)] underline underline-offset-2"
                       >
                         Download it
