@@ -916,6 +916,52 @@ the store-compliance surfaces.
 
 Most recent first. Each entry: PR number, branch, SRS section, one-paragraph summary of what was actually shipped, plus any deliberate deferrals or follow-ups.
 
+### `feature/profile-education-experience` - 17 reported items across six seeker pages - 2026-09-08
+
+CLI merge to `develop` (`--no-ff`). One branch, four commits, covering the Education, Work experience, Skills, Resume, Notification and Jobs pages (SRS §4.3, §4.5, §4.13).
+
+**Two migrations**: `20260908030715_add_work_experience_career_break` (`WorkExperience.isCareerBreak`). Education needed none — `Education` already allowed many rows per candidate; only the UI was in the way.
+
+#### Education (3)
+- **Multiple qualifications.** The page had exactly two slots, so a candidate with a post-graduation, a diploma and an SSC could record one of them. Now a list with "+ Add another degree" and per-card removal. Class 12 stays a separate section: different fields, and it is discriminated in the database by the `CLASS12_DEGREE` sentinel. **Everything validates before anything is written** — validating as we go would leave the earlier cards saved and the later ones not, under an error implying nothing was.
+- **Future starting years.** One list ran to `currentYear + 6`, so the *start* dropdown offered 2027-2032. Now two lists: start capped at today, end still reaching ahead because a candidate currently pursuing a degree has a real expected graduation date.
+- **Class 12 marks.** The section collected a school and two years but no result. The column existed all along; the form omitted the field and the save path explicitly skipped `grade` for Class 12.
+
+#### Work experience (4 + career break)
+- **Subtext** said "List your roles in reverse-chronological order" — asking the user to do by hand what the query has always done, and which cannot be done by hand since there is no ordering control.
+- **Edit.** Only Remove existed, so fixing a typo meant deleting and retyping. `PATCH /me/experience/:id` already existed and was simply unused from this page.
+- **Remove now confirms.** The dialog is extracted from the sign-out confirm into `components/ui/ConfirmDialog`, shared with Education and Resume.
+- **Total experience badge.** ⚠️ Two subtleties, both caught rather than assumed: **overlapping roles are merged, not summed** (two concurrent roles across the same two years is two years, not four — a number a recruiter checks), and the arithmetic is **whole calendar months**. The first implementation divided elapsed ms by an average month; a test caught that two years to the day is 730 days against a 30.437-day average, flooring to **23** — so exactly two years would have displayed as "1 yr 11 mos".
+- **Career break** (`WorkExperience.isCareerBreak`). The reason goes in `title` and `companyName` carries a constant label — `companyName` is non-null and read by `apps/recruiter` and `apps/sadmin`, so widening it to nullable would have broken their builds for a seeker feature. Breaks are excluded from the total: a break is context, not experience.
+
+#### Skills (3)
+- **The suggestion pool is now empty until you type.** It was 100 chips painted by default with no grouping. Search results and an opt-in "browse by category" view are both grouped (Languages, Frameworks, Databases, Cloud, Tools, Architecture, Data & ML, Mobile, Soft skills). The page's `take: 500` cap is gone too — with the list dumped rather than searched, a skill outside the first 500 alphabetically was **literally unreachable**.
+- **Manually entered skills.** The API has accepted `customSkills` since onboarding shipped; the page never offered it. The UI repeats the API's `slugifySkill` so it can tell a typed name ALREADY exists — otherwise "React.js" against a catalogued "react-js" would offer a duplicate, the server would resolve it to the same row, and the button would appear to do nothing.
+- **"Clear all"** beside Selected (n). Clearing 34 skills was 34 clicks.
+
+#### Resume (4 of 6)
+- **Previewer** — per-version View, a 15-minute signed URL fetched on demand, PDF inline in an `<object>` (which degrades to its own children, giving the open-in-a-tab fallback for free).
+- **Version history + drag-and-drop.** Uploading used to **soft-delete the previous resume inside the same transaction**, which is exactly why only one could exist — versions were not missing so much as actively deleted. Now the last three are kept and any can be promoted. Removing a non-active version activates it first, because `DELETE /me/resume` operates on the active one and would otherwise have deleted the wrong file.
+- ⚠️ **Pay barrier removed.** `getDownloadUrl` no longer consults `feature.resume_download_pdf`. Owner decision, and a sound one: the candidate uploaded this file and is the only party who cannot already read it, since every recruiter they applied to receives a copy. **Ownership scoping is what protects the endpoint now** — the lookup filters by `candidateId`. The flag stays for a GENERATED profile PDF; its dead route and middleware branch were removed rather than left contradicting the new behaviour.
+- **Subtext erased** from the header per instruction; the recruiter-visibility point moved to the removal confirmation, where it actually applies.
+- Previews and downloads now **detect the dev fallback URL** (`local://memory/<key>`) and say object storage is not configured, instead of rendering a silently blank panel. Deliberately NOT solved with a `/media/resumes` passthrough like company logos have — that route is unauthenticated, and pointing it at resumes would publish every candidate's.
+
+#### Notifications (3)
+- "new **JobPortal** features" → **Career Queue**.
+- **Cadence control** nested under Job alerts, writing `JobAlert.frequency` across every alert — the same field the per-alert control edits, so the two cannot disagree. Alerts set individually show as "Mixed" rather than being misreported. Writes are sequential: ten parallel PATCHes against a rotating-refresh-token session is the exact concurrency `apiFetch`'s single-flight guard exists to survive.
+- **"Unsubscribe from all non-essential emails"** master switch.
+- ⚠️ **No Email/Push choice was added.** Push does not exist anywhere in this product — no subscription, no service worker, no sender; the only trace is an unused `pushEnabled` key in a recruiter DTO *test*. The panel says plainly that delivery is by email.
+
+#### Jobs (1)
+- **"Applied 6d ago" on the result card.** `loadSrpUserContext` already batch-loaded saved jobs over the visible ids; the applied lookup joins the same `Promise.all`, so this is one more query per page rather than one per card. Threaded through all four SRP entry points. Canvas-measured at **6.08:1**, above the AA floor for its 11px/500 text.
+
+#### Not done, deliberately
+**Resume parser / auto-fill** and **ATS score** both need PDF text extraction, which means a new top-level dependency — CLAUDE.md forbids adding one without flagging it. They are features rather than fixes: the parser needs field-mapping heuristics and a review-before-import step (silently overwriting a profile from a mis-parsed CV is worse than no parser), and an ATS score needs defined criteria to be anything but an authoritative-looking number that means nothing. `feature.ai_resume_review` already exists in the flag catalogue, so the product already treats the ATS check as a paid feature shipped OFF.
+
+**Verified live against Postgres throughout**, not by screenshot: three education rows saved in one pass including the previously-unrecordable Class 12 marks; experience totalling "10 yrs 1 mo" (47 + 74 months with a 12-month break excluded) and unchanged after deleting the break; a custom skill landing in the catalogue as `isCustom` with the count going 5→6; all six alerts flipped to weekly from the settings page; three resume uploads leaving exactly three versions with the oldest retired and "Use this one" moving Active; 7 of 20 job cards showing the Applied marker.
+
+**65 new tests** (37 education/experience, 18 skills, 10 resume versions). The resume suite previously had five tests and covered neither the download gate nor upload retention — so both behaviours I changed were unopposed rather than validated.
+
 ### `chore/seed-demo-job-alerts` - the Job alerts page had no demo data - 2026-09-07
 
 CLI merge to `develop` (`--no-ff`). Reported as *"there are no data in the job alerts page"*. There was no alerts seed at all - `db:seed:demo:full` created companies, jobs, candidates and applications, but never a single `JobAlert` - so every demo account landed on the empty state and **none of the row states were reachable** without creating alerts by hand: no Paused badge, no Resume button, no "Last sent never", and only whichever cadence you happened to pick.
