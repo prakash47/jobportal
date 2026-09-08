@@ -5,6 +5,8 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseIntPipe,
   Post,
   UploadedFile,
   UseGuards,
@@ -34,11 +36,34 @@ export class ResumeController {
     return this.service.getActive(user.sub);
   }
 
-  // Returns a 15-min signed URL — gated by feature.resume_download_pdf at the
-  // API layer (third of three enforcement layers per CLAUDE.md §4).
+  /** Every stored version, newest first, with which one is active. */
+  @Get('versions')
+  versions(@CurrentUser() user: AccessClaims) {
+    return this.service.listVersions(user.sub);
+  }
+
+  /**
+   * A 15-min signed URL for the caller's own resume.
+   *
+   * No longer flag-gated — see ResumeService.getDownloadUrl for the reasoning.
+   * Ownership scoping is what protects this endpoint, not the flag.
+   */
   @Get('download')
   download(@CurrentUser() user: AccessClaims) {
     return this.service.getDownloadUrl(user.sub);
+  }
+
+  /** Same, for one specific stored version. */
+  @Get(':id/download')
+  downloadVersion(@CurrentUser() user: AccessClaims, @Param('id', ParseIntPipe) id: number) {
+    return this.service.getDownloadUrl(user.sub, id);
+  }
+
+  /** Promote a stored version to the one recruiters receive. */
+  @Post(':id/activate')
+  @HttpCode(HttpStatus.OK)
+  activate(@CurrentUser() user: AccessClaims, @Param('id', ParseIntPipe) id: number) {
+    return this.service.setActive(user.sub, id);
   }
 
   @Post()
