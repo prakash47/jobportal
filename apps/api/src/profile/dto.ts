@@ -128,6 +128,10 @@ const experienceBase = z
     startDate: z.iso.datetime(),
     endDate: z.iso.datetime().optional(),
     isCurrent: z.boolean().optional(),
+    // A deliberate employment gap rather than a role. The reason goes in
+    // `title` and `companyName` carries a constant label, because companyName
+    // is non-null and is read by the recruiter and admin apps.
+    isCareerBreak: z.boolean().optional(),
     description: z.string().max(2_000).optional(),
   })
   .strict();

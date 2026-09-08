@@ -214,7 +214,9 @@ export function OnboardingWizard({
       }
       body.endYear = endYear;
     }
-    if (!isClass12 && section.grade.trim()) body.grade = section.grade.trim();
+    // Class 12 now collects marks too, so the grade is no longer skipped for
+    // it — the field existed on the row all along, only the form omitted it.
+    if (section.grade.trim()) body.grade = section.grade.trim();
 
     if (section.id != null) {
       const err = await patch(`/me/education/${section.id}`, body);
