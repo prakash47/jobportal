@@ -132,16 +132,22 @@ export function ProfileForm({ initial, cityCatalogue }: ProfileFormProps) {
     setSaved(false);
 
     const patch: Record<string, unknown> = { name, workStatus };
+
+    // Every optional field is sent on EVERY save — as a value when filled and
+    // as an explicit null when empty. Previously an empty field was omitted,
+    // and an omitted key means "no change" on a PATCH: erasing a phone number
+    // and saving kept the old one, which then reappeared on the next load.
+    // That was the reported bug, and it was true of every field here.
+    //
     // Same join as signup, so the two forms cannot drift into storing
     // different shapes for the same column.
-    const joinedPhone = joinPhone(phoneIso, phone);
-    if (joinedPhone) patch['phone'] = joinedPhone;
-    if (headline) patch['headline'] = headline;
-    if (summary) patch['summary'] = summary;
-    if (dateOfBirth) patch['dateOfBirth'] = dateOfBirth;
-    if (gender) patch['gender'] = gender;
-    if (nationality) patch['nationality'] = nationality;
-    if (currentCityId !== null) patch['currentCityId'] = Number(currentCityId);
+    patch['phone'] = joinPhone(phoneIso, phone);
+    patch['headline'] = headline.trim() || null;
+    patch['summary'] = summary.trim() || null;
+    patch['dateOfBirth'] = dateOfBirth || null;
+    patch['gender'] = gender || null;
+    patch['nationality'] = nationality ?? null;
+    patch['currentCityId'] = currentCityId === null ? null : Number(currentCityId);
     // Always sent: this is the only control for the list, so an empty array is
     // a real instruction ("I cleared my preferences"), not an absent one.
     patch['preferredCityIds'] = preferredCityIds.map(Number);
@@ -150,18 +156,15 @@ export function ProfileForm({ initial, cityCatalogue }: ProfileFormProps) {
     // is selected we omit them — the PATCH DTO can't clear to null, so any
     // previously-saved values simply stay hidden behind the FRESHER status.
     if (working) {
-      if (experienceYears !== '')
-        patch['experienceMonths'] = Math.round(Number(experienceYears) * 12);
-      if (currentTitle) patch['currentTitle'] = currentTitle;
-      const cs = lpaToPaise(currentSalary);
-      if (cs !== null) patch['currentSalaryPaise'] = cs;
-      const ex = lpaToPaise(expected);
-      if (ex !== null) {
-        patch['expectedSalaryMinPaise'] = ex;
-        // Explicit null clears a max left by the old two-box form.
-        patch['expectedSalaryMaxPaise'] = null;
-      }
-      if (notice !== '') patch['noticePeriodDays'] = Number(notice);
+      // Same rule as above: sent every time, null when cleared.
+      patch['experienceMonths'] =
+        experienceYears === '' ? null : Math.round(Number(experienceYears) * 12);
+      patch['currentTitle'] = currentTitle.trim() || null;
+      patch['currentSalaryPaise'] = lpaToPaise(currentSalary);
+      patch['expectedSalaryMinPaise'] = lpaToPaise(expected);
+      // Explicit null clears a max left by the old two-box form.
+      patch['expectedSalaryMaxPaise'] = null;
+      patch['noticePeriodDays'] = notice === '' ? null : Number(notice);
     }
 
     const res = await api('/me/profile', { method: 'PATCH', body: JSON.stringify(patch) });
@@ -390,13 +393,22 @@ export function ProfileForm({ initial, cityCatalogue }: ProfileFormProps) {
               maxLength={120}
             />
           </Field>
-          <Field id="experienceYears" label="Total experience (years)">
+          <Field
+            id="experienceYears"
+            label="Total experience (years)"
+            hint="Decimals are fine — 6.7 is about 6 years 8 months."
+          >
+            {/* step 0.1, not 0.5. The half-year step rejected 8.3 and 6.7 in
+                browsers that validate against it, and nudged everyone onto a
+                coarser number than they actually have. Months are the stored
+                unit anyway (experienceMonths), so 0.1 of a year rounds to
+                roughly one month — finer than that would be false precision. */}
             <Input
               id="experienceYears"
               type="number"
               min={0}
               max={60}
-              step={0.5}
+              step={0.1}
               value={experienceYears}
               onChange={(e) =>
                 setExperienceYears(e.target.value === '' ? '' : Number(e.target.value))

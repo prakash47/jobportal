@@ -5,6 +5,35 @@ import { z } from 'zod';
 // passing `null` is rejected.
 
 const yearInt = z.number().int().min(1950).max(2100);
+
+/**
+ * The current year, read per-request rather than captured at module load.
+ *
+ * A long-lived API process started in December would otherwise keep rejecting
+ * January's valid start years until it was restarted.
+ */
+const thisYear = (): number => new Date().getUTCFullYear();
+
+/**
+ * A start year cannot be in the future — you have not started yet.
+ *
+ * The dropdown stops at the current year, but that is cosmetic: a POST with
+ * `startYear: 2029` was accepted with a 201 (reported, and reproduced against
+ * the running API). This is the enforcement point.
+ */
+const startYearInt = yearInt.refine((y) => y <= thisYear(), {
+  message: 'startYear cannot be in the future',
+});
+
+/**
+ * An ending year may run a little ahead — someone mid-degree has a real
+ * expected graduation date — but not arbitrarily. `null` is the honest way to
+ * say "still studying", and the form uses it.
+ */
+const MAX_FUTURE_END_YEARS = 8;
+const endYearInt = yearInt.refine((y) => y <= thisYear() + MAX_FUTURE_END_YEARS, {
+  message: `endYear cannot be more than ${MAX_FUTURE_END_YEARS} years in the future`,
+});
 const phoneRegex = /^[+0-9 \-()]{6,20}$/;
 
 // Bounds for a birth date. The floor is India's minimum working age under the
@@ -31,23 +60,36 @@ export function isPlausibleBirthDate(value: string): boolean {
   return parsed.getTime() >= oldest && parsed.getTime() <= youngest;
 }
 
+/**
+ * Fields a user can CLEAR, not just change.
+ *
+ * `.optional()` alone means "omit = no change", which is right for a PATCH —
+ * but it left no way to express "make this empty". The form omitted every empty
+ * field, so erasing a phone number and saving silently kept the old one, and it
+ * reappeared on the next load. Reported for the phone; it was true of every
+ * optional field on the page.
+ *
+ * `null` is therefore accepted and written through as a real null. `name` is
+ * deliberately NOT in this set — an account with no name has nothing to show a
+ * recruiter.
+ */
 export const ProfilePatchDto = z
   .object({
     name: z.string().min(1).max(120).optional(),
-    phone: z.string().regex(phoneRegex).optional(),
-    headline: z.string().max(250).optional(),
-    summary: z.string().max(5_000).optional(),
-    experienceMonths: z.number().int().min(0).max(720).optional(),
-    currentTitle: z.string().max(120).optional(),
+    phone: z.string().regex(phoneRegex).nullable().optional(),
+    headline: z.string().max(250).nullable().optional(),
+    summary: z.string().max(5_000).nullable().optional(),
+    experienceMonths: z.number().int().min(0).max(720).nullable().optional(),
+    currentTitle: z.string().max(120).nullable().optional(),
     currentCompanyId: z.number().int().positive().optional(),
-    currentSalaryPaise: z.number().int().min(0).optional(),
-    expectedSalaryMinPaise: z.number().int().min(0).optional(),
+    currentSalaryPaise: z.number().int().min(0).nullable().optional(),
+    expectedSalaryMinPaise: z.number().int().min(0).nullable().optional(),
     // Nullable, unlike every other field here: the personal-details page now
     // collects ONE expected-salary figure, so it must be able to clear a max
     // left behind by the old two-box form. Without this the seeker would see a
     // single number while recruiters kept seeing a stale range.
     expectedSalaryMaxPaise: z.number().int().min(0).nullable().optional(),
-    noticePeriodDays: z.number().int().min(0).max(365).optional(),
+    noticePeriodDays: z.number().int().min(0).max(365).nullable().optional(),
     preferredCityIds: z.array(z.number().int().positive()).max(10).optional(),
     preferredWorkModes: z.array(z.enum(['ONSITE', 'REMOTE', 'HYBRID'])).max(3).optional(),
     preferredJobTypes: z
@@ -61,7 +103,7 @@ export const ProfilePatchDto = z
     currentCompanyName: z.string().max(150).optional(),
     currentCityName: z.string().max(120).optional(),
     industryId: z.number().int().positive().optional(),
-    gender: z.enum(['MALE', 'FEMALE', 'PREFER_NOT_TO_SAY']).optional(),
+    gender: z.enum(['MALE', 'FEMALE', 'PREFER_NOT_TO_SAY']).nullable().optional(),
     // Personal-details page (SRS §4.3).
     //
     // Date-only on the wire (YYYY-MM-DD), never a timestamp: a birthday is a
@@ -74,14 +116,16 @@ export const ProfilePatchDto = z
       .refine((v) => isPlausibleBirthDate(v), {
         message: 'dateOfBirth must be a real past date for someone aged 14-100',
       })
+      .nullable()
       .optional(),
-    nationality: z.string().trim().min(1).max(60).optional(),
-    currentCityId: z.number().int().positive().optional(),
+    nationality: z.string().trim().min(1).max(60).nullable().optional(),
+    currentCityId: z.number().int().positive().nullable().optional(),
   })
   .strict()
   .refine(
     (v) =>
       v.expectedSalaryMinPaise === undefined ||
+      v.expectedSalaryMinPaise === null ||
       v.expectedSalaryMaxPaise === undefined ||
       v.expectedSalaryMaxPaise === null ||
       v.expectedSalaryMinPaise <= v.expectedSalaryMaxPaise,
@@ -97,10 +141,10 @@ const educationBase = z
     institute: z.string().min(1).max(200),
     degree: z.string().min(1).max(120),
     fieldOfStudy: z.string().max(120).optional(),
-    startYear: yearInt,
+    startYear: startYearInt,
     // Nullable so "currently pursuing" can be stored/cleared as endYear: null
     // (null ⇔ ongoing). undefined means "no change" on PATCH.
-    endYear: yearInt.nullable().optional(),
+    endYear: endYearInt.nullable().optional(),
     grade: z.string().max(40).optional(),
   })
   .strict();

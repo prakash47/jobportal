@@ -99,3 +99,61 @@ export function sortExperience<T extends { startDate: string; isCurrent: boolean
     return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
   });
 }
+
+/**
+ * How out-of-date the work history is.
+ *
+ * Profile completeness counts whether sections are FILLED, not whether they are
+ * CURRENT — so a history that stops in 2017 scores as complete and reads as
+ * complete, which is what was reported. A recruiter looking at a nine-year gap
+ * cannot tell whether the candidate has not worked since or has not updated
+ * their profile since, and those mean very different things.
+ *
+ * `current` is the only state that needs nothing: an ongoing role is by
+ * definition up to date.
+ */
+export type FreshnessState = 'none' | 'current' | 'fresh' | 'stale';
+
+export interface Freshness {
+  state: FreshnessState;
+  /** Months since the most recent role ended. 0 for `current` / `none`. */
+  monthsSince: number;
+  /** End date of the most recent closed role, ISO, or null. */
+  lastEndedAt: string | null;
+}
+
+/**
+ * Anything older than this reads as a gap worth explaining rather than the
+ * normal few months between jobs.
+ */
+export const STALE_AFTER_MONTHS = 6;
+
+export function experienceFreshness(
+  spans: ExperienceSpan[],
+  now: Date = new Date(),
+): Freshness {
+  const roles = spans.filter((s) => !s.isCareerBreak);
+  if (roles.length === 0) return { state: 'none', monthsSince: 0, lastEndedAt: null };
+
+  // An ongoing role — or an ongoing career BREAK, which is also a current,
+  // deliberate account of the present — means nothing is missing.
+  if (spans.some((s) => s.isCurrent)) {
+    return { state: 'current', monthsSince: 0, lastEndedAt: null };
+  }
+
+  let latest: number | null = null;
+  for (const role of roles) {
+    if (!role.endDate) continue;
+    const end = new Date(role.endDate).getTime();
+    if (Number.isNaN(end)) continue;
+    if (latest === null || end > latest) latest = end;
+  }
+  if (latest === null) return { state: 'none', monthsSince: 0, lastEndedAt: null };
+
+  const months = wholeMonthsBetween(new Date(latest), now);
+  return {
+    state: months >= STALE_AFTER_MONTHS ? 'stale' : 'fresh',
+    monthsSince: months,
+    lastEndedAt: new Date(latest).toISOString(),
+  };
+}

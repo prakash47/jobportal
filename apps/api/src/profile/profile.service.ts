@@ -41,7 +41,7 @@ export class ProfileService {
   async updateProfile(userId: number, input: ProfilePatchInput): Promise<ProfileView> {
     // Validate the industry FK up front so a bad id is a clean 404, not a raw
     // Postgres FK-violation 500 from the update below.
-    if (input.industryId !== undefined) {
+    if (input.industryId !== undefined && input.industryId !== null) {
       const industry = await prisma.industry.findUnique({
         where: { id: input.industryId },
         select: { id: true },
@@ -49,7 +49,7 @@ export class ProfileService {
       if (!industry) throw new NotFoundException('Industry not found');
     }
     // Same guard for the city FK, for the same reason.
-    if (input.currentCityId !== undefined) {
+    if (input.currentCityId !== undefined && input.currentCityId !== null) {
       const city = await prisma.city.findUnique({
         where: { id: input.currentCityId },
         select: { id: true },
@@ -69,9 +69,9 @@ export class ProfileService {
       // "YYYY-MM-DD" would be interpreted in the server's local timezone, so a
       // birthday saved from a machine running west of UTC would come back a
       // day early.
-      ...(dateOfBirth !== undefined
-        ? { dateOfBirth: new Date(`${dateOfBirth}T00:00:00.000Z`) }
-        : {}),
+      ...(dateOfBirth === undefined
+        ? {}
+        : { dateOfBirth: dateOfBirth === null ? null : new Date(`${dateOfBirth}T00:00:00.000Z`) }),
     }) as unknown as Prisma.CandidateUpdateInput;
 
     await prisma.$transaction(async (tx) => {

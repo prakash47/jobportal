@@ -3,11 +3,12 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Checkbox, Input, Label, Textarea, cn } from '@jobportal/ui';
-import { Pencil, Plus, Trash2 } from '@jobportal/ui/icons';
+import { AlertCircle, Check, Pencil, Plus, Trash2 } from '@jobportal/ui/icons';
 import { api } from '../../lib/profile/api-client';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import {
   CAREER_BREAK_COMPANY,
+  experienceFreshness,
   formatExperience,
   sortExperience,
   totalExperienceMonths,
@@ -74,6 +75,7 @@ export function ExperienceManager({ initial }: { initial: ExperienceRow[] }) {
   // session lands in the right place without a round-trip.
   const ordered = useMemo(() => sortExperience(rows), [rows]);
   const totalMonths = useMemo(() => totalExperienceMonths(rows), [rows]);
+  const freshness = useMemo(() => experienceFreshness(rows), [rows]);
 
   function openAdd() {
     setDraft(emptyDraft);
@@ -196,6 +198,38 @@ export function ExperienceManager({ initial }: { initial: ExperienceRow[] }) {
           Calculated from your dates. Overlapping roles count once; career breaks are excluded.
         </p>
       </div>
+
+      {/* Up-to-date, not merely complete.
+          Profile completeness counts whether a section is FILLED, so a history
+          that stops years ago scores as done and reads as done — the reported
+          case was a profile marked complete whose last role ended in 2017. A
+          recruiter cannot tell "has not worked since" from "has not updated
+          since", and only the candidate can say which. */}
+      {freshness.state === 'stale' && freshness.lastEndedAt !== null && (
+        <div className="flex items-start gap-3 rounded-lg border border-[color-mix(in_oklch,var(--color-warning),var(--color-border)_55%)] bg-[color-mix(in_oklch,var(--color-warning),var(--color-bg-elevated)_90%)] p-4">
+          <AlertCircle
+            className="mt-0.5 size-4 shrink-0 text-[color-mix(in_oklch,var(--color-warning),var(--color-fg)_30%)]"
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[var(--color-fg)]">
+              Your work history may be out of date
+            </p>
+            <p className="mt-0.5 text-sm text-[var(--color-fg-muted)]">
+              The most recent role ends {fmt(freshness.lastEndedAt)} —{' '}
+              {formatExperience(freshness.monthsSince)} ago. If you have worked since, add it; if
+              you were not working, a career break entry explains the gap.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {freshness.state === 'current' && ordered.length > 0 && (
+        <p className="flex items-center gap-2 text-sm text-[var(--color-fg-muted)]">
+          <Check className="size-4 text-[var(--color-success)]" aria-hidden="true" />
+          Up to date — you have a current role listed.
+        </p>
+      )}
 
       <ul className="space-y-3">
         {ordered.length === 0 && (

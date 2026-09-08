@@ -73,10 +73,20 @@ function SidebarContent({
 }) {
   return (
     <div className="flex h-full flex-col">
+      {/*
+        Points at /jobs, and neither at /profile nor at /.
+        It used to be /profile — the page you are usually already on, so
+        clicking the mark did nothing, which is what was reported. And "/" is
+        not an option either: app/page.tsx redirects a signed-in CANDIDATE
+        straight back to /profile, so the marketing home is unreachable while
+        signed in and the click would still appear dead.
+        /jobs is the public surface a seeker actually wants from here, and it
+        navigates from every dashboard page including /profile.
+      */}
       <Link
-        href="/profile"
+        href="/jobs"
         {...(onNavigate ? { onClick: onNavigate } : {})}
-        aria-label="Career Queue — dashboard"
+        aria-label="Career Queue — find jobs"
         className={cn(
           'flex items-center gap-2.5 py-4',
           collapsed ? 'justify-center px-2' : 'px-4',
