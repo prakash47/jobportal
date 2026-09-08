@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Badge } from '@jobportal/ui';
-import { Briefcase, MapPin } from '@jobportal/ui/icons';
+import { Briefcase, Check, MapPin } from '@jobportal/ui/icons';
 import type { JobDoc } from '@jobportal/search';
 import { CompanyLogo } from '../companies/CompanyLogo';
 import { JobCardSaveToggle } from './JobCardSaveToggle';
@@ -14,6 +14,8 @@ export interface JobCardProps {
   cityName?: string | null;
   isAuthed?: boolean;
   initialSaved?: boolean;
+  /** ISO date the signed-in user applied, or null. Drives the Applied marker. */
+  appliedAt?: string | null;
   /** Same-origin path login should bounce back to (e.g. '/jobs?q=react'). */
   returnTo?: string;
 }
@@ -29,6 +31,7 @@ export function JobCard({
   cityName = null,
   isAuthed = false,
   initialSaved = false,
+  appliedAt = null,
   returnTo,
 }: JobCardProps) {
   const salary = formatSalaryLpa(job.salaryMin, job.salaryMax);
@@ -68,7 +71,18 @@ export function JobCard({
             {job.companyName}
           </Link>
         </div>
-        <span className="relative z-10 shrink-0">
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {/* Reported: applying showed nothing on the card, so the same job read
+              as untouched in the results and only revealed itself as applied
+              once opened. Static text, not a Badge: this is a state marker, and
+              a coloured pill here would compete with the save toggle beside it. */}
+          {appliedAt !== null && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-[color-mix(in_oklch,var(--color-success),var(--color-bg-elevated)_86%)] px-2 py-0.5 text-[11px] font-medium text-[oklch(0.45_0.15_145)]">
+              <Check className="size-3" aria-hidden="true" />
+              Applied {postedAgo(appliedAt)}
+            </span>
+          )}
+        <span className="relative z-10">
           <JobCardSaveToggle
             jobId={job.id}
             jobSlug={job.canonicalSlug}
@@ -77,6 +91,7 @@ export function JobCard({
             {...(returnTo ? { returnTo } : {})}
           />
         </span>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-[var(--color-fg-muted)]">

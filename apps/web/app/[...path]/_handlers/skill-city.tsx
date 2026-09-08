@@ -130,6 +130,7 @@ export default async function SkillCityJobsPage({ params, searchParams }: PagePr
       industries={industries}
       isAuthed={userCtx.isAuthed}
       savedJobIds={userCtx.savedJobIds}
+      appliedAtByJobId={userCtx.appliedAtByJobId}
       returnTo={basePath}
     />
   );

@@ -108,6 +108,7 @@ export default async function CityJobsPage({ params, searchParams }: PageProps) 
       industries={industries}
       isAuthed={userCtx.isAuthed}
       savedJobIds={userCtx.savedJobIds}
+      appliedAtByJobId={userCtx.appliedAtByJobId}
       returnTo={basePath}
     />
   );

@@ -87,6 +87,7 @@ export default async function SkillJobsPage({ params, searchParams }: PageProps)
       industries={industries}
       isAuthed={userCtx.isAuthed}
       savedJobIds={userCtx.savedJobIds}
+      appliedAtByJobId={userCtx.appliedAtByJobId}
       returnTo={basePath}
     />
   );

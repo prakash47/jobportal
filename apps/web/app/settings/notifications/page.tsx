@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { prisma } from '@jobportal/db';
 import { requireUser } from '../../../lib/auth/require-user';
 import { readPreferences } from '../../../lib/notifications/preferences';
 import { PageHeader } from '../../../components/dashboard/PageHeader';
@@ -17,7 +18,7 @@ interface PageProps {
 }
 
 export default async function NotificationSettingsPage({ searchParams }: PageProps) {
-  await requireUser();
+  const session = await requireUser();
   const sp = await searchParams;
   // Email-footer "Unsubscribe" link routes here with ?unsubscribe=1. We
   // don't auto-toggle anything (a destructive write from a GET would be
@@ -25,7 +26,16 @@ export default async function NotificationSettingsPage({ searchParams }: PagePro
   // want off and save.
   const fromUnsubscribe = sp['unsubscribe'] === '1';
 
-  const prefs = await readPreferences();
+  // The cadence control writes JobAlert.frequency, so the page needs to know
+  // what the user's alerts are currently set to.
+  const [prefs, alerts] = await Promise.all([
+    readPreferences(),
+    prisma.jobAlert.findMany({
+      where: { userId: session.sub },
+      select: { id: true, frequency: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ]);
   if (!prefs) {
     return (
       <p className="text-sm text-[var(--color-fg-muted)]">
@@ -51,7 +61,7 @@ export default async function NotificationSettingsPage({ searchParams }: PagePro
       )}
 
       <ContentCard className="p-5 sm:p-6">
-        <NotificationPreferencesForm initial={prefs} />
+        <NotificationPreferencesForm initial={prefs} alerts={alerts} />
       </ContentCard>
     </div>
   );
